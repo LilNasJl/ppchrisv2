@@ -42,11 +42,13 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     protected static ?string $slug = 'leave-requests';
 
-    protected static ?string $title = 'Leave Request';
+    protected static ?string $title = 'Leave';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::ArrowLeftEndOnRectangle;
+    protected static ?string $navigationLabel = 'Leave';
 
-    protected static ?int $navigationSort = 6;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowLeftEndOnRectangle;
+
+    protected static ?int $navigationSort = 4;
 
     public function mount(): void
     {

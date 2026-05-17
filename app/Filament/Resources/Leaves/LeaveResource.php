@@ -20,11 +20,14 @@ use UnitEnum;
 
 class LeaveResource extends Resource
 {
-
     protected static ?string $model = ModelsLeave::class;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowLeftEndOnRectangle;
+
     protected static ?string $recordTitleAttribute = 'Leave';
+
     protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
+
     protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
@@ -35,6 +38,21 @@ class LeaveResource extends Resource
     public static function table(Table $table): Table
     {
         return LeavesTable::configure($table);
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $pendingCount = ModelsLeave::query()
+            ->whereHas('employee', fn (Builder $query) => $query->activeEmployment())
+            ->where('status', 'Pending')
+            ->count();
+
+        return $pendingCount > 0 ? (string) $pendingCount : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
     }
 
     public static function getRelations(): array

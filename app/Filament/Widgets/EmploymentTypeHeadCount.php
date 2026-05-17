@@ -9,7 +9,11 @@ use Illuminate\Support\Facades\DB;
 class EmploymentTypeHeadCount extends ChartWidget
 {
     protected ?string $heading = 'Employment Type Head Count';
-    protected int | string | array $columnSpan = 1; // Half width
+
+    protected int|string|array $columnSpan = [
+        'default' => 'full',
+        'lg' => 1,
+    ];
 
     protected function getData(): array
     {
@@ -29,9 +33,9 @@ class EmploymentTypeHeadCount extends ChartWidget
                     'label' => 'Employees',
                     'data' => $data->pluck('total')->toArray(),
                     'backgroundColor' => [
-                        '#36A2EB', 
-                        '#FF6384', 
-                        '#FFCE56', 
+                        '#36A2EB',
+                        '#FF6384',
+                        '#FFCE56',
                         '#4BC0C0',
                     ],
                 ],

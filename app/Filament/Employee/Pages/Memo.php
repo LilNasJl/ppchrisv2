@@ -26,9 +26,9 @@ class Memo extends Page implements HasTable
 
     protected static ?string $title = 'Memo';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::DocumentText;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 3;
 
     public function table(Table $table): Table
     {

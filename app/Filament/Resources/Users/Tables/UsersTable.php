@@ -22,7 +22,16 @@ class UsersTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->where('role', 'employee'))
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->with(['employee.branch'])
+                ->where('role', 'employee')
+                ->whereHas('employee')
+                ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
+                ->select('users.*'))
+            ->defaultSort(fn (Builder $query): Builder => $query
+                ->orderBy('account_employees.lastname')
+                ->orderBy('account_employees.middlename')
+                ->orderBy('account_employees.firstname'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -37,10 +46,18 @@ class UsersTable
                     ->label('ID No.')
                     ->badge()
                     ->formatStateUsing(fn ($state) => 'PF-'.$state),
-                TextColumn::make('name')
-                    ->label('Account Name')
-                    ->searchable()
-                    ->sortable(),
+                TextColumn::make('employee.lastname')
+                    ->label('Employee Name')
+                    ->formatStateUsing(fn ($record): string => $record->employee?->full_name ?? 'N/A')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
+                        ->whereHas('employee', fn (Builder $employeeQuery): Builder => $employeeQuery
+                            ->where('lastname', 'like', "%{$search}%")
+                            ->orWhere('middlename', 'like', "%{$search}%")
+                            ->orWhere('firstname', 'like', "%{$search}%")))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('account_employees.lastname', $direction)
+                        ->orderBy('account_employees.middlename', $direction)
+                        ->orderBy('account_employees.firstname', $direction)),
                 TextColumn::make('email')
                     ->label('Email')
                     ->searchable()

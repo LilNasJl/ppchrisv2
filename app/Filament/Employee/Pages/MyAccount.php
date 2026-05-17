@@ -24,9 +24,9 @@ class MyAccount extends Page implements HasForms
 
     protected static ?string $title = 'My Account';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::Identification;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::Identification;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 6;
 
     public ?array $data = [];
 
@@ -36,7 +36,7 @@ class MyAccount extends Page implements HasForms
         $employee = $user->employee;
 
         $this->form->fill([
-            'employee_id' => $employee?->uid ? 'PF-' . $employee->uid : null,
+            'employee_id' => $employee?->uid ? 'PF-'.$employee->uid : null,
             'fingerprint_id' => $employee?->fingerprint_id,
             'name' => $user->name,
             'email' => $user->email,

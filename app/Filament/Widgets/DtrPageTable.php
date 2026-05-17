@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DtrPageTable extends TableWidget
 {
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table
     {
@@ -27,8 +27,12 @@ class DtrPageTable extends TableWidget
             ->query(fn (): Builder => ModelsEmployee::query()
                 ->with(['branch', 'department', 'designation', 'user'])
                 ->activeEmployment()
-                ->whereHas('user', fn($query) => $query->where('role', 'employee'))    
+                ->whereHas('user', fn ($query) => $query->where('role', 'employee'))
             )
+            ->defaultSort(fn (Builder $query): Builder => $query
+                ->orderBy('lastname')
+                ->orderBy('middlename')
+                ->orderBy('firstname'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -41,12 +45,14 @@ class DtrPageTable extends TableWidget
 
                 TextColumn::make('fullname')
                     ->label('Name')
-                    ->getStateUsing(fn ($record) => 
-                        trim($record->lastname . ', ' . (filled($record->middlename) ? $record->middlename . '. ' : '') . $record->firstname)
+                    ->getStateUsing(fn ($record) => trim($record->lastname.', '.(filled($record->middlename) ? $record->middlename.'. ' : '').$record->firstname)
                     )
                     // Pass the actual DB column names here
                     ->searchable(['lastname', 'middlename', 'firstname'])
-                    ->sortable(['lastname', 'middlename', 'firstname']),
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('lastname', $direction)
+                        ->orderBy('middlename', $direction)
+                        ->orderBy('firstname', $direction)),
 
                 TextColumn::make('designation.title')
                     ->label('Designation')
@@ -81,7 +87,6 @@ class DtrPageTable extends TableWidget
                     ->icon(Heroicon::ArrowDownTray)
                     ->url(DtrImport::getUrl()),
 
-
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -91,8 +96,8 @@ class DtrPageTable extends TableWidget
                         ->url(fn ($record) => DtrManage::getUrl([
                             'employeeId' => $record->id,
                             'branchId' => $record->branch_id,
-                        ]))
-                ])
+                        ])),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

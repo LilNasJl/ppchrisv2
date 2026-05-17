@@ -22,9 +22,9 @@ class Payroll extends Page implements HasForms
 
     protected static ?string $title = 'Payroll';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::Banknotes;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     public ?string $period_id = null;
 
@@ -52,7 +52,7 @@ class Payroll extends Page implements HasForms
                     ->all())
                 ->searchable()
                 ->reactive()
-                ->placeholder('No locked payroll period available'),
+                ->placeholder('No payroll summary available yet'),
         ];
     }
 

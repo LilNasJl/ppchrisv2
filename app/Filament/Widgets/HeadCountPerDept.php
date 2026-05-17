@@ -9,7 +9,11 @@ use Illuminate\Support\Facades\DB;
 class HeadCountPerDept extends ChartWidget
 {
     protected ?string $heading = 'Head Count Per Department';
-    protected int|string|array $columnSpan = 1; // medium
+
+    protected int|string|array $columnSpan = [
+        'default' => 'full',
+        'lg' => 1,
+    ];
 
     protected function getData(): array
     {
@@ -35,7 +39,7 @@ class HeadCountPerDept extends ChartWidget
                 return $item->department->acronym ?? 'Unknown';
             }),
         ];
-    
+
     }
 
     protected function getType(): string
@@ -43,4 +47,3 @@ class HeadCountPerDept extends ChartWidget
         return 'bar';
     }
 }
-

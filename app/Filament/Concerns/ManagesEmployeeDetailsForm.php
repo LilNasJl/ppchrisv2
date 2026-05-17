@@ -1,15 +1,10 @@
 <?php
 
-namespace App\Filament\Widgets;
+namespace App\Filament\Concerns;
 
-use App\Filament\Pages\EditEmployeeDetails;
-use App\Filament\Pages\ViewEmployeeDetails;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
-use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
@@ -21,19 +16,13 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\ImageColumn;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Table;
-use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
-class EmployeeDetailsTable extends TableWidget
+trait ManagesEmployeeDetailsForm
 {
-    protected static ?string $heading = '';
-
-    protected static bool $isDiscovered = false;
-
     protected const DEDUCTION_GROUPS = [
         'Deductions' => [
             'SHORTAGES',
@@ -198,7 +187,27 @@ class EmployeeDetailsTable extends TableWidget
             ->toArray();
     }
 
-    protected function getEmployeeFormSchema(): array
+    protected function getEmployeeDetailsFormData(ModelsEmployee $record): array
+    {
+        $record->resetLeaveCreditsIfNeeded();
+        $record->refresh();
+
+        $data = $record->attributesToArray();
+        $data['deductions'] = $this->getDeductionState($record);
+        $data['other_deduction_ids'] = $this->getSelectedOtherDeductionIds($record);
+        $data['leave_credits'] = $record->leave_credits;
+        $data['birthday_leave_credits'] = $record->birthday_leave_credits;
+        $data['leave_credits_year'] = $record->leave_credits_year;
+        $data['allowance'] = $record->allowance ?? 0;
+        $data['kids'] = $record->kids ?? 0;
+        $data['tenure'] = $record->tenure;
+        $data['profile_photo_path'] = $record->user?->profile_photo_path;
+        $data['schedule_type'] = $this->scheduleTypeForRateType($record->rate_type);
+
+        return $data;
+    }
+
+    protected function getEmployeeDetailsFormSchema(bool $isReadOnly = false): array
     {
         return [
             Tabs::make('Employee Details')
@@ -208,7 +217,7 @@ class EmployeeDetailsTable extends TableWidget
                         ->schema([
                             Placeholder::make('profile_card')
                                 ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record): HtmlString => $this->profilePreview($record))
+                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->profilePreview($record ?? ($this->employeeRecord ?? null)))
                                 ->columnSpanFull(),
 
                             FileUpload::make('profile_photo_path')
@@ -241,7 +250,10 @@ class EmployeeDetailsTable extends TableWidget
                                         ->placeholder('e.g., Cruz')
                                         ->required(),
                                 ])
-                                ->columns(3),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 3,
+                                ]),
 
                             Group::make()
                                 ->schema([
@@ -295,7 +307,10 @@ class EmployeeDetailsTable extends TableWidget
                                         ->columnSpanFull(),
 
                                 ])
-                                ->columns(3),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 3,
+                                ]),
 
                             Placeholder::make('divider2')
                                 ->label("GOVERNMENT ID's")
@@ -345,7 +360,10 @@ class EmployeeDetailsTable extends TableWidget
                                             'regex' => 'The SSS number must follow the 00-0000000-0 format.',
                                         ]),
                                 ])
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Designation')
@@ -395,7 +413,10 @@ class EmployeeDetailsTable extends TableWidget
                                 ->required(),
 
                         ])
-                        ->columns(2),
+                        ->columns([
+                            'default' => 1,
+                            'md' => 2,
+                        ]),
 
                     Tabs\Tab::make('Education')
                         ->icon(Heroicon::AcademicCap)
@@ -419,7 +440,10 @@ class EmployeeDetailsTable extends TableWidget
                                     DatePicker::make('year_grad')
                                         ->label('Year Graduated'),
                                 ])
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Deductions')
@@ -427,11 +451,17 @@ class EmployeeDetailsTable extends TableWidget
                         ->schema([
                             Fieldset::make('Deductions')
                                 ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['Deductions']))
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
 
                             Fieldset::make('REMITTANCES')
                                 ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['REMITTANCES']))
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
 
                             Fieldset::make('Other Deductions')
                                 ->schema(fn (Get $get): array => [
@@ -447,7 +477,10 @@ class EmployeeDetailsTable extends TableWidget
 
                                     ...$this->getOtherDeductionFields($get('other_deduction_ids') ?? []),
                                 ])
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Leave')
@@ -470,7 +503,10 @@ class EmployeeDetailsTable extends TableWidget
                                         ->disabled()
                                         ->dehydrated(false),
                                 ])
-                                ->columns(3),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 3,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Salary')
@@ -518,103 +554,40 @@ class EmployeeDetailsTable extends TableWidget
                                         ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->default(0),
                                 ])
-                                ->columns(2),
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
                 ])
+                ->disabled($isReadOnly)
                 ->columnSpanFull(),
         ];
     }
 
-    public function table(Table $table): Table
+    protected function saveEmployeeDetails(ModelsEmployee $record, array $data): Model
     {
-        return $table
-            ->query(
-                fn (): Builder => ModelsEmployee::query()
-                    ->with(['user', 'designation', 'department', 'branch'])
-                    ->whereHas('user', fn ($query) => $query->where('role', 'employee'))
-            )
-            ->defaultSort(fn (Builder $query): Builder => $query
-                ->orderBy('lastname')
-                ->orderBy('middlename')
-                ->orderBy('firstname'))
-            ->columns([
-                TextColumn::make('index')
-                    ->label('#')
-                    ->rowIndex(),
+        $deductions = $data['deductions'] ?? [];
+        $otherDeductionIds = $data['other_deduction_ids'] ?? [];
+        $profilePhotoPath = $data['profile_photo_path'] ?? null;
 
-                ImageColumn::make('user.profile_photo_path')
-                    ->label('Profile')
-                    ->disk('public')
-                    ->circular(),
+        unset($data['deductions'], $data['other_deduction_ids'], $data['tenure'], $data['profile_photo_path']);
+        $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);
 
-                TextColumn::make('uid')
-                    ->label('ID No.')
-                    ->badge()
-                    ->formatStateUsing(fn (ModelsEmployee $record): string => 'PF-'.$record->uid)
-                    ->searchable()
-                    ->sortable(),
+        DB::transaction(function () use ($record, $data, $deductions, $otherDeductionIds, $profilePhotoPath): void {
+            foreach (['gsis', 'philhealth', 'pagibig', 'tin', 'sss'] as $field) {
+                $data[$field] = $data[$field] ?? '';
+            }
 
-                TextColumn::make('firstname')
-                    ->label('Name')
-                    ->formatStateUsing(
-                        fn (ModelsEmployee $record): string => trim($record->lastname.', '.(filled($record->middlename) ? $record->middlename.'. ' : '').$record->firstname)
-                    )
-                    ->searchable(['lastname', 'middlename', 'firstname'])
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
-                        ->orderBy('lastname', $direction)
-                        ->orderBy('middlename', $direction)
-                        ->orderBy('firstname', $direction)),
-
-                TextColumn::make('designation.title')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('department.name')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('branch.branch_name')
-                    ->label('Branch')
-                    ->searchable()
-                    ->sortable()
-                    ->wrap(),
-
-                TextColumn::make('employment_type')
-                    ->label('Employment Status')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state, ModelsEmployee $record): string => $record->hasEndedEmployment()
-                            ? "Employment End: {$state}"
-                            : ($state ?: 'N/A')
-                    )
-                    ->color(fn (ModelsEmployee $record): string => $record->hasEndedEmployment() ? 'danger' : 'success'),
-            ])
-            ->filters([
-                //
-            ])
-            ->headerActions([
-                //
-            ])
-            ->recordActions([
-
-                ActionGroup::make([
-                    Action::make('viewEmployeeDetails')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl(['employeeId' => $record->id])),
-
-                    Action::make('editEmployeeDetails')
-                        ->label('Edit')
-                        ->icon(Heroicon::PencilSquare)
-                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl(['employeeId' => $record->id])),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal),
-
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    //
-                ]),
+            $record->update($data);
+            $record->user?->update([
+                'profile_photo_path' => $profilePhotoPath,
             ]);
+
+            $this->syncEmployeeDeductions($record, $deductions, $otherDeductionIds);
+        });
+
+        return $record->refresh();
     }
 
     protected function syncEmployeeDeductions(ModelsEmployee $record, array $deductions, array $otherDeductionIds): void

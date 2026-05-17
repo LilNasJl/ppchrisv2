@@ -37,12 +37,12 @@ class HrPanelProvider extends PanelProvider
             ->login(Login::class)
             ->sidebarFullyCollapsibleOnDesktop()
             ->navigationGroups([
-                NavigationGroup::make('Employee Management')->collapsed(),
-                NavigationGroup::make('Payroll Management')->collapsed(),
-                NavigationGroup::make('Updates and Activities')->collapsed(),
-                NavigationGroup::make('Reports and Documents')->collapsed(),
-                NavigationGroup::make('Organizational Setup')->collapsed(),
-                NavigationGroup::make('Compliance & Benefits')->collapsed(),
+                NavigationGroup::make('Employee Management'),
+                NavigationGroup::make('Payroll Management'),
+                NavigationGroup::make('Updates and Activities'),
+                NavigationGroup::make('Reports and Documents'),
+                NavigationGroup::make('Organizational Setup'),
+                NavigationGroup::make('Compliance & Benefits'),
 
                 // NavigationGroup::make()
                 //     ->label('Employee Management'),

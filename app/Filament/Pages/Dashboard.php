@@ -15,6 +15,7 @@ use Filament\Support\Icons\Heroicon;
 class Dashboard extends Page
 {
     protected string $view = 'filament.pages.dashboard';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
     // protected function getColumns(): int | array
@@ -22,7 +23,7 @@ class Dashboard extends Page
     //     return 2;
     // }
 
-        protected function getHeaderWidgets(): array
+    protected function getHeaderWidgets(): array
     {
         return [
             DashboardCard::class,
@@ -35,4 +36,11 @@ class Dashboard extends Page
         ];
     }
 
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return [
+            'default' => 1,
+            'lg' => 2,
+        ];
+    }
 }
