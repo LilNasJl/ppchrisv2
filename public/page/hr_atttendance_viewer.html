@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Time Record Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:      #0a0c0f;
+  --surface: #111318;
+  --card:    #161b23;
+  --border:  #1f2733;
+  --accent:  #00c896;
+  --blue:    #3b82f6;
+  --muted:   #3d4a5c;
+  --dim:     #6b7a90;
+  --text:    #c8d4e0;
+  --white:   #eaf0f8;
+  --out:     #f97316;
+  --ah:      #ef4444;
+  --shift:   #a78bfa;
+  --brk:     #fbbf24;
+  --mono:    'Courier New', monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;}
+
+header{padding:20px 40px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;}
+.logo{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);flex-shrink:0;animation:glow 2s ease-in-out infinite;}
+@keyframes glow{0%,100%{opacity:1;box-shadow:0 0 12px var(--accent);}50%{opacity:.4;box-shadow:0 0 4px var(--accent);}}
+header h1{font-size:17px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--white);}
+
+main{max-width:1500px;margin:0 auto;padding:32px 40px 80px;}
+@media(max-width:700px){main{padding:16px 14px 60px;}header{padding:14px;}}
+
+.tabs{display:flex;gap:0;margin-bottom:28px;border-bottom:1px solid var(--border);}
+.tab{padding:11px 32px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--dim);font-size:14px;font-weight:600;cursor:pointer;transition:color .15s,border-color .15s;margin-bottom:-1px;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--white);border-bottom-color:var(--accent);}
+
+.panel{display:none;}.panel.visible{display:block;}
+
+.drop-zone{border:1px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:24px;background:var(--card);}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:#0c1a14;}
+.dz-icon{font-size:36px;margin-bottom:10px;opacity:.45;}
+.dz-label{font-size:15px;font-weight:600;color:var(--white);margin-bottom:4px;}
+.dz-sub{font-size:12px;color:var(--dim);margin-bottom:18px;}
+.dz-btn{display:inline-block;padding:8px 24px;border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;background:transparent;transition:background .15s,color .15s;}
+.dz-btn:hover{background:var(--accent);color:#000;}
+input[type=file]{display:none;}
+
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 22px;min-width:80px;}
+.stat-n{font-size:26px;font-weight:700;color:var(--white);line-height:1;margin-bottom:4px;}
+.stat-n.g{color:var(--accent);}.stat-n.o{color:var(--out);}.stat-n.b{color:var(--blue);}.stat-n.p{color:var(--shift);}
+.stat-l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;}
+
+.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.srch{flex:1;min-width:180px;max-width:300px;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:13px;padding:8px 14px;outline:none;transition:border-color .15s;}
+.srch:focus{border-color:var(--accent);}
+.srch::placeholder{color:var(--muted);}
+.sel{background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:13px;padding:8px 12px;cursor:pointer;outline:none;}
+.sel:focus{border-color:var(--accent);}
+.clr{padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--dim);font-size:12px;cursor:pointer;transition:all .15s;}
+.clr:hover{border-color:var(--ah);color:var(--ah);}
+.del-row{padding:6px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:4px;color:var(--ah);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.del-row:hover{background:rgba(239,68,68,.18);color:#fecaca;}
+
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--card);}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+thead th{background:#0d1017;color:var(--dim);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;padding:14px 20px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;transition:color .15s;}
+thead th:hover{color:var(--text);}
+thead th.sorted{color:var(--accent);}
+thead th .ar{margin-left:4px;opacity:.35;font-size:10px;}
+thead th.sorted .ar{opacity:1;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:rgba(255,255,255,.025);}
+tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;font-family:var(--mono);}
+.uc{color:var(--blue);font-weight:700;}
+.nc{color:var(--white);font-weight:600;font-family:system-ui,sans-serif;}
+.mc{color:var(--muted);font-style:italic;font-family:system-ui,sans-serif;}
+.nod{padding:52px;text-align:center;color:var(--dim);font-size:14px;font-family:system-ui,sans-serif;}
+
+.tag{display:inline-block;padding:3px 10px;border-radius:3px;font-size:11px;font-weight:700;letter-spacing:.5px;font-family:system-ui,sans-serif;}
+.ti {background:rgba(0,200,150,.1);  color:var(--accent);border:1px solid rgba(0,200,150,.2);}
+.to {background:rgba(249,115,22,.1); color:var(--out);   border:1px solid rgba(249,115,22,.2);}
+.tr {background:rgba(59,130,246,.1); color:var(--blue);  border:1px solid rgba(59,130,246,.2);}
+.ts {background:rgba(167,139,250,.1);color:var(--shift); border:1px solid rgba(167,139,250,.2);}
+.tb {background:rgba(251,191,36,.1); color:var(--brk);   border:1px solid rgba(251,191,36,.2);}
+.ta {background:rgba(239,68,68,.1);  color:var(--ah);    border:1px solid rgba(239,68,68,.2);}
+.tm {background:rgba(251,191,36,.1); color:var(--brk);   border:1px solid rgba(251,191,36,.2);}
+.tu {background:rgba(59,130,246,.1); color:var(--blue);  border:1px solid rgba(59,130,246,.2);}
+
+.pager{display:flex;gap:4px;margin-top:14px;align-items:center;flex-wrap:wrap;}
+.pg{padding:5px 12px;background:var(--card);border:1px solid var(--border);border-radius:3px;color:var(--dim);font-size:12px;cursor:pointer;transition:all .15s;}
+.pg:hover{border-color:var(--text);color:var(--text);}
+.pg.on{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700;}
+.pi{font-size:12px;color:var(--dim);margin-left:8px;}
+
+/* Export dropdown */
+.exp-wrap{position:relative;display:inline-flex;}
+.exp-main{padding:8px 14px;background:transparent;border:1px solid var(--accent);border-right:none;border-radius:4px 0 0 4px;color:var(--accent);font-size:12px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;cursor:default;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;user-select:none;}
+.exp-arr{padding:8px 10px;background:transparent;border:1px solid var(--accent);border-radius:0 4px 4px 0;color:var(--accent);font-size:11px;cursor:pointer;transition:background .15s,color .15s;line-height:1;}
+.exp-arr:hover{background:var(--accent);color:#000;}
+.exp-arr:disabled,.exp-main.disabled{opacity:.35;pointer-events:none;}
+.exp-drop{display:none;position:absolute;top:calc(100% + 4px);right:0;min-width:170px;background:var(--card);border:1px solid var(--border);border-radius:6px;z-index:99;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.exp-drop.open{display:block;}
+.exp-item{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:background .12s,color .12s;white-space:nowrap;}
+.exp-item:hover{background:rgba(255,255,255,.05);color:var(--white);}
+.exp-item .ei{font-size:15px;width:20px;text-align:center;}
+.exp-item.csv .ei{color:#22c55e;} .exp-item.xls .ei{color:#16a34a;} .exp-item.pdf .ei{color:#ef4444;} .exp-item.prn .ei{color:#60a5fa;}
+@media print{.no-print{display:none!important;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div>
+  <h1>Daily Time Record Viewer</h1>
+</header>
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="sw('dtr')">View Daily Time Record</button>
+    <button class="tab"        onclick="sw('emp')">View Employee List</button>
+  </div>
+
+  <!-- DTR -->
+  <div class="panel visible" id="panel-dtr">
+    <div class="drop-zone" id="dz-dtr" ondragover="dov(event,'dz-dtr')" ondragleave="dol('dz-dtr')" ondrop="ddr(event,'dtr')">
+      <div class="dz-icon">📂</div>
+      <div class="dz-label">e.g., payroll.bin</div>
+      <div class="dz-sub">Drag &amp; drop or click to browse</div>
+      <button class="dz-btn" onclick="document.getElementById('f-dtr').click()">Choose File</button>
+      <input type="file" id="f-dtr" accept=".bin" onchange="lf(event,'dtr')">
+    </div>
+    <div id="dtr-data" style="display:none">
+      <div class="stats" id="dtr-stats"></div>
+      <div class="toolbar">
+        <input class="srch" id="dq" type="text" placeholder="Search User ID…" oninput="fil('dtr')">
+        <select class="sel" id="ds" onchange="fil('dtr')">
+          <option value="">All Schedules</option>
+          <option>Regular</option><option>Shift1</option><option>Shift2</option><option>Shift3</option>
+          <option>Brkn1</option><option>Brkn2</option><option>Saturday</option><option>Overtime</option>
+          <option>Forgot to Punch</option><option value="A.H">A.H</option>
+        </select>
+        <input class="srch" id="dfr" type="date" style="max-width:155px" onchange="fil('dtr')">
+        <input class="srch" id="dto" type="date" style="max-width:155px" onchange="fil('dtr')">
+        <button class="clr" onclick="clr('dtr')">✕ Clear</button>
+        <div class="exp-wrap no-print" id="dtr-exp-wrap">
+          <span class="exp-main disabled" id="dtr-exp-label">⬇ Export</span>
+          <button class="exp-arr" id="dtr-exp-arr" onclick="toggleDrop('dtr')" disabled title="Export options">▾</button>
+          <div class="exp-drop" id="dtr-exp-drop">
+            <button class="exp-item csv" onclick="doExport('dtr','csv')"><span class="ei">📄</span>CSV (.csv)</button>
+            <button class="exp-item xls" onclick="doExport('dtr','excel')"><span class="ei">📊</span>Excel (.xlsx)</button>
+            <button class="exp-item pdf" onclick="doExport('dtr','pdf')"><span class="ei">📕</span>PDF (print)</button>
+            <button class="exp-item prn" onclick="doExport('dtr','print')"><span class="ei">🖨️</span>Print</button>
+          </div>
+        </div>
+      </div>
+      <div class="tw"><table id="dt">
+        <thead><tr>
+          <th onclick="sb('dtr','#')">#<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','uid')">Fingerprint ID<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','name')">Name<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','date_in')">Date In<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','time_in')">Time In<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','date_out')">Date Out<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','time_out')">Time Out<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','sched')">Schedule Type<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','sched_start')">Schedule Start<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','sched_end')">Schedule End<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','late')">Late<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','undertime')">Undertime<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','early')">Early Clock In<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','overtime')">Overtime<span class="ar">↕</span></th>
+          <th onclick="sb('dtr','ot_status')">Overtime Status<span class="ar">↕</span></th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="db"></tbody>
+      </table></div>
+      <div class="pager" id="dp"></div>
+    </div>
+  </div>
+
+  <!-- EMP -->
+  <div class="panel" id="panel-emp">
+    <div class="drop-zone" id="dz-emp" ondragover="dov(event,'dz-emp')" ondragleave="dol('dz-emp')" ondrop="ddr(event,'emp')">
+      <div class="dz-icon">📂</div>
+      <div class="dz-label">empData.bin</div>
+      <div class="dz-sub">Drag &amp; drop or click to browse</div>
+      <button class="dz-btn" onclick="document.getElementById('f-emp').click()">Choose File</button>
+      <input type="file" id="f-emp" accept=".bin" onchange="lf(event,'emp')">
+    </div>
+    <div id="emp-data" style="display:none">
+      <div class="stats" id="emp-stats"></div>
+      <div class="toolbar">
+        <input class="srch" id="eq" type="text" placeholder="Search name or User ID…" oninput="fil('emp')">
+        <select class="sel" id="ety" onchange="fil('emp')">
+          <option value="">All Types</option>
+          <option value="ADMIN">Admin</option><option value="USER">User</option>
+        </select>
+        <select class="sel" id="esc" onchange="fil('emp')">
+          <option value="">All Schedules</option>
+          <option value="REGULAR">Regular</option><option value="SHIFT">Shift</option>
+        </select>
+        <button class="clr" onclick="clr('emp')">✕ Clear</button>
+        <div class="exp-wrap no-print" id="emp-exp-wrap">
+          <span class="exp-main disabled" id="emp-exp-label">⬇ Export</span>
+          <button class="exp-arr" id="emp-exp-arr" onclick="toggleDrop('emp')" disabled title="Export options">▾</button>
+          <div class="exp-drop" id="emp-exp-drop">
+            <button class="exp-item csv" onclick="doExport('emp','csv')"><span class="ei">📄</span>CSV (.csv)</button>
+            <button class="exp-item xls" onclick="doExport('emp','excel')"><span class="ei">📊</span>Excel (.xlsx)</button>
+            <button class="exp-item pdf" onclick="doExport('emp','pdf')"><span class="ei">📕</span>PDF (print)</button>
+            <button class="exp-item prn" onclick="doExport('emp','print')"><span class="ei">🖨️</span>Print</button>
+          </div>
+        </div>
+      </div>
+      <div class="tw"><table id="et">
+        <thead><tr>
+          <th onclick="sb('emp','#')">#<span class="ar">↕</span></th>
+          <th onclick="sb('emp','uid')">User ID<span class="ar">↕</span></th>
+          <th onclick="sb('emp','name')">Name<span class="ar">↕</span></th>
+          <th onclick="sb('emp','type')">Type<span class="ar">↕</span></th>
+          <th onclick="sb('emp','sched')">Schedule<span class="ar">↕</span></th>
+          <th onclick="sb('emp','fp')">FP Slot<span class="ar">↕</span></th>
+          <th onclick="sb('emp','created')">Created<span class="ar">↕</span></th>
+        </tr></thead>
+        <tbody id="eb"></tbody>
+      </table></div>
+      <div class="pager" id="ep"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const XOR=0xA5,PAGE=50;
+const S={
+  dtr:{raw:[],filtered:[],sk:'date_in',sd:1,pg:1},
+  emp:{raw:[],filtered:[],sk:'uid',    sd:1,pg:1}
+};
+const BD={dtr:'db',emp:'eb'};
+const TL={dtr:'dt',emp:'et'};
+const PG={dtr:'dp',emp:'ep'};
+
+function sw(t){
+  ['dtr','emp'].forEach((v,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('active',v===t);
+    document.getElementById('panel-'+v).classList.toggle('visible',v===t);
+  });
+}
+
+function decode(ab){
+  const b=new Uint8Array(ab),rec=[],err=[];
+  let p=0;
+  while(p+2<=b.length){
+    const len=(b[p]<<8)|b[p+1];p+=2;
+    if(!len)break;
+    if(p+len>b.length){err.push('Truncated');break;}
+    let j='';for(let i=0;i<len;i++)j+=String.fromCharCode(b[p+i]^XOR);p+=len;
+    try{rec.push(JSON.parse(j));}catch(e){err.push('Parse:'+j.slice(0,30));}
+  }
+  return{rec,err};
+}
+
+function lf(e,t){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=x=>proc(x.target.result,t,f.name);r.readAsArrayBuffer(f);}
+function dov(e,id){e.preventDefault();document.getElementById(id).classList.add('drag');}
+function dol(id){document.getElementById(id).classList.remove('drag');}
+function ddr(e,t){
+  e.preventDefault();
+  document.getElementById({dtr:'dz-dtr',emp:'dz-emp'}[t]).classList.remove('drag');
+  const f=e.dataTransfer.files[0];if(!f)return;
+  const r=new FileReader();r.onload=x=>proc(x.target.result,t,f.name);r.readAsArrayBuffer(f);
+}
+function proc(buf,t,fn){
+  const{rec,err}=decode(buf);
+  if(!rec.length){alert('No valid records in "'+fn+'".\n'+(err.length?err.slice(0,3).join('\n'):'File may be empty.'));return;}
+  const stamp=Date.now();
+  S[t].raw=rec.map((row,index)=>({...row,_rowId:`${t}-${stamp}-${index}`}));
+  S[t].filtered=[...S[t].raw];S[t].pg=1;
+  S[t].sk=t==='dtr'?'date_in':'uid';S[t].sd=1;
+  renderStats(t);srt(t);
+  document.getElementById(t+'-data').style.display='block';
+  document.getElementById(t+'-exp-arr').disabled=false;
+  document.getElementById(t+'-exp-label').classList.remove('disabled');
+}
+
+function renderStats(t){
+  const d=S[t].raw;let h='';
+  if(t==='dtr'){
+    const cmp=d.filter(r=>r.time_out&&r.time_out!=='').length;
+    const uids=new Set(d.map(r=>r.uid)).size;
+    h=`<div class="stat"><div class="stat-n">${d.length}</div><div class="stat-l">Total</div></div>
+       <div class="stat"><div class="stat-n g">${cmp}</div><div class="stat-l">Complete</div></div>
+       <div class="stat"><div class="stat-n o">${d.length-cmp}</div><div class="stat-l">Open</div></div>
+       <div class="stat"><div class="stat-n b">${uids}</div><div class="stat-l">Employees</div></div>`;
+  }else{
+    const adm=d.filter(r=>r.type==='ADMIN').length;
+    const sft=d.filter(r=>r.sched==='SHIFT').length;
+    h=`<div class="stat"><div class="stat-n">${d.length}</div><div class="stat-l">Total</div></div>
+       <div class="stat"><div class="stat-n o">${adm}</div><div class="stat-l">Admins</div></div>
+       <div class="stat"><div class="stat-n b">${d.length-adm}</div><div class="stat-l">Users</div></div>
+       <div class="stat"><div class="stat-n g">${d.length-sft}</div><div class="stat-l">Regular</div></div>
+       <div class="stat"><div class="stat-n p">${sft}</div><div class="stat-l">Shift</div></div>`;
+  }
+  document.getElementById(t+'-stats').innerHTML=h;
+}
+
+function fil(t){
+  if(t==='dtr'){
+    const q=(document.getElementById('dq').value||'').toLowerCase();
+    const sc=document.getElementById('ds').value;
+    const fr=document.getElementById('dfr').value;
+    const to=document.getElementById('dto').value;
+    S.dtr.filtered=S.dtr.raw.filter(r=>{
+      const mq=!q||String(r.uid||'').includes(q);
+      return mq&&(!sc||r.sched===sc)&&(!fr||(r.date_in||'')>=fr)&&(!to||(r.date_in||'')<=to);
+    });
+  }else{
+    const q=(document.getElementById('eq').value||'').toLowerCase();
+    const ty=document.getElementById('ety').value;
+    const sc=document.getElementById('esc').value;
+    S.emp.filtered=S.emp.raw.filter(r=>{
+      const mq=!q||String(r.uid||r.id||'').includes(q)||(r.name||'').toLowerCase().includes(q);
+      return mq&&(!ty||r.type===ty)&&(!sc||r.sched===sc);
+    });
+  }
+  S[t].pg=1;srt(t);
+}
+
+function sb(t,k){
+  if(S[t].sk===k)S[t].sd*=-1;else{S[t].sk=k;S[t].sd=1;}
+  document.getElementById(TL[t]).querySelectorAll('thead th').forEach(th=>{th.classList.remove('sorted');th.querySelector('.ar').textContent='↕';});
+  event.currentTarget.classList.add('sorted');
+  event.currentTarget.querySelector('.ar').textContent=S[t].sd===1?'↑':'↓';
+  srt(t);
+}
+function srt(t){
+  const{sk,sd}=S[t];
+  if(sk!=='#')S[t].filtered.sort((a,b)=>{
+    const av=a[sk]??'',bv=b[sk]??'';
+    if(typeof av==='number'&&typeof bv==='number')return(av-bv)*sd;
+    return String(av).localeCompare(String(bv))*sd;
+  });
+  ren(t);
+}
+
+function stag(sc){
+  sc=sc||'';
+  const m={Regular:'tr',Saturday:'tb',Overtime:'to','Forgot to Punch':'ta',Shift1:'ts',Shift2:'ts',Shift3:'ts',Brkn1:'tb',Brkn2:'tb','A.H':'ta'};
+  const cl=m[sc]||'tr';
+  return`<span class="tag ${cl}">${x(sc)||'—'}</span>`;
+}
+function minTag(val, cls){
+  if(val===undefined||val===null||val==='') return '<span class="mc">—</span>';
+  const v=parseInt(val)||0;
+  if(v===0) return '<span style="color:var(--dim)">0</span>';
+  return `<span class="tag ${cls}">${v}</span>`;
+}
+function rowDtr(r,n){
+  const ho=r.time_out&&r.time_out!=='';
+  const otStatus=r.ot_status??r.overtime_status??r.overtimeStatus??'';
+  return`<tr>
+    <td style="color:var(--muted);font-size:11px">${n}</td>
+    <td class="uc">${x(String(r.uid??'—'))}</td>
+    <td class="nc">${x(r.name||'—')}</td>
+    <td>${x(r.date_in||'—')}</td>
+    <td>${x(r.time_in||'—')}</td>
+    <td>${ho?x(r.date_out||'—'):'<span class="mc">—</span>'}</td>
+    <td>${ho?x(r.time_out||'—'):'<span class="mc">open</span>'}</td>
+    <td>${stag(r.sched)}</td>
+    <td>${r.sched_start?x(r.sched_start):'<span class="mc">—</span>'}</td>
+    <td>${r.sched_end  ?x(r.sched_end)  :'<span class="mc">—</span>'}</td>
+    <td>${minTag(r.late,    'ta')}</td>
+    <td>${minTag(r.undertime,'to')}</td>
+    <td>${minTag(r.early,   'ts')}</td>
+    <td>${minTag(r.overtime,'ts')}</td>
+    <td>${otStatus?`<span class="${String(otStatus).toLowerCase()==='pending'?'tag to':'mc'}">${x(otStatus)}</span>`:'<span class="mc">-</span>'}</td>
+    <td><button type="button" class="del-row" onclick="deleteRow('dtr','${x(r._rowId)}')">Delete</button></td></tr>`;
+}
+function rowEmp(r,n){
+  const tTag=r.type==='ADMIN'?'<span class="tag tm">Admin</span>':'<span class="tag tu">User</span>';
+  const sTag=(r.sched||'REGULAR')==='SHIFT'?'<span class="tag ts">Shift</span>':'<span class="tag tr">Regular</span>';
+  return`<tr>
+    <td style="color:var(--muted);font-size:11px">${n}</td>
+    <td class="uc">${x(String(r.uid??r.id??'—'))}</td>
+    <td class="nc">${x(r.name||'—')}</td>
+    <td>${tTag}</td><td>${sTag}</td>
+    <td style="color:var(--accent)">${x(String(r.fp??'—'))}</td>
+    <td style="color:var(--dim)">${x(r.created||'—')}</td></tr>`;
+}
+
+function ren(t){
+  const data=S[t].filtered,start=(S[t].pg-1)*PAGE,slice=data.slice(start,start+PAGE);
+  const body=document.getElementById(BD[t]);
+  if(!data.length){body.innerHTML=`<tr><td colspan="${t==='dtr'?16:7}" class="nod">No records match.</td></tr>`;document.getElementById(PG[t]).innerHTML='';return;}
+  body.innerHTML=slice.map((r,i)=>t==='dtr'?rowDtr(r,start+i+1):rowEmp(r,start+i+1)).join('');
+  paginate(t,data.length);
+}
+
+function deleteRow(t,rowId){
+  if(t!=='dtr')return;
+  S[t].raw=S[t].raw.filter(r=>r._rowId!==rowId);
+  S[t].filtered=S[t].filtered.filter(r=>r._rowId!==rowId);
+  const pages=Math.max(1,Math.ceil(S[t].filtered.length/PAGE));
+  S[t].pg=Math.min(S[t].pg,pages);
+  renderStats(t);
+  ren(t);
+}
+
+function paginate(t,total){
+  const pages=Math.ceil(total/PAGE),cur=S[t].pg;
+  const el=document.getElementById(PG[t]);
+  if(pages<=1){el.innerHTML='';return;}
+  let h='';
+  if(cur>1)h+=pb(t,cur-1,'‹');
+  const lo=Math.max(1,cur-2),hi=Math.min(pages,cur+2);
+  if(lo>1)h+=pb(t,1,'1');
+  if(lo>2)h+='<span class="pi">…</span>';
+  for(let p=lo;p<=hi;p++)h+=pb(t,p,p,p===cur);
+  if(hi<pages-1)h+='<span class="pi">…</span>';
+  if(hi<pages)h+=pb(t,pages,pages);
+  if(cur<pages)h+=pb(t,cur+1,'›');
+  h+=`<span class="pi">${cur}/${pages} &middot; ${total} records</span>`;
+  el.innerHTML=h;
+}
+function pb(t,p,label,on=false){return`<button class="pg${on?' on':''}" onclick="gp('${t}',${p})">${label}</button>`;}
+function gp(t,p){S[t].pg=p;ren(t);document.getElementById('panel-'+t).scrollIntoView({behavior:'smooth',block:'start'});}
+
+function clr(t){
+  S[t].raw=[];S[t].filtered=[];
+  document.getElementById(t+'-data').style.display='none';
+  document.getElementById(t+'-exp-arr').disabled=true;
+  document.getElementById(t+'-exp-label').classList.add('disabled');
+  document.getElementById(t+'-exp-drop').classList.remove('open');
+  document.getElementById({dtr:'f-dtr',emp:'f-emp'}[t]).value='';
+}
+function x(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* ── Export helpers ── */
+function toggleDrop(t){
+  const d=document.getElementById(t+'-exp-drop');
+  d.classList.toggle('open');
+}
+document.addEventListener('click',e=>{
+  ['dtr','emp'].forEach(t=>{
+    const w=document.getElementById(t+'-exp-wrap');
+    if(w&&!w.contains(e.target))document.getElementById(t+'-exp-drop').classList.remove('open');
+  });
+});
+
+function getExportData(t,batchId){
+  // last update 05-03-26
+  const data=S[t].filtered;
+  if(!data.length){alert('No records to export.');return null;}
+  const periodId = getQueryParam('period_id') || '';
+  const branchId = getQueryParam('branch_id') || '';
+  if(t==='dtr' && (!periodId || !branchId)){
+    alert('Please select both payroll period and branch before exporting D.T.R records.');
+    return null;
+  }
+
+  let headers,rows;
+  if(t==='dtr'){
+    headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Schedule Start','Schedule End','Branch ID'];
+    rows=data.map((r,i)=>{
+      return[
+        i+1, batchId, periodId, r.uid??'', r.name||'',
+        r.date_in||'', r.time_in||'',
+        r.time_out&&r.time_out!==''?(r.date_out||''):'',
+        r.time_out&&r.time_out!==''?(r.time_out||''):'',
+        r.sched||'', r.sched_start||'', r.sched_end||'',
+        branchId
+      ];
+    });
+  }else{
+    headers=['#','Batch ID','User ID','Name','Type','Schedule','FP Slot','Created'];
+    rows=data.map((r,i)=>[
+      i+1, batchId, periodId, r.uid??r.id??'', r.name||'',
+      r.type||'', r.sched||'REGULAR', r.fp??'', r.created||''
+    ]);
+  }
+  return{headers,rows,data};
+}
+
+function getTS(){
+  const n=new Date();
+  return n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')
+    +'_'+String(n.getHours()).padStart(2,'0')+String(n.getMinutes()).padStart(2,'0');
+}
+
+function genBatchId(){
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let id='';for(let i=0;i<12;i++)id+=chars[Math.floor(Math.random()*chars.length)];
+  return id;
+}
+
+function doExport(t,fmt){
+  document.getElementById(t+'-exp-drop').classList.remove('open');
+  const batchId=genBatchId();
+  if(fmt==='csv')        exportCSV(t,batchId);
+  else if(fmt==='excel') exportExcel(t,batchId);
+  else if(fmt==='pdf')   exportPrintWin(t,true,batchId);
+  else if(fmt==='print') exportPrintWin(t,false,batchId);
+}
+
+function exportCSV(t,batchId){
+  const d=getExportData(t,batchId); if(!d)return;
+
+  // DTR time columns (0-based): 6=Time In, 8=Time Out, 10=Schedule Start, 11=Schedule End
+ const txtCols = t==='dtr' ? new Set([6,8,10,11]) : new Set();
+
+  const esc=v=>{
+    const s=String(v??'');
+    return (s.includes(',')||s.includes('"')||s.includes('\n'))
+      ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const forceText=v=>{
+    const s=String(v??'');
+    if(s===''||s==='open'||s==='—') return esc(s);
+    return `"=""${s.replace(/"/g,'""')}"""`;
+  };
+
+  const csvRows=d.rows.map(r=>
+    r.map((v,i)=> txtCols.has(i) ? forceText(v) : esc(v)).join(',')
+  );
+  const csv=[d.headers.map(esc).join(','),...csvRows].join('\r\n');
+  dl(new Blob([csv],{type:'text/csv;charset=utf-8;'}),(t==='dtr'?'dtr_export_':'employee_list_')+getTS()+'.csv');
+}
+
+function exportExcel(t,batchId){
+  const d=getExportData(t,batchId); if(!d)return;
+  if(typeof XLSX==='undefined'){alert('SheetJS library not loaded. Check your internet connection.');return;}
+  const wb=XLSX.utils.book_new();
+  // Force time columns as strings so Excel doesn't parse them as time values
+  // cols 6=Time In, 8=Time Out, 10=Schedule Start, 11=Schedule End
+  const txtCols = t==='dtr' ? new Set([6,8,10,11]) : new Set();
+  const sheetData=[d.headers,...d.rows.map(r=>r.map((v,i)=>txtCols.has(i)?String(v??''):v))];
+  const ws=XLSX.utils.aoa_to_sheet(sheetData,{cellDates:false});
+  // Mark time cells as type 's' (string) to prevent auto-formatting
+  if(t==='dtr'){
+    d.rows.forEach((r,ri)=>{
+      txtCols.forEach(ci=>{
+        const addr=XLSX.utils.encode_cell({r:ri+1,c:ci});
+        if(ws[addr])ws[addr].t='s';
+      });
+    });
+  }
+  ws['!cols']=d.headers.map(h=>({wch:Math.max(h.length+2,12)}));
+  XLSX.utils.book_append_sheet(wb,ws,t==='dtr'?'DTR':'Employees');
+  XLSX.writeFile(wb,(t==='dtr'?'dtr_export_':'employee_list_')+getTS()+'.xlsx');
+}
+
+function exportPrintWin(t,pdfMode,batchId){
+  const d=getExportData(t,batchId); if(!d)return;
+  const title=t==='dtr'?'Daily Time Record':'Employee List';
+  const now=new Date().toLocaleString();
+  const total=d.data.length;
+  const thCells=d.headers.map(h=>`<th>${h}</th>`).join('');
+  const tbRows=d.rows.map(r=>`<tr>${r.map(v=>`<td>${v===''||v===null||v===undefined?'—':v}</td>`).join('')}</tr>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${title}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#111;background:#fff;padding:18px;}
+h2{font-size:15px;font-weight:700;margin-bottom:2px;color:#111;}
+.meta{font-size:9px;color:#555;margin-bottom:4px;}
+.batch{font-size:9px;color:#888;margin-bottom:10px;font-family:monospace;letter-spacing:.5px;}
+table{width:100%;border-collapse:collapse;font-size:9px;}
+thead th{background:#1a1f2a;color:#fff;padding:6px 8px;text-align:left;font-weight:700;letter-spacing:.4px;white-space:nowrap;}
+tbody tr:nth-child(even){background:#f5f7fa;}
+tbody td{padding:5px 8px;border-bottom:1px solid #e2e8f0;white-space:nowrap;}
+.footer{margin-top:12px;font-size:8px;color:#888;text-align:right;}
+${pdfMode?`@media screen{.pdf-hint{display:block;background:#fff3cd;border:1px solid #ffc107;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:11px;color:#664d03;}}`:`.pdf-hint{display:none;}`}
+@media print{.pdf-hint{display:none!important;}}
+</style></head><body>
+${pdfMode?`<div class="pdf-hint">💡 <strong>To save as PDF:</strong> In the print dialog, set the <strong>Destination</strong> to <em>"Save as PDF"</em>, then click Save.</div>`:''}
+<h2>${title}</h2>
+<div class="meta">Exported: ${now} &nbsp;|&nbsp; ${total} record${total!==1?'s':''}</div>
+<div class="batch">Batch ID: ${batchId}</div>
+<table><thead><tr>${thCells}</tr></thead><tbody>${tbRows}</tbody></table>
+<div class="footer">Daily Time Record Viewer &mdash; ${now} &mdash; Batch: ${batchId}</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+  const w=window.open('','_blank','width=1000,height=700');
+  if(!w){alert('Pop-up blocked. Please allow pop-ups for this page.');return;}
+  w.document.write(html);w.document.close();
+}
+
+function dl(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+</script>
+
+<script>
+function getQueryParam(param) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(param);
+}
+
+const periodId = getQueryParam('period_id');
+const branchId = getQueryParam('branch_id');
+
+console.log('Selected period:', periodId);
+console.log('Selected branch:', branchId);
+
+// Use this to filter/load your attendance data
+</script>
+</body>
+</html>

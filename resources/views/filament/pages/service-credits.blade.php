@@ -1,0 +1,5 @@
+<x-filament-panels::page>
+
+    <!-- <h1>Service credits</h1> -->
+
+</x-filament-panels::page>
