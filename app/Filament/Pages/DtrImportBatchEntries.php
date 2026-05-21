@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Dtr as ModelsDtr;
 use BackedEnum;
 use Filament\Actions\Action;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -18,6 +19,7 @@ use Override;
 
 class DtrImportBatchEntries extends Page implements HasTable
 {
+    use HasPageShield;
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';

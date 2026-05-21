@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 
-#[Fillable(['name', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled'])]
+#[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled'])]
 #[Hidden(['password', 'remember_token'])]
 class SystemAccount extends User
 {

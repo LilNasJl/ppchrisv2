@@ -8,8 +8,10 @@ use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\PayrollPeriod;
+use App\Support\HrDatabaseNotification;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -23,6 +25,7 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
@@ -32,6 +35,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DtrManageTable extends BaseWidget
 {
+    use HasWidgetShield;
     protected int|string|array $columnSpan = 'full';
 
     public ?string $employeeId = null;
@@ -527,6 +531,15 @@ class DtrManageTable extends BaseWidget
         }
 
         $deleted = $this->getScopedDtrQuery()->delete();
+
+        if ($deleted > 0) {
+            HrDatabaseNotification::send(
+                title: 'D.T.R entries deleted',
+                body: "Cleared {$deleted} D.T.R entries",
+                status: 'danger',
+                icon: Heroicon::Trash,
+            );
+        }
 
         $this->flushCachedTableRecords();
 

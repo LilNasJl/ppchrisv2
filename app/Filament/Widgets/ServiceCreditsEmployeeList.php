@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\BulkActionGroup;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
@@ -10,6 +11,7 @@ use ServiceCredit;
 
 class ServiceCreditsEmployeeList extends TableWidget
 {
+    use HasWidgetShield;
     public function table(Table $table): Table
     {
         return $table

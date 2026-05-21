@@ -5,11 +5,14 @@ namespace App\Filament\Pages;
 use App\Filament\Resources\MemoTypes\MemoTypeResource;
 use App\Models\Employee;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -20,6 +23,7 @@ use UnitEnum;
 
 class Memo extends Page implements HasTable
 {
+    use HasPageShield;
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
@@ -44,6 +48,11 @@ class Memo extends Page implements HasTable
                 TextColumn::make('index')
                     ->label('#')
                     ->rowIndex(),
+
+                ImageColumn::make('user.profile_photo_path')
+                    ->label('Profile')
+                    ->disk('public')
+                    ->circular(),
 
                 TextColumn::make('full_name')
                     ->label('Employee Name')
@@ -77,12 +86,15 @@ class Memo extends Page implements HasTable
                     ->color(fn (Employee $record): string => $record->hasEndedEmployment() ? 'danger' : 'success'),
             ])
             ->recordActions([
-                Action::make('viewMemo')
-                    ->label('View Memo')
-                    ->icon(Heroicon::DocumentText)
-                    ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
-                        'employeeId' => $record->id,
-                    ])),
+                ActionGroup::make([
+                    Action::make('viewMemo')
+                        ->label('View Memo')
+                        ->icon(Heroicon::DocumentText)
+                        ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
+                            'employeeId' => $record->id,
+                        ])),
+                ])
+                    ->icon(Heroicon::EllipsisHorizontal),
             ]);
     }
 

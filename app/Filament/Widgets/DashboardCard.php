@@ -5,11 +5,13 @@ namespace App\Filament\Widgets;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Leave;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class DashboardCard extends StatsOverviewWidget
 {
+    use HasWidgetShield;
     protected int|string|array $columnSpan = 'full';
 
     protected function getColumns(): int|array

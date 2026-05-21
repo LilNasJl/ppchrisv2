@@ -43,7 +43,7 @@ class SystemAccountResource extends Resource
 
     protected static ?string $pluralModelLabel = 'System Accounts';
 
-    protected static ?string $recordTitleAttribute = 'name';
+    protected static ?string $recordTitleAttribute = 'username';
 
     public static function form(Schema $schema): Schema
     {
@@ -52,11 +52,21 @@ class SystemAccountResource extends Resource
                 Section::make('Account Details')
                     ->description('Accounts here are only for HR/admin access. Employee accounts stay in Employee Accounts.')
                     ->schema([
-                        TextInput::make('name')
-                            ->label('Account Name')
-                            ->placeholder('e.g., Juan Dela Cruz')
+                        TextInput::make('username')
+                            ->label('Username')
+                            ->placeholder('e.g., jlladroma')
                             ->required()
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->rule('regex:/^\S+$/')
+                            ->unique(
+                                table: User::class,
+                                column: 'username',
+                                ignoreRecord: true,
+                            )
+                            ->validationMessages([
+                                'regex' => 'The username must not contain spaces.',
+                                'unique' => 'This username is already registered.',
+                            ]),
 
                         TextInput::make('email')
                             ->label('Email')
@@ -110,14 +120,14 @@ class SystemAccountResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('name')
+            ->defaultSort('username')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
                     ->rowIndex(),
 
-                TextColumn::make('name')
-                    ->label('Account Name')
+                TextColumn::make('username')
+                    ->label('Username')
                     ->searchable()
                     ->sortable(),
 

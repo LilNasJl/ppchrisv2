@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Activity;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class UpcomingActivitiesTable extends TableWidget
 {
+    use HasWidgetShield;
     protected int | string | array $columnSpan = 'full';
 
     protected static ?string $heading = 'Upcoming Activities';

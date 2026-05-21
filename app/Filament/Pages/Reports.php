@@ -11,6 +11,7 @@ use App\Models\PayrollPeriod;
 use App\Services\PayrollCalculator;
 use App\Support\CompanyExportHeader;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -29,6 +30,7 @@ use UnitEnum;
 
 class Reports extends Page implements HasForms
 {
+    use HasPageShield;
     use InteractsWithForms;
 
     protected string $view = 'filament.pages.reports';
@@ -253,13 +255,10 @@ class Reports extends Page implements HasForms
 
     protected function employmentStatusRows(): Collection
     {
-        $employees = Employee::query()
-            ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
-            ->get();
+        $employees = $this->activeEmployeeQuery()->get();
 
         return collect([
-            ['Active Employee', $employees->reject(fn (Employee $employee): bool => $employee->hasEndedEmployment())->count()],
-            ['End Contract Employee', $employees->filter(fn (Employee $employee): bool => $employee->hasEndedEmployment())->count()],
+            ['Active Employee', $employees->count()],
         ]);
     }
 
@@ -318,16 +317,23 @@ class Reports extends Page implements HasForms
                 $first = $dtrs->first();
                 $employee = Employee::query()
                     ->with('branch')
+                    ->activeEmployment()
+                    ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
                     ->where('branch_id', $first->branch_id)
                     ->where('fingerprint_id', $first->fingerprint_id)
                     ->first();
 
+                if (! $employee) {
+                    return [];
+                }
+
                 return [
-                    'employee' => $employee?->full_name ?: (string) $first->fingerprint_id,
-                    'branch' => $employee?->branch?->branch_name ?: (string) $first->branch_id,
+                    'employee' => $employee->full_name,
+                    'branch' => $employee->branch?->branch_name ?: (string) $first->branch_id,
                     'minutes' => (float) $dtrs->sum(fn (Dtr $dtr): float => (float) ($dtr->{$metric} ?? 0)),
                 ];
             })
+            ->filter()
             ->sortByDesc('minutes')
             ->values()
             ->map(fn (array $row, int $index): array => [
@@ -378,6 +384,9 @@ class Reports extends Page implements HasForms
 
         return Memo::query()
             ->with('employee')
+            ->whereHas('employee', fn (Builder $query) => $query
+                ->activeEmployment()
+                ->whereHas('user', fn (Builder $userQuery) => $userQuery->where('role', 'employee')))
             ->whereBetween('created_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->get()
             ->groupBy('employee_id')

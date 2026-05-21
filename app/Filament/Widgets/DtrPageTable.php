@@ -6,6 +6,7 @@ use App\Filament\Pages\DtrImport;
 use App\Filament\Pages\DtrManage;
 use App\Filament\Pages\DtrViewer;
 use App\Models\Employee as ModelsEmployee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DtrPageTable extends TableWidget
 {
+    use HasWidgetShield;
     protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table

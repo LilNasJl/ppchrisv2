@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\Branch;
 use App\Models\Branch as ModelsBranch;
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -29,6 +30,7 @@ use Livewire\Attributes\On;
 
 class BranchTable extends TableWidget
 {
+    use HasWidgetShield;
     protected int|string|array $columnSpan = 'full';
 
     #[On('refreshBranchTable')]

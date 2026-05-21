@@ -14,6 +14,15 @@ class EditUser extends EditRecord
 {
     protected static string $resource = UserResource::class;
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (filled($data['username'] ?? null)) {
+            $data['name'] = $data['username'];
+        }
+
+        return $data;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

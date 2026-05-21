@@ -13,6 +13,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group as ComponentsGroup;
@@ -24,6 +25,7 @@ use UnitEnum;
 
 class Branch extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.branch';
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
     protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';

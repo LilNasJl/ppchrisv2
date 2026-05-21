@@ -58,11 +58,6 @@ class UsersTable
                         ->orderBy('account_employees.lastname', $direction)
                         ->orderBy('account_employees.middlename', $direction)
                         ->orderBy('account_employees.firstname', $direction)),
-                TextColumn::make('email')
-                    ->label('Email')
-                    ->searchable()
-                    ->sortable(),
-
                 TextColumn::make('employee.branch.branch_name')
                     ->label('Branch')
                     ->searchable()

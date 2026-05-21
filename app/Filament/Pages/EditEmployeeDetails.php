@@ -9,6 +9,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,7 @@ use Override;
 
 class EditEmployeeDetails extends Page implements HasForms
 {
+    use HasPageShield;
     use InteractsWithForms;
     use ManagesEmployeeDetailsForm;
 

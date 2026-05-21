@@ -12,9 +12,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled'])]
+#[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -32,6 +33,32 @@ class User extends Authenticatable implements FilamentUser
             'employee' => $this->role === 'employee' && ! (bool) $this->employee?->hasEndedEmployment(),
             default => false,
         };
+    }
+
+    public static function normalizeUsername(?string $username): ?string
+    {
+        if (blank($username)) {
+            return null;
+        }
+
+        return Str::of((string) $username)
+            ->trim()
+            ->toString();
+    }
+
+    public static function companyUsernameFromUid(?string $uid): ?string
+    {
+        if (blank($uid)) {
+            return null;
+        }
+
+        $uid = Str::of((string) $uid)
+            ->replace('PF', '')
+            ->replace('-', '')
+            ->trim()
+            ->toString();
+
+        return 'PF'.str_pad((string) ((int) $uid), 4, '0', STR_PAD_LEFT);
     }
 
     protected static function booted(): void

@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Filament\Pages\EmployeePayroll;
 use App\Models\Employee;
 use App\Services\PayrollCalculator;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class PayrollEmployeeTable extends TableWidget
 {
+    use HasWidgetShield;
     protected int | string | array $columnSpan = 'full';
 
     protected static ?string $heading = 'Employee Payroll';

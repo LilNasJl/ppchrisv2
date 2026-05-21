@@ -8,6 +8,7 @@ use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Validator;
@@ -15,6 +16,7 @@ use UnitEnum;
 
 class ActivityCalendar extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.activity-calendar';
 
     protected static ?string $title = 'Activity Calendar';
@@ -116,9 +118,7 @@ class ActivityCalendar extends Page
         ])->validate();
 
         if ($this->editingActivityId) {
-            Activity::query()
-                ->whereKey($this->editingActivityId)
-                ->update($data);
+            Activity::query()->find($this->editingActivityId)?->update($data);
         } else {
             Activity::create($data);
         }
@@ -133,7 +133,7 @@ class ActivityCalendar extends Page
 
     public function deleteActivity(int $activityId): void
     {
-        Activity::query()->whereKey($activityId)->delete();
+        Activity::query()->find($activityId)?->delete();
 
         if ($this->editingActivityId === $activityId) {
             $this->resetActivityForm();

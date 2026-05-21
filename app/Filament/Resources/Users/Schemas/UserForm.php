@@ -73,9 +73,17 @@ class UserForm
                 Section::make('Employee Account Details')
                     ->description('Primary login and security information.')
                     ->schema([
-                        TextInput::make('name')
-                            ->placeholder('e.g., Juan Dela Cruz')
-                            ->required(),
+                        TextInput::make('username')
+                            ->label('Username')
+                            ->placeholder('e.g., PF0001')
+                            ->default(function (): string {
+                                $counter = Counter::first();
+                                $next = $counter ? $counter->uid + 1 : 1;
+
+                                return 'PF'.str_pad($next, 4, '0', STR_PAD_LEFT);
+                            })
+                            ->readOnly()
+                            ->dehydrated(false),
 
                         TextInput::make('email')
                             ->placeholder('e.g., juandelacruz@gmail.com')

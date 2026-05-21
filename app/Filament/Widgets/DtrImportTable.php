@@ -5,6 +5,8 @@ namespace App\Filament\Widgets;
 use App\Filament\Imports\DtrImporter;
 use App\Filament\Pages\DtrImportBatchEntries;
 use App\Models\Dtr as ModelsImport;
+use App\Support\HrDatabaseNotification;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -19,6 +21,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DtrImportTable extends TableWidget
 {
+    use HasWidgetShield;
     protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table
@@ -90,9 +93,20 @@ class DtrImportTable extends TableWidget
                                 return false;
                             }
 
-                            return ModelsImport::query()
+                            $deleted = ModelsImport::query()
                                 ->where('batch_id', $record->batch_id)
-                                ->forceDelete() > 0;
+                                ->forceDelete();
+
+                            if ($deleted > 0) {
+                                HrDatabaseNotification::send(
+                                    title: 'D.T.R batch permanently deleted',
+                                    body: "Batch {$record->batch_id} ({$deleted} entries)",
+                                    status: 'danger',
+                                    icon: Heroicon::Trash,
+                                );
+                            }
+
+                            return $deleted > 0;
                         }),
                 ])
                     ->icon('heroicon-m-ellipsis-vertical')

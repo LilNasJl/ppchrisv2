@@ -3,11 +3,13 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\DB;
 
 class HeadCountPerDept extends ChartWidget
 {
+    use HasWidgetShield;
     protected ?string $heading = 'Head Count Per Department';
 
     protected int|string|array $columnSpan = [

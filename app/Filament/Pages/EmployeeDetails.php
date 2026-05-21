@@ -7,6 +7,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Support\Icons\Heroicon;
@@ -16,6 +17,7 @@ use UnitEnum;
 
 class EmployeeDetails extends Page 
 {
+    use HasPageShield;
 
 
     protected string $view = 'filament.pages.employee-details';

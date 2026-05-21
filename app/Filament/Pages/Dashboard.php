@@ -9,11 +9,13 @@ use App\Filament\Widgets\HeadCountPerDept;
 use App\Filament\Widgets\UpcomingActivitiesTable;
 use App\Filament\Widgets\UpcomingHolidaysTable;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class Dashboard extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.dashboard';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;

@@ -38,7 +38,7 @@ class MyAccount extends Page implements HasForms
         $this->form->fill([
             'employee_id' => $employee?->uid ? 'PF-'.$employee->uid : null,
             'fingerprint_id' => $employee?->fingerprint_id,
-            'name' => $user->name,
+            'full_name' => $employee?->full_name ?? $user->name,
             'email' => $user->email,
             'profile_photo_path' => $user->profile_photo_path,
         ]);
@@ -64,10 +64,10 @@ class MyAccount extends Page implements HasForms
                         ->disabled()
                         ->dehydrated(false),
 
-                    TextInput::make('name')
-                        ->label('Account Name')
-                        ->required()
-                        ->maxLength(255),
+                    TextInput::make('full_name')
+                        ->label('Full Name')
+                        ->disabled()
+                        ->dehydrated(false),
 
                     TextInput::make('email')
                         ->label('Email')

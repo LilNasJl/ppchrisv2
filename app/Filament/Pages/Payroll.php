@@ -7,6 +7,7 @@ use App\Filament\Widgets\PayrollEmployeeTable;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
@@ -14,6 +15,7 @@ use UnitEnum;
 
 class Payroll extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.payroll';
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
     protected static string|UnitEnum|null $navigationGroup = 'Payroll Management';

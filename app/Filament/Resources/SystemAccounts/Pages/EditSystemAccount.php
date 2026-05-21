@@ -11,6 +11,13 @@ class EditSystemAccount extends EditRecord
 {
     protected static string $resource = SystemAccountResource::class;
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $data['name'] = $data['username'];
+
+        return $data;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

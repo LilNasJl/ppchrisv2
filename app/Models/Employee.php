@@ -90,7 +90,7 @@ class Employee extends Model
 
                 $counter->increment('uid');
 
-                $employee->uid = str_pad($counter->uid, 5, '0', STR_PAD_LEFT);
+                $employee->uid = str_pad($counter->uid, 4, '0', STR_PAD_LEFT);
             });
 
             $employee->schedule_type = $employee->rate_type === 'daily'

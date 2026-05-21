@@ -1,7 +1,9 @@
 <x-filament-panels::page>
     @php
         $user = auth()->user();
-        $initials = collect(explode(' ', (string) $user?->name))
+        $employee = $user?->employee;
+        $displayName = $employee?->full_name ?? $user?->name ?? 'Employee';
+        $initials = collect(explode(' ', str_replace(',', '', (string) $displayName)))
             ->filter()
             ->map(fn (string $part) => str($part)->substr(0, 1)->upper())
             ->take(2)
@@ -13,7 +15,7 @@
             @if ($user?->profile_photo_url)
                 <img
                     src="{{ $user->profile_photo_url }}"
-                    alt="{{ $user->name }}"
+                    alt="{{ $displayName }}"
                     style="width: 86px; height: 86px; border-radius: 999px; object-fit: cover; border: 2px solid rgba(96, 165, 250, .7);"
                 >
             @else
@@ -24,7 +26,7 @@
 
             <div>
                 <div style="font-size: 13px; color: #94a3b8;">Profile Picture</div>
-                <div style="font-size: 20px; font-weight: 800;">{{ $user?->name }}</div>
+                <div style="font-size: 20px; font-weight: 800;">{{ $displayName }}</div>
             </div>
         </section>
 

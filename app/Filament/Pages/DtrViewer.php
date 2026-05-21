@@ -8,6 +8,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Group;
 use Filament\Support\Icons\Heroicon;
@@ -15,6 +16,7 @@ use Override;
 
 class DtrViewer extends Page implements HasForms
 {
+    use HasPageShield;
     use InteractsWithForms;
 
     protected string $view = 'filament.pages.dtr-viewer';

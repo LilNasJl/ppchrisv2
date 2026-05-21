@@ -3,7 +3,8 @@
         $announcements = $this->announcements;
         $upcomingHolidays = $this->upcomingHolidays;
         $upcomingActivities = $this->upcomingActivities;
-        $userName = auth()->user()?->name ?? 'Employee';
+        $employee = auth()->user()?->employee;
+        $userName = filled($employee?->firstname) ? $employee->firstname : (auth()->user()?->name ?? 'Employee');
     @endphp
 
     <style>

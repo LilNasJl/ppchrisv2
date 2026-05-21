@@ -4,12 +4,14 @@ namespace App\Filament\Pages;
 
 use App\Filament\Widgets\DtrManageTable;
 use Filament\Actions\Action;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
 
 class DtrManage extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.dtr-manage';
     protected static bool $shouldRegisterNavigation = false;
     protected static ?string $title = "Manage D.T.R";

@@ -9,6 +9,7 @@ use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Validator;
@@ -16,6 +17,7 @@ use UnitEnum;
 
 class HolidayCalendar extends Page
 {
+    use HasPageShield;
     protected string $view = 'filament.pages.holiday-calendar';
 
     protected static ?string $title = 'Holiday Calendar';
@@ -158,9 +160,7 @@ class HolidayCalendar extends Page
             'description' => ['nullable', 'string'],
         ])->validate();
 
-        HolidayType::query()
-            ->whereKey($holidayTypeId)
-            ->update($data);
+        HolidayType::query()->find($holidayTypeId)?->update($data);
 
         $this->loadHolidayTypeEdits();
 
@@ -199,7 +199,7 @@ class HolidayCalendar extends Page
 
     public function deleteHoliday(int $holidayId): void
     {
-        Holiday::query()->whereKey($holidayId)->delete();
+        Holiday::query()->find($holidayId)?->delete();
 
         Notification::make()
             ->title('Holiday removed')
