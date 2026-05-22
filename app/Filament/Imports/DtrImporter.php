@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Holiday;
+use App\Services\DtrCalculator;
 use Carbon\Carbon;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -216,22 +217,20 @@ class DtrImporter extends Importer
         }
 
         if ($scheduleType === 'Overtime') {
-            $overtime = max(0, (int) $actualIn->diffInMinutes($actualOut));
-
             return [
                 'schedule_type' => $scheduleType,
-                'schedule_start' => null,
-                'schedule_end' => null,
-                'late' => 0,
-                'undertime' => 0,
-                'early_clock_in' => 0,
-                'overtime' => $overtime,
-                'credited_overtime' => 0,
-                'work_hrs' => $overtime,
-                'credited_work_hrs' => 0,
-                'overtime_status' => $overtime >= 30 ? 'Pending' : 'n/a',
-                'early_clock_in_approved' => false,
-                'overtime_approved' => false,
+                'schedule_start' => $this->data['schedule_start'] ?? '00:00:00',
+                'schedule_end' => $this->data['schedule_end'] ?? '00:00:00',
+                ...app(DtrCalculator::class)->calculate(
+                    dateIn: $this->data['date_in'],
+                    timeIn: $this->data['time_in'],
+                    dateOut: $this->data['date_out'],
+                    timeOut: $this->data['time_out'],
+                    scheduleStart: null,
+                    scheduleEnd: null,
+                    scheduleType: $scheduleType,
+                    overtimeOnly: true,
+                ),
                 'is_absent' => false,
             ];
         }
@@ -246,73 +245,27 @@ class DtrImporter extends Importer
             ];
         }
 
-        $scheduleStart = Carbon::parse("{$this->data['date_in']} {$scheduleStartValue}");
-        $scheduleEnd = Carbon::parse("{$this->data['date_in']} {$scheduleEndValue}");
-
-        if ($scheduleEnd->lessThanOrEqualTo($scheduleStart)) {
-            $scheduleEnd->addDay();
-        }
-
-        $late = $actualIn->greaterThan($scheduleStart)
-            ? (int) $scheduleStart->diffInMinutes($actualIn)
-            : 0;
-
-        $earlyClockIn = $actualIn->lessThan($scheduleStart)
-            ? (int) $actualIn->diffInMinutes($scheduleStart)
-            : 0;
-
-        $undertime = $actualOut->lessThan($scheduleEnd)
-            ? (int) $actualOut->diffInMinutes($scheduleEnd)
-            : 0;
-
-        $overtime = $actualOut->greaterThan($scheduleEnd)
-            ? (int) $scheduleEnd->diffInMinutes($actualOut)
-            : 0;
-
-        $shouldDeductBreak = $this->usesRegularSchedule($scheduleType)
-            && $scheduleType !== 'Saturday'
-            && $scheduleStart->lessThan($scheduleStart->copy()->setTime(13, 0))
-            && $scheduleEnd->greaterThan($scheduleStart->copy()->setTime(12, 0));
-
-        $breakDeduction = $shouldDeductBreak ? 60 : 0;
-
-        $scheduledMinutes = max(0, (int) $scheduleStart->diffInMinutes($scheduleEnd) - $breakDeduction);
-        $workMinutes = max(0, $scheduledMinutes - $late - $undertime + $earlyClockIn + $overtime);
-        $creditedWorkMinutes = max(0, $workMinutes - $earlyClockIn - $overtime);
-
         return [
             'schedule_type' => $scheduleType,
             'schedule_start' => $scheduleStartValue,
             'schedule_end' => $scheduleEndValue,
-            'late' => $late,
-            'undertime' => $undertime,
-            'early_clock_in' => $earlyClockIn,
-            'overtime' => $overtime,
-            'credited_overtime' => 0,
-            'work_hrs' => $workMinutes,
-            'credited_work_hrs' => $creditedWorkMinutes,
-            'overtime_status' => ($earlyClockIn >= 30 || $overtime >= 30) ? 'Pending' : 'n/a',
-            'early_clock_in_approved' => false,
-            'overtime_approved' => false,
+            ...app(DtrCalculator::class)->calculate(
+                dateIn: $this->data['date_in'],
+                timeIn: $this->data['time_in'],
+                dateOut: $this->data['date_out'],
+                timeOut: $this->data['time_out'],
+                scheduleStart: $scheduleStartValue,
+                scheduleEnd: $scheduleEndValue,
+                scheduleStartColumn: $this->getScheduleStartColumn($scheduleType),
+                scheduleType: $scheduleType,
+            ),
             'is_absent' => false,
         ];
     }
 
     protected function emptyCalculationData(bool $isAbsent = false): array
     {
-        return [
-            'late' => 0,
-            'undertime' => 0,
-            'early_clock_in' => 0,
-            'overtime' => 0,
-            'credited_overtime' => 0,
-            'work_hrs' => 0,
-            'credited_work_hrs' => 0,
-            'overtime_status' => 'n/a',
-            'early_clock_in_approved' => false,
-            'overtime_approved' => false,
-            'is_absent' => $isAbsent,
-        ];
+        return app(DtrCalculator::class)->emptyCalculationData($isAbsent);
     }
 
     protected function normalizeScheduleType(?string $scheduleType): string
@@ -370,6 +323,13 @@ class DtrImporter extends Importer
         }
 
         return $this->data['schedule_end'] ?? null;
+    }
+
+    protected function getScheduleStartColumn(string $scheduleType): ?string
+    {
+        return in_array($scheduleType, ['Regular', 'Saturday'], true)
+            ? 'reg_sched_start'
+            : null;
     }
 
     protected function getBranch(): ?Branch

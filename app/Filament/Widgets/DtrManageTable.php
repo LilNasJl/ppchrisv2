@@ -8,10 +8,11 @@ use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\PayrollPeriod;
+use App\Services\DtrCalculator;
 use App\Support\HrDatabaseNotification;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
-use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -36,6 +37,7 @@ use Illuminate\Database\Eloquent\Builder;
 class DtrManageTable extends BaseWidget
 {
     use HasWidgetShield;
+
     protected int|string|array $columnSpan = 'full';
 
     public ?string $employeeId = null;
@@ -634,76 +636,21 @@ class DtrManageTable extends BaseWidget
 
     protected function calculateDtr(array $data): array
     {
-        $actualIn = Carbon::parse("{$data['date_in']} {$data['time_in']}");
-        $actualOut = Carbon::parse("{$data['date_out']} {$data['time_out']}");
-
-        if ($actualOut->lessThan($actualIn)) {
-            $actualOut->addDay();
-        }
-
-        if ((bool) ($data['overtime_only'] ?? false)) {
-            $overtime = (int) $actualIn->diffInMinutes($actualOut);
-
-            return [
-                'late' => 0,
-                'undertime' => 0,
-                'overtime' => $overtime,
-                'early_clock_in' => 0,
-                'credited_overtime' => 0,
-                'work_hrs' => $overtime,
-                'credited_work_hrs' => 0,
-                'overtime_status' => $overtime >= 30 ? 'Pending' : 'n/a',
-                'early_clock_in_approved' => false,
-                'overtime_approved' => false,
-            ];
-        }
-
-        $scheduleStart = Carbon::parse("{$data['date_in']} {$data['schedule_start']}");
-        $scheduleEnd = Carbon::parse("{$data['date_in']} {$data['schedule_end']}");
-
-        if ($scheduleEnd->lessThanOrEqualTo($scheduleStart)) {
-            $scheduleEnd->addDay();
-        }
-
-        $late = $actualIn->greaterThan($scheduleStart)
-            ? (int) $scheduleStart->diffInMinutes($actualIn)
-            : 0;
-
-        $earlyClockIn = $actualIn->lessThan($scheduleStart)
-            ? (int) $actualIn->diffInMinutes($scheduleStart)
-            : 0;
-
-        $undertime = $actualOut->lessThan($scheduleEnd)
-            ? (int) $actualOut->diffInMinutes($scheduleEnd)
-            : 0;
-
-        $overtime = $actualOut->greaterThan($scheduleEnd)
-            ? (int) $scheduleEnd->diffInMinutes($actualOut)
-            : 0;
-
-        $breakDeduction = $this->getBreakDeductionMinutes(
-            $data['schedule_start_column'] ?? null,
-            $scheduleStart,
-            $scheduleEnd,
+        return app(DtrCalculator::class)->calculate(
+            dateIn: $data['date_in'],
+            timeIn: $data['time_in'],
+            dateOut: $data['date_out'],
+            timeOut: $data['time_out'],
+            scheduleStart: $data['schedule_start'] ?? null,
+            scheduleEnd: $data['schedule_end'] ?? null,
+            scheduleStartColumn: $data['schedule_start_column'] ?? null,
+            scheduleType: $this->getScheduleTypeLabel(
+                $data['schedule_start_column'] ?? null,
+                (bool) ($data['overtime_only'] ?? false),
+                $this->usesSaturdaySchedule($data['date_in'] ?? null),
+            ),
+            overtimeOnly: (bool) ($data['overtime_only'] ?? false),
         );
-
-        $scheduledMinutes = max(0, (int) $scheduleStart->diffInMinutes($scheduleEnd) - $breakDeduction);
-        $workMinutes = max(0, $scheduledMinutes - $late - $undertime + $earlyClockIn + $overtime);
-        $creditedWorkMinutes = max(0, $workMinutes - $earlyClockIn - $overtime);
-        $hasPendingOvertime = $earlyClockIn >= 30 || $overtime >= 30;
-
-        return [
-            'late' => $late,
-            'undertime' => $undertime,
-            'overtime' => $overtime,
-            'early_clock_in' => $earlyClockIn,
-            'credited_overtime' => 0,
-            'work_hrs' => $workMinutes,
-            'credited_work_hrs' => $creditedWorkMinutes,
-            'overtime_status' => $hasPendingOvertime ? 'Pending' : 'n/a',
-            'early_clock_in_approved' => false,
-            'overtime_approved' => false,
-        ];
     }
 
     protected function getBreakDeductionMinutes(?string $scheduleStartColumn, Carbon $scheduleStart, Carbon $scheduleEnd): int

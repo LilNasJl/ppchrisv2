@@ -6,8 +6,10 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollSnapshot;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class PayrollCalculator
@@ -52,10 +54,58 @@ class PayrollCalculator
 
     public function rows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
+        if ((bool) $period->is_locked && $this->hasSnapshots($period, $branchId)) {
+            return $this->snapshotRows($period, $branchId);
+        }
+
+        return $this->liveRows($period, $branchId);
+    }
+
+    public function snapshotPeriod(PayrollPeriod $period): void
+    {
+        $rows = $this->liveRows($period);
+
+        DB::transaction(function () use ($period, $rows): void {
+            PayrollSnapshot::query()
+                ->where('payroll_period_id', $period->id)
+                ->delete();
+
+            foreach ($rows as $row) {
+                PayrollSnapshot::create([
+                    'payroll_period_id' => $period->id,
+                    'employee_id' => $row['employee_id'] ?? null,
+                    'branch_id' => $row['branch_id'] ?? null,
+                    'row_number' => $row['number'] ?? 0,
+                    'data' => $row,
+                ]);
+            }
+        });
+    }
+
+    protected function liveRows(PayrollPeriod $period, ?int $branchId = null): Collection
+    {
         return $this->employeesQuery($branchId)
             ->get()
             ->values()
             ->map(fn (Employee $employee, int $index): array => $this->row($employee, $period, $index + 1));
+    }
+
+    protected function hasSnapshots(PayrollPeriod $period, ?int $branchId = null): bool
+    {
+        return PayrollSnapshot::query()
+            ->where('payroll_period_id', $period->id)
+            ->when($branchId, fn (Builder $query) => $query->where('branch_id', $branchId))
+            ->exists();
+    }
+
+    protected function snapshotRows(PayrollPeriod $period, ?int $branchId = null): Collection
+    {
+        return PayrollSnapshot::query()
+            ->where('payroll_period_id', $period->id)
+            ->when($branchId, fn (Builder $query) => $query->where('branch_id', $branchId))
+            ->orderBy('row_number')
+            ->get()
+            ->map(fn (PayrollSnapshot $snapshot): array => $snapshot->data);
     }
 
     public function row(Employee $employee, PayrollPeriod $period, int $number = 1): array
@@ -65,8 +115,11 @@ class PayrollCalculator
         $dtrs = $this->dtrs($employee, $period);
         $rateType = $this->rateType($employee);
         $isDaily = $rateType === 'Daily';
-        $ratePerDay = $this->ratePerDay($employee);
-        $monthlyRate = $isDaily ? null : $this->money($employee->monthly_rate ?: ($ratePerDay * self::REGULAR_WORK_DAYS_PER_MONTH));
+        $ratePerDay = $this->ratePerDay($employee, $dtrs);
+        $hasStoredDailyRate = $this->storedDailyRate($dtrs) > 0;
+        $monthlyRate = $isDaily ? null : $this->money($hasStoredDailyRate
+            ? $ratePerDay * self::REGULAR_WORK_DAYS_PER_MONTH
+            : ($employee->monthly_rate ?: ($ratePerDay * self::REGULAR_WORK_DAYS_PER_MONTH)));
         $halfMonthPay = $isDaily ? null : $this->money(($monthlyRate ?? 0) / 2);
         $ratePerHour = $this->money($ratePerDay / 8);
 
@@ -81,8 +134,9 @@ class PayrollCalculator
             ? $this->money($ratePerDay * $daysWorked)
             : $this->money($ratePerDay * self::REGULAR_HALF_MONTH_DAYS);
 
-        $lateMinutes = $this->sumMinutes($dtrs, 'late');
-        $undertimeMinutes = $this->sumMinutes($dtrs, 'undertime');
+        $deductibleDtrs = $this->deductibleDtrs($dtrs);
+        $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
+        $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
         $overtimeAmount = $this->money($overtimeHours * $ratePerHour);
@@ -291,8 +345,14 @@ class PayrollCalculator
         return Str::contains(Str::lower((string) $employee->rate_type), 'daily') ? 'Daily' : 'Monthly';
     }
 
-    protected function ratePerDay(Employee $employee): float
+    protected function ratePerDay(Employee $employee, ?Collection $dtrs = null): float
     {
+        $storedDailyRate = $this->storedDailyRate($dtrs);
+
+        if ($storedDailyRate > 0) {
+            return $this->money($storedDailyRate);
+        }
+
         $dailyRate = (float) ($employee->daily_rate ?? 0);
 
         if ($dailyRate > 0) {
@@ -304,6 +364,18 @@ class PayrollCalculator
         return $monthlyRate > 0
             ? $this->money($monthlyRate / self::REGULAR_WORK_DAYS_PER_MONTH)
             : 0.0;
+    }
+
+    protected function storedDailyRate(?Collection $dtrs): float
+    {
+        if (! $dtrs || $dtrs->isEmpty()) {
+            return 0.0;
+        }
+
+        return (float) ($dtrs
+            ->sortBy('date_in')
+            ->first(fn (Dtr $dtr): bool => (float) ($dtr->daily_rate ?? 0) > 0)
+            ?->daily_rate ?? 0);
     }
 
     protected function workedDtrDays(Collection $dtrs): float
@@ -325,6 +397,13 @@ class PayrollCalculator
             ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
             ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime')
             ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in));
+    }
+
+    protected function deductibleDtrs(Collection $dtrs): Collection
+    {
+        return $dtrs
+            ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime');
     }
 
     protected function absenceDays(Collection $dtrs): float
@@ -384,11 +463,17 @@ class PayrollCalculator
 
                     return Str::contains($holidayType, 'special') || ($holidayRate > 0 && $holidayRate < 100);
                 })
-                ->unique(fn (Dtr $dtr): string => (string) $dtr->date_in.'-'.(string) ($dtr->holiday_type ?: $dtr->holiday_id))
                 ->sum(function (Dtr $dtr) use ($ratePerDay): float {
                     $holidayRate = (float) ($dtr->holiday_rate ?: $dtr->holiday?->type?->rate ?: 0);
+                    $dailyRate = (float) ($dtr->daily_rate ?: $ratePerDay);
+                    $ratePerHour = $dailyRate / 8;
+                    $creditedHours = ((float) ($dtr->credited_work_hrs ?? 0)) / 60;
+                    $baseWorkedPay = $creditedHours * $ratePerHour;
+                    $premiumMultiplier = $holidayRate >= 100
+                        ? max(0, ($holidayRate - 100) / 100)
+                        : $holidayRate / 100;
 
-                    return $ratePerDay * ($holidayRate / 100);
+                    return $baseWorkedPay * $premiumMultiplier;
                 })
         );
     }

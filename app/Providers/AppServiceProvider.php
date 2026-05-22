@@ -19,8 +19,10 @@ use App\Models\MemoType;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
 use App\Models\SystemAccount;
+use App\Models\Ticket;
 use App\Models\User;
 use App\Observers\HrActionNotificationObserver;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Role;
 
@@ -45,7 +47,7 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * @return array<class-string<\Illuminate\Database\Eloquent\Model>>
+     * @return array<class-string<Model>>
      */
     protected function hrNotifiableModels(): array
     {
@@ -68,6 +70,7 @@ class AppServiceProvider extends ServiceProvider
             PayrollSignatory::class,
             Role::class,
             SystemAccount::class,
+            Ticket::class,
             User::class,
         ];
     }
