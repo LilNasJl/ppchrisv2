@@ -54,10 +54,6 @@ class PayrollCalculator
 
     public function rows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
-        if ((bool) $period->is_locked && $this->hasSnapshots($period, $branchId)) {
-            return $this->snapshotRows($period, $branchId);
-        }
-
         return $this->liveRows($period, $branchId);
     }
 

@@ -35,9 +35,7 @@ class PayrollPeriodForm
 
                         Toggle::make('is_locked')
                             ->label('Locked')
-                            ->helperText('Use the Lock Payroll Period action after review. Locked payroll periods cannot be unlocked.')
-                            ->disabled()
-                            ->dehydrated(false)
+                            ->helperText('Turn this on to restrict D.T.R changes for this payroll period. It can be turned off again when corrections are needed.')
                             ->default(false),
 
                         Textarea::make('description')

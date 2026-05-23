@@ -2,13 +2,12 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Pages;
 
-use App\Filament\Pages\Payroll;
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
 use Filament\Actions\Action;
-use Filament\Resources\Pages\ListRecords;
+use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Icons\Heroicon;
 
-class ListPayrollPeriods extends ListRecords
+class ViewPayrollPeriod extends ViewRecord
 {
     protected static string $resource = PayrollPeriodResource::class;
 
@@ -18,7 +17,7 @@ class ListPayrollPeriods extends ListRecords
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Payroll::getUrl()),
+                ->url(PayrollPeriodResource::getUrl()),
         ];
     }
 }

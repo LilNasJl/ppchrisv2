@@ -22,9 +22,15 @@ use App\Models\SystemAccount;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Observers\HrActionNotificationObserver;
+use App\Services\PayrollPeriodGenerator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Permission\Models\Role;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -43,6 +49,42 @@ class AppServiceProvider extends ServiceProvider
     {
         foreach ($this->hrNotifiableModels() as $model) {
             $model::observe(HrActionNotificationObserver::class);
+        }
+
+        $this->ensureCurrentPayrollPeriodForWebRequests();
+    }
+
+    protected function ensureCurrentPayrollPeriodForWebRequests(): void
+    {
+        if ($this->app->runningInConsole()) {
+            return;
+        }
+
+        try {
+            if (! Schema::hasTable('payroll_periods')) {
+                return;
+            }
+
+            $now = Carbon::now('Asia/Manila');
+            $checkKey = 'payroll-period:auto-check:'.$now->format('Y-m-d-H');
+
+            if (Cache::has($checkKey)) {
+                return;
+            }
+
+            Cache::lock('payroll-period:auto-check-lock', 10)->block(1, function () use ($checkKey): void {
+                if (Cache::has($checkKey)) {
+                    return;
+                }
+
+                app(PayrollPeriodGenerator::class)->ensureCurrentPeriod();
+
+                Cache::put($checkKey, true, now()->addHour());
+            });
+        } catch (Throwable $exception) {
+            Log::warning('Automatic payroll period check failed.', [
+                'message' => $exception->getMessage(),
+            ]);
         }
     }
 

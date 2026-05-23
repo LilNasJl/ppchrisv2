@@ -28,16 +28,6 @@ class PayrollPeriod extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (PayrollPeriod $payrollPeriod): void {
-            if (
-                $payrollPeriod->exists
-                && (bool) $payrollPeriod->getOriginal('is_locked')
-                && ! (bool) $payrollPeriod->is_locked
-            ) {
-                $payrollPeriod->is_locked = true;
-            }
-        });
-
         static::saved(function (PayrollPeriod $payrollPeriod): void {
             Dtr::query()
                 ->where('payroll_period_id', $payrollPeriod->id)
