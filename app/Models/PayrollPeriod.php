@@ -17,6 +17,8 @@ class PayrollPeriod extends Model
         'date_payout',
         'description',
         'is_locked',
+        'locked_at',
+        'deductions_processed_at',
     ];
 
     protected $casts = [
@@ -24,6 +26,8 @@ class PayrollPeriod extends Model
         'date_end' => 'date',
         'date_payout' => 'date',
         'is_locked' => 'boolean',
+        'locked_at' => 'datetime',
+        'deductions_processed_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -57,5 +61,10 @@ class PayrollPeriod extends Model
     public function dtrs(): HasMany
     {
         return $this->hasMany(Dtr::class);
+    }
+
+    public function employeeExclusions(): HasMany
+    {
+        return $this->hasMany(PayrollPeriodEmployeeExclusion::class);
     }
 }

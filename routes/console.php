@@ -2,6 +2,7 @@
 
 use App\Models\Employee;
 use App\Services\PayrollPeriodGenerator;
+use App\Services\PayrollPeriodLockService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -30,4 +31,11 @@ Artisan::command('payroll-period:ensure-current', function (PayrollPeriodGenerat
     $this->info($message.$result['period']->title);
 })->purpose('Create the current payroll period when it does not exist');
 
+Artisan::command('payroll-period:auto-lock-due', function (PayrollPeriodLockService $lockService): void {
+    $locked = $lockService->lockPastPayoutPeriods();
+
+    $this->info("Locked {$locked} payroll period(s) after payout.");
+})->purpose('Lock payroll periods after their payout date and process deduction terms');
+
 Schedule::command('payroll-period:ensure-current')->hourly();
+Schedule::command('payroll-period:auto-lock-due')->hourly();

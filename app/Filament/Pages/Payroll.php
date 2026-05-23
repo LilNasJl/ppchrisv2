@@ -40,6 +40,11 @@ class Payroll extends Page
                     ->icon(Heroicon::BuildingStorefront)
                     ->url(PayrollByBranch::getUrl()),
 
+                Action::make('payrollRoster')
+                    ->label('Payroll Roster')
+                    ->icon(Heroicon::ClipboardDocumentList)
+                    ->url(PayrollRoster::getUrl()),
+
                 Action::make('managePayrollPeriods')
                     ->label('Manage Payroll Periods')
                     ->icon(Heroicon::CalendarDays)

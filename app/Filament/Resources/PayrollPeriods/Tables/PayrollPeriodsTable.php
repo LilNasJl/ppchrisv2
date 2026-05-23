@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Tables;
 
+use App\Models\PayrollPeriod;
+use App\Services\PayrollPeriodLockService;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -41,7 +43,12 @@ class PayrollPeriodsTable
                 ToggleColumn::make('is_locked')
                     ->label('Locked')
                     ->onColor('danger')
-                    ->offColor('success'),
+                    ->offColor('success')
+                    ->updateStateUsing(function (PayrollPeriod $record, mixed $state): bool {
+                        app(PayrollPeriodLockService::class)->setLocked($record, (bool) $state);
+
+                        return (bool) $state;
+                    }),
 
                 TextColumn::make('description')
                     ->limit(80)

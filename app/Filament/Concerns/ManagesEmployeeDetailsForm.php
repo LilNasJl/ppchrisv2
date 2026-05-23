@@ -5,15 +5,14 @@ namespace App\Filament\Concerns;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
+use App\Services\EmployeeDeductionService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,7 +41,11 @@ trait ManagesEmployeeDetailsForm
         foreach (collect(self::DEDUCTION_GROUPS)->flatten() as $title) {
             Deduction::query()->firstOrCreate(
                 ['title' => $title],
-                ['description' => $title],
+                [
+                    'description' => $title,
+                    'category' => Deduction::categoryForTitle($title),
+                    'term_type' => Deduction::TERM_PERMANENT,
+                ],
             );
         }
     }
@@ -187,14 +190,56 @@ trait ManagesEmployeeDetailsForm
             ->toArray();
     }
 
+    protected function deductionSummary(?ModelsEmployee $record): HtmlString
+    {
+        if (! $record) {
+            return new HtmlString('<div style="color:#64748b;">No employee selected.</div>');
+        }
+
+        $deductions = app(EmployeeDeductionService::class)->activeEmployeeDeductions($record);
+
+        if ($deductions->isEmpty()) {
+            return new HtmlString('<div style="color:#64748b;">No deductions linked to this employee.</div>');
+        }
+
+        $rows = $deductions
+            ->sortBy(fn (EmployeeDeduction $employeeDeduction): string => ($employeeDeduction->deduction?->category ?? '').($employeeDeduction->deduction?->title ?? ''))
+            ->map(function (EmployeeDeduction $employeeDeduction): string {
+                $deduction = $employeeDeduction->deduction;
+                $category = Deduction::categoryOptions()[$deduction?->category ?? Deduction::CATEGORY_OTHER] ?? 'Other Deductions';
+                $term = $employeeDeduction->term_type === Deduction::TERM_FIXED
+                    ? "{$employeeDeduction->remaining_terms} of {$employeeDeduction->term_periods} payroll period(s) remaining"
+                    : 'Permanent';
+
+                return '<tr>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($category).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);font-weight:700;">'.e($deduction?->title ?? 'Unknown').'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($deduction?->description ?: '-').'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.number_format((float) $employeeDeduction->amount, 2).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($term).'</td>'
+                    .'</tr>';
+            })
+            ->implode('');
+
+        return new HtmlString(
+            '<div style="overflow:auto;">'
+            .'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            .'<thead><tr>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Group</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Deduction</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Description</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Amount</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Terms</th>'
+            .'</tr></thead><tbody>'.$rows.'</tbody></table></div>'
+        );
+    }
+
     protected function getEmployeeDetailsFormData(ModelsEmployee $record): array
     {
         $record->resetLeaveCreditsIfNeeded();
         $record->refresh();
 
         $data = $record->attributesToArray();
-        $data['deductions'] = $this->getDeductionState($record);
-        $data['other_deduction_ids'] = $this->getSelectedOtherDeductionIds($record);
         $data['leave_credits'] = $record->leave_credits;
         $data['birthday_leave_credits'] = $record->birthday_leave_credits;
         $data['leave_credits_year'] = $record->leave_credits_year;
@@ -454,38 +499,10 @@ trait ManagesEmployeeDetailsForm
                     Tabs\Tab::make('Deductions')
                         ->icon(Heroicon::MinusCircle)
                         ->schema([
-                            Fieldset::make('Deductions')
-                                ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['Deductions']))
-                                ->columns([
-                                    'default' => 1,
-                                    'md' => 2,
-                                ]),
-
-                            Fieldset::make('REMITTANCES')
-                                ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['REMITTANCES']))
-                                ->columns([
-                                    'default' => 1,
-                                    'md' => 2,
-                                ]),
-
-                            Fieldset::make('Other Deductions')
-                                ->schema(fn (Get $get): array => [
-                                    Select::make('other_deduction_ids')
-                                        ->label('Linked Other Deductions')
-                                        ->multiple()
-                                        ->searchable()
-                                        ->preload()
-                                        ->live()
-                                        ->options(fn (): array => $this->getOtherDeductionOptions())
-                                        ->helperText('Only selected deductions will be linked to this employee.')
-                                        ->columnSpanFull(),
-
-                                    ...$this->getOtherDeductionFields($get('other_deduction_ids') ?? []),
-                                ])
-                                ->columns([
-                                    'default' => 1,
-                                    'md' => 2,
-                                ]),
+                            Placeholder::make('deduction_summary')
+                                ->hiddenLabel()
+                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->deductionSummary($record ?? ($this->employeeRecord ?? null)))
+                                ->columnSpanFull(),
                         ]),
 
                     Tabs\Tab::make('Leave')
@@ -579,14 +596,12 @@ trait ManagesEmployeeDetailsForm
 
     protected function saveEmployeeDetails(ModelsEmployee $record, array $data): Model
     {
-        $deductions = $data['deductions'] ?? [];
-        $otherDeductionIds = $data['other_deduction_ids'] ?? [];
         $profilePhotoPath = $data['profile_photo_path'] ?? null;
 
         unset($data['deductions'], $data['other_deduction_ids'], $data['tenure'], $data['profile_photo_path']);
         $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);
 
-        DB::transaction(function () use ($record, $data, $deductions, $otherDeductionIds, $profilePhotoPath): void {
+        DB::transaction(function () use ($record, $data, $profilePhotoPath): void {
             foreach (['gsis', 'philhealth', 'pagibig', 'tin', 'sss', 'bank_id_no', 'fingerprint_id'] as $field) {
                 $data[$field] = filled($data[$field] ?? null) ? $data[$field] : null;
             }
@@ -596,7 +611,6 @@ trait ManagesEmployeeDetailsForm
                 'profile_photo_path' => $profilePhotoPath,
             ]);
 
-            $this->syncEmployeeDeductions($record, $deductions, $otherDeductionIds);
         });
 
         return $record->refresh();

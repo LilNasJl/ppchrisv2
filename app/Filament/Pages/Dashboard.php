@@ -23,11 +23,6 @@ class Dashboard extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
-    // protected function getColumns(): int | array
-    // {
-    //     return 2;
-    // }
-
     protected function getHeaderWidgets(): array
     {
         return [
@@ -39,7 +34,6 @@ class Dashboard extends Page
             UpcomingHolidaysTable::class,
             UpcomingActivitiesTable::class,
             UpcomingBirthdaysTable::class,
-
         ];
     }
 

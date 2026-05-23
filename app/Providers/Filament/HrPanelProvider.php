@@ -36,14 +36,13 @@ class HrPanelProvider extends PanelProvider
             ->favicon(url('ppclogo.png'))
             ->databaseNotifications()
             ->login(Login::class)
-            ->sidebarFullyCollapsibleOnDesktop()
+            ->sidebarCollapsibleOnDesktop()
             ->navigationGroups([
                 NavigationGroup::make('Employee Management'),
                 NavigationGroup::make('Payroll Management'),
                 NavigationGroup::make('Updates and Activities'),
                 NavigationGroup::make('Reports and Documents'),
                 NavigationGroup::make('Organizational Setup'),
-                NavigationGroup::make('Compliance & Benefits'),
                 NavigationGroup::make('Settings'),
 
                 // NavigationGroup::make()

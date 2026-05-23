@@ -17,12 +17,14 @@ use App\Models\Leave;
 use App\Models\Memo;
 use App\Models\MemoType;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSignatory;
 use App\Models\SystemAccount;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Observers\HrActionNotificationObserver;
 use App\Services\PayrollPeriodGenerator;
+use App\Services\PayrollPeriodLockService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -78,6 +80,7 @@ class AppServiceProvider extends ServiceProvider
                 }
 
                 app(PayrollPeriodGenerator::class)->ensureCurrentPeriod();
+                app(PayrollPeriodLockService::class)->lockPastPayoutPeriods();
 
                 Cache::put($checkKey, true, now()->addHour());
             });
@@ -109,6 +112,7 @@ class AppServiceProvider extends ServiceProvider
             Memo::class,
             MemoType::class,
             PayrollPeriod::class,
+            PayrollPeriodEmployeeExclusion::class,
             PayrollSignatory::class,
             Role::class,
             SystemAccount::class,

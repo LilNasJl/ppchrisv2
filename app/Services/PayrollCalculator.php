@@ -6,6 +6,7 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -54,6 +55,10 @@ class PayrollCalculator
 
     public function rows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
+        if ((bool) $period->is_locked && $this->hasSnapshots($period, $branchId)) {
+            return $this->snapshotRows($period, $branchId);
+        }
+
         return $this->liveRows($period, $branchId);
     }
 
@@ -80,10 +85,27 @@ class PayrollCalculator
 
     protected function liveRows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
-        return $this->employeesQuery($branchId)
+        return $this->employeesForPeriod($period, $branchId)
             ->get()
             ->values()
             ->map(fn (Employee $employee, int $index): array => $this->row($employee, $period, $index + 1));
+    }
+
+    public function includedEmployeeIds(PayrollPeriod $period, ?int $branchId = null): Collection
+    {
+        return $this->employeesForPeriod($period, $branchId)
+            ->pluck('employees.id');
+    }
+
+    protected function employeesForPeriod(PayrollPeriod $period, ?int $branchId = null): Builder
+    {
+        $excludedEmployeeIds = PayrollPeriodEmployeeExclusion::query()
+            ->where('payroll_period_id', $period->id)
+            ->pluck('employee_id')
+            ->all();
+
+        return $this->employeesQuery($branchId)
+            ->when($excludedEmployeeIds !== [], fn (Builder $query) => $query->whereNotIn('employees.id', $excludedEmployeeIds));
     }
 
     protected function hasSnapshots(PayrollPeriod $period, ?int $branchId = null): bool
@@ -486,7 +508,7 @@ class PayrollCalculator
             ->mapWithKeys(fn (string $title, string $key): array => [$this->normalizeTitle($title) => $key])
             ->all();
 
-        foreach ($employee->employeeDeductions as $employeeDeduction) {
+        foreach (app(EmployeeDeductionService::class)->activeEmployeeDeductions($employee) as $employeeDeduction) {
             $title = $this->normalizeTitle((string) $employeeDeduction->deduction?->title);
             $amount = $this->money($employeeDeduction->amount ?? 0);
             $key = $titleToKey[$title] ?? null;

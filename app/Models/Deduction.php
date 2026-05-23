@@ -9,9 +9,22 @@ class Deduction extends Model
 {
     use SoftDeletes;
 
-    public const DEFAULT_TITLES = [
+    public const CATEGORY_COMPANY = 'company';
+
+    public const CATEGORY_REMITTANCE = 'remittance';
+
+    public const CATEGORY_OTHER = 'other';
+
+    public const TERM_PERMANENT = 'permanent';
+
+    public const TERM_FIXED = 'fixed';
+
+    public const COMPANY_TITLES = [
         'SHORTAGES',
         'COMPANY UNIFORM',
+    ];
+
+    public const REMITTANCE_TITLES = [
         'SSS LOAN',
         'SSS EE',
         'HDMF LOAN',
@@ -22,12 +35,58 @@ class Deduction extends Model
     protected $fillable = [
         'title',
         'description',
-        'amount'
+        'amount',
+        'category',
+        'term_type',
+        'term_periods',
+    ];
+
+    protected $casts = [
+        'term_periods' => 'integer',
     ];
 
     public static function defaultTitles(): array
     {
-        return self::DEFAULT_TITLES;
+        return [
+            ...self::COMPANY_TITLES,
+            ...self::REMITTANCE_TITLES,
+        ];
     }
-    
+
+    public static function categoryOptions(): array
+    {
+        return [
+            self::CATEGORY_COMPANY => 'Company Deductions',
+            self::CATEGORY_REMITTANCE => 'Remittances',
+            self::CATEGORY_OTHER => 'Other Deductions',
+        ];
+    }
+
+    public static function termTypeOptions(): array
+    {
+        return [
+            self::TERM_PERMANENT => 'Permanent',
+            self::TERM_FIXED => 'Fixed number of payroll periods',
+        ];
+    }
+
+    public static function categoryForTitle(string $title): string
+    {
+        $title = strtoupper(trim($title));
+
+        if (in_array($title, self::COMPANY_TITLES, true)) {
+            return self::CATEGORY_COMPANY;
+        }
+
+        if (in_array($title, self::REMITTANCE_TITLES, true)) {
+            return self::CATEGORY_REMITTANCE;
+        }
+
+        return self::CATEGORY_OTHER;
+    }
+
+    public function employeeDeductions()
+    {
+        return $this->hasMany(EmployeeDeduction::class, 'deduction_id');
+    }
 }

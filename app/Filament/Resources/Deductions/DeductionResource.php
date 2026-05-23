@@ -20,9 +20,14 @@ use UnitEnum;
 class DeductionResource extends Resource
 {
     protected static ?string $model = ModelsDeduction::class;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::MinusCircle;
+
     protected static ?string $recordTitleAttribute = 'Deduction';
-    protected static string|UnitEnum|null $navigationGroup = 'Compliance & Benefits';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function form(Schema $schema): Schema
     {
