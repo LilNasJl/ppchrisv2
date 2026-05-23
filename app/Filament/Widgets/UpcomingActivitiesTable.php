@@ -13,7 +13,11 @@ use Illuminate\Database\Eloquent\Builder;
 class UpcomingActivitiesTable extends TableWidget
 {
     use HasWidgetShield;
-    protected int | string | array $columnSpan = 'full';
+
+    protected int|string|array $columnSpan = [
+        'default' => 'full',
+        'lg' => 1,
+    ];
 
     protected static ?string $heading = 'Upcoming Activities';
 

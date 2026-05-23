@@ -6,10 +6,10 @@ use App\Filament\Resources\HolidayTypes\HolidayTypeResource;
 use App\Models\Holiday;
 use App\Models\HolidayType;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Validator;
@@ -18,13 +18,14 @@ use UnitEnum;
 class HolidayCalendar extends Page
 {
     use HasPageShield;
+
     protected string $view = 'filament.pages.holiday-calendar';
 
     protected static ?string $title = 'Holiday Calendar';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::CalendarDays;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::CalendarDays;
 
-    protected static string | UnitEnum | null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
     protected static ?int $navigationSort = 3;
 
@@ -32,7 +33,7 @@ class HolidayCalendar extends Page
 
     public ?string $selectedDate = null;
 
-    public int | string | null $holidayTypeId = null;
+    public int|string|null $holidayTypeId = null;
 
     public ?string $holidayTitle = null;
 

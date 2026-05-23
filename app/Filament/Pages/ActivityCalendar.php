@@ -5,10 +5,10 @@ namespace App\Filament\Pages;
 use App\Filament\Resources\Activities\ActivityResource;
 use App\Models\Activity;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Validator;
@@ -17,13 +17,14 @@ use UnitEnum;
 class ActivityCalendar extends Page
 {
     use HasPageShield;
+
     protected string $view = 'filament.pages.activity-calendar';
 
     protected static ?string $title = 'Activity Calendar';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::CalendarDateRange;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::CalendarDateRange;
 
-    protected static string | UnitEnum | null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
     protected static ?int $navigationSort = 4;
 
@@ -167,8 +168,7 @@ class ActivityCalendar extends Page
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             $dateString = $date->toDateString();
             $dayActivities = $activities
-                ->filter(fn (Activity $activity): bool =>
-                    $activity->date_from->toDateString() <= $dateString &&
+                ->filter(fn (Activity $activity): bool => $activity->date_from->toDateString() <= $dateString &&
                     $activity->date_to->toDateString() >= $dateString
                 )
                 ->values();

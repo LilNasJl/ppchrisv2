@@ -32,13 +32,12 @@ class Branch extends Model
         'broken_shift2_start',
         'broken_shift2_end',
         'broken_shift3_start',
-        'broken_shift4_end',
-        'scheduling'
+        'broken_shift3_end',
+        'scheduling',
     ];
 
     public function employee()
     {
-        return $this->belongsTo(\App\Models\Employee::class, 'employee_id');
+        return $this->belongsTo(Employee::class, 'employee_id');
     }
-
 }

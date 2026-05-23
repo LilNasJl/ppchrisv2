@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Users\Schemas;
 
 use App\Models\Counter;
+use App\Models\Employee;
 use App\Models\User;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -31,10 +32,11 @@ class UserForm
                                 $counter = Counter::first();
                                 $next = $counter ? $counter->uid + 1 : 1;
 
-                                return 'PF-'.str_pad($next, 4, '0', STR_PAD_LEFT);
+                                return Employee::companyIdFromUid($next);
                             })
-                            ->disabled()        // User cannot edit it
-                            ->dehydrated()      // ⚠️ Critical: disabled fields are excluded from submitted data without this
+                            ->formatStateUsing(fn ($state): ?string => Employee::companyIdFromUid($state))
+                            ->disabled()
+                            ->dehydrated(false)
                             ->columnSpanFull(),
 
                         TextInput::make('firstname')
@@ -102,10 +104,12 @@ class UserForm
                         TextInput::make('password')
                             ->password()
                             ->revealable()
-                            ->placeholder('e.g., password123')
+                            ->default(fn (string $context): ?string => $context === 'create' ? 'PASSWORD1.' : null)
+                            ->readOnly(fn (string $context): bool => $context === 'create')
                             ->dehydrateStateUsing(fn ($state) => Hash::make($state))
                             ->dehydrated(fn ($state) => filled($state))
-                            ->required(fn (string $context): bool => $context === 'create'),
+                            ->required(fn (string $context): bool => $context === 'create')
+                            ->helperText('New employee accounts start with PASSWORD1.'),
 
                         Toggle::make('is_disabled')
                             ->label('Disable Account')

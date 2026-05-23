@@ -11,9 +11,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Group as ComponentsGroup;
-use Filament\Schemas\Components\Utilities\Set;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 
 class LeaveForm
@@ -25,26 +25,24 @@ class LeaveForm
                 Section::make()
                     ->schema([
                         ComponentsGroup::make([
-                           Select::make('employee_id')
+                            Select::make('employee_id')
                                 ->label('Employee Name')
                                 ->searchable()
-                                ->getSearchResultsUsing(fn (string $search) =>
-                                    Employee::query()
-                                        ->activeEmployment()
-                                        ->where(function ($query) use ($search): void {
-                                            $query
-                                                ->where('firstname', 'like', "%{$search}%")
-                                                ->orWhere('middlename', 'like', "%{$search}%")
-                                                ->orWhere('lastname', 'like', "%{$search}%");
-                                        })
-                                        ->limit(50)
-                                        ->get()
-                                        ->mapWithKeys(fn ($employee) => [
-                                            $employee->id => "{$employee->lastname}, {$employee->firstname} {$employee->middlename}"
-                                        ])
+                                ->getSearchResultsUsing(fn (string $search) => Employee::query()
+                                    ->activeEmployment()
+                                    ->where(function ($query) use ($search): void {
+                                        $query
+                                            ->where('firstname', 'like', "%{$search}%")
+                                            ->orWhere('middlename', 'like', "%{$search}%")
+                                            ->orWhere('lastname', 'like', "%{$search}%");
+                                    })
+                                    ->limit(50)
+                                    ->get()
+                                    ->mapWithKeys(fn ($employee) => [
+                                        $employee->id => "{$employee->lastname}, {$employee->firstname} {$employee->middlename}",
+                                    ])
                                 )
-                                ->getOptionLabelUsing(fn ($value) =>
-                                    optional(Employee::find($value))->full_name
+                                ->getOptionLabelUsing(fn ($value) => optional(Employee::find($value))->full_name
                                 )
                                 ->required(),
 
@@ -127,11 +125,12 @@ class LeaveForm
                                 ])
                                 ->maxSize(2048)
                                 ->storeFileNamesIn('attachment_original_name')
+                                ->fetchFileInformation(false)
                                 ->downloadable()
                                 ->openable()
                                 ->columnSpanFull(),
                         ])
-                        ->columns(2),
+                            ->columns(2),
                     ])
                     ->columnSpanFull(),
             ]);

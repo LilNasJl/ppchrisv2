@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 class DtrPageTable extends TableWidget
 {
     use HasWidgetShield;
+
     protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table
@@ -61,12 +62,7 @@ class DtrPageTable extends TableWidget
                     ->badge()
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('department.name')
-                    ->label('Department')
-                    ->searchable()
-                    ->sortable()
-                    ->wrap()
-                    ->limit(100),
+
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')
                     ->searchable()

@@ -13,7 +13,11 @@ use Illuminate\Database\Eloquent\Builder;
 class EmployeeTenureTable extends TableWidget
 {
     use HasWidgetShield;
-    protected int | string | array $columnSpan = 'full';
+
+    protected int|string|array $columnSpan = [
+        'default' => 'full',
+        'lg' => 1,
+    ];
 
     protected static ?string $heading = 'Employee Tenure';
 
@@ -33,7 +37,7 @@ class EmployeeTenureTable extends TableWidget
 
                 TextColumn::make('fullname')
                     ->label('Full Name')
-                    ->getStateUsing(fn (Employee $record): string => trim($record->lastname . ', ' . (filled($record->middlename) ? $record->middlename . '. ' : '') . $record->firstname)),
+                    ->getStateUsing(fn (Employee $record): string => trim($record->lastname.', '.(filled($record->middlename) ? $record->middlename.'. ' : '').$record->firstname)),
 
                 TextColumn::make('tenure')
                     ->label('Tenure')

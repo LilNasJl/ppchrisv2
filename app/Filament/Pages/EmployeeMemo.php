@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Memo as MemoModel;
 use App\Models\MemoType;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
@@ -14,7 +15,6 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
@@ -38,7 +38,7 @@ class EmployeeMemo extends Page implements HasTable
 
     protected static ?string $title = 'Employee Memo';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::DocumentText;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
     public ?string $employeeId = null;
 
@@ -50,7 +50,7 @@ class EmployeeMemo extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->heading(fn (): string => $this->employee()?->full_name . ' Memo Records')
+            ->heading(fn (): string => $this->employee()?->full_name.' Memo Records')
             ->query(fn (): Builder => MemoModel::query()
                 ->with(['type', 'employee'])
                 ->where('employee_id', $this->employeeId)
@@ -169,6 +169,7 @@ class EmployeeMemo extends Page implements HasTable
                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         ])
                         ->maxSize(2048)
+                        ->fetchFileInformation(false)
                         ->columnSpanFull(),
                 ])
                 ->columns(2),

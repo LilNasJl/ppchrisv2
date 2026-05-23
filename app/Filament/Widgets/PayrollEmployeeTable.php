@@ -19,7 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 class PayrollEmployeeTable extends TableWidget
 {
     use HasWidgetShield;
-    protected int | string | array $columnSpan = 'full';
+
+    protected int|string|array $columnSpan = 'full';
 
     protected static ?string $heading = 'Employee Payroll';
 
@@ -39,7 +40,7 @@ class PayrollEmployeeTable extends TableWidget
 
                 TextColumn::make('fullname')
                     ->label('Name')
-                    ->getStateUsing(fn (Employee $record): string => trim($record->lastname . ', ' . (filled($record->middlename) ? $record->middlename . '. ' : '') . $record->firstname))
+                    ->getStateUsing(fn (Employee $record): string => trim($record->lastname.', '.(filled($record->middlename) ? $record->middlename.'. ' : '').$record->firstname))
                     ->searchable(['lastname', 'firstname', 'middlename'])
                     ->sortable(['lastname', 'firstname', 'middlename']),
 
@@ -48,12 +49,6 @@ class PayrollEmployeeTable extends TableWidget
                     ->badge()
                     ->searchable()
                     ->sortable(),
-
-                TextColumn::make('department.name')
-                    ->label('Department')
-                    ->searchable()
-                    ->sortable()
-                    ->wrap(),
 
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')

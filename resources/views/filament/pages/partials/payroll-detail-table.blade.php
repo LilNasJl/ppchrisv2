@@ -124,6 +124,7 @@
         <thead>
             <tr>
                 <th rowspan="2">#</th>
+                <th rowspan="2">Bank ID No.</th>
                 <th rowspan="2">Name</th>
                 <th rowspan="2">Designation</th>
                 <th rowspan="2">Branch</th>
@@ -168,6 +169,7 @@
             @forelse ($rows as $row)
                 <tr>
                     <td class="text-center">{{ $row['number'] }}</td>
+                    <td>{{ $row['bank_id_no'] }}</td>
                     <td>{{ $row['name'] }}</td>
                     <td>{{ $row['designation'] }}</td>
                     <td>{{ $row['branch'] }}</td>
@@ -204,7 +206,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="34" class="text-center">No payroll data available.</td>
+                    <td colspan="35" class="text-center">No payroll data available.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -212,7 +214,7 @@
         @if ($rows->isNotEmpty())
             <tfoot>
                 <tr>
-                    <td colspan="9">TOTAL</td>
+                    <td colspan="10">TOTAL</td>
                     <td class="text-right">{{ $plainNumber($rows->sum('days_worked')) }}</td>
                     <td class="text-right">{{ $sum('total_pay') }}</td>
                     <td class="text-right">{{ $sum('salary_adjustment') }}</td>

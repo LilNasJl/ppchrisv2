@@ -56,10 +56,12 @@ class Employee extends Model
         'pagibig_no',
         'tin',
         'sss_no',
+        'bank_id_no',
         'gsis',
         'philhealth',
         'pagibig',
         'sss',
+        'salary_adjustment',
     ];
 
     protected $casts = [
@@ -68,6 +70,7 @@ class Employee extends Model
         'daily_rate' => 'decimal:2',
         'monthly_rate' => 'decimal:2',
         'allowance' => 'decimal:2',
+        'salary_adjustment' => 'decimal:2',
         'leave_credits' => 'decimal:2',
         'birthday_leave_credits' => 'decimal:2',
     ];
@@ -97,11 +100,32 @@ class Employee extends Model
                 ? 'daily'
                 : 'regular';
             $employee->allowance ??= 0;
+            $employee->salary_adjustment ??= 0;
             $employee->kids ??= 0;
             $employee->leave_credits ??= 10;
             $employee->birthday_leave_credits ??= 1;
             $employee->leave_credits_year ??= now()->year;
         });
+    }
+
+    public static function companyIdFromUid(int|string|null $uid): ?string
+    {
+        if (blank($uid)) {
+            return null;
+        }
+
+        $uid = preg_replace('/[^0-9]/', '', (string) $uid);
+
+        if (blank($uid)) {
+            return null;
+        }
+
+        return 'PF-'.str_pad((string) ((int) $uid), 4, '0', STR_PAD_LEFT);
+    }
+
+    public function getCompanyIdAttribute(): ?string
+    {
+        return self::companyIdFromUid($this->uid);
     }
 
     public function designation()

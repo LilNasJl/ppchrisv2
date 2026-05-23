@@ -220,8 +220,7 @@ class EmployeeDetailsTable extends TableWidget
                                 ->disk('public')
                                 ->directory('profile-photos')
                                 ->visibility('public')
-                                ->downloadable()
-                                ->openable()
+                                ->fetchFileInformation(false)
                                 ->columnSpanFull(),
                         ]),
 
@@ -298,7 +297,7 @@ class EmployeeDetailsTable extends TableWidget
                                 ->columns(3),
 
                             Placeholder::make('divider2')
-                                ->label("GOVERNMENT ID's")
+                                ->label('GOVERNMENT AND BANK ID')
                                 ->content(new HtmlString('<hr class="my-4">')),
 
                             Group::make()
@@ -344,6 +343,11 @@ class EmployeeDetailsTable extends TableWidget
                                         ->validationMessages([
                                             'regex' => 'The SSS number must follow the 00-0000000-0 format.',
                                         ]),
+
+                                    TextInput::make('bank_id_no')
+                                        ->label('Bank ID No.')
+                                        ->placeholder('e.g., 1234567890')
+                                        ->maxLength(191),
                                 ])
                                 ->columns(2),
                         ]),
@@ -517,6 +521,13 @@ class EmployeeDetailsTable extends TableWidget
                                         ->prefix('₱')
                                         ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->default(0),
+
+                                    TextInput::make('salary_adjustment')
+                                        ->label('Salary Adjustment')
+                                        ->numeric()
+                                        ->prefix('₱')
+                                        ->dehydrateStateUsing(fn ($state) => $state ?? 0)
+                                        ->default(0),
                                 ])
                                 ->columns(2),
                         ]),
@@ -534,9 +545,7 @@ class EmployeeDetailsTable extends TableWidget
                     ->whereHas('user', fn ($query) => $query->where('role', 'employee'))
             )
             ->defaultSort(fn (Builder $query): Builder => $query
-                ->orderBy('lastname')
-                ->orderBy('middlename')
-                ->orderBy('firstname'))
+                ->orderBy('uid'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -550,7 +559,7 @@ class EmployeeDetailsTable extends TableWidget
                 TextColumn::make('uid')
                     ->label('ID No.')
                     ->badge()
-                    ->formatStateUsing(fn (ModelsEmployee $record): string => 'PF-'.$record->uid)
+                    ->formatStateUsing(fn (ModelsEmployee $record): string => $record->company_id ?? 'N/A')
                     ->searchable()
                     ->sortable(),
 
@@ -566,10 +575,6 @@ class EmployeeDetailsTable extends TableWidget
                         ->orderBy('firstname', $direction)),
 
                 TextColumn::make('designation.title')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('department.name')
                     ->searchable()
                     ->sortable(),
 

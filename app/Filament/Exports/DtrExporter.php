@@ -77,10 +77,10 @@ class DtrExporter extends Exporter
 
     public static function getCompletedNotificationBody(Export $export): string
     {
-        $body = 'Exported ' . Number::format($export->successful_rows) . ' D.T.R rows.';
+        $body = 'Exported '.Number::format($export->successful_rows).' D.T.R rows.';
 
         if ($failed = $export->getFailedRowsCount()) {
-            $body .= ' ' . Number::format($failed) . ' failed.';
+            $body .= ' '.Number::format($failed).' failed.';
         }
 
         return $body;

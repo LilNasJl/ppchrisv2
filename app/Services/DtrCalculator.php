@@ -60,7 +60,7 @@ class DtrCalculator
 
         $workMinutes = max(0, $scheduledMinutes - $late - $undertime + $earlyClockIn + $overtime);
         $creditedWorkMinutes = max(0, $scheduledMinutes - $late - $undertime);
-        $hasPendingOvertime = $earlyClockIn >= 30 || $overtime >= 30;
+        $hasPendingOvertime = $overtime >= 30;
 
         return [
             'late' => $late,

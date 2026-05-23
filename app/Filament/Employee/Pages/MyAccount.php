@@ -2,6 +2,7 @@
 
 namespace App\Filament\Employee\Pages;
 
+use App\Models\Employee;
 use BackedEnum;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
@@ -36,7 +37,7 @@ class MyAccount extends Page implements HasForms
         $employee = $user->employee;
 
         $this->form->fill([
-            'employee_id' => $employee?->uid ? 'PF-'.$employee->uid : null,
+            'employee_id' => Employee::companyIdFromUid($employee?->uid),
             'fingerprint_id' => $employee?->fingerprint_id,
             'full_name' => $employee?->full_name ?? $user->name,
             'email' => $user->email,
@@ -101,8 +102,7 @@ class MyAccount extends Page implements HasForms
                         ->disk('public')
                         ->directory('profile-photos')
                         ->visibility('public')
-                        ->downloadable()
-                        ->openable()
+                        ->fetchFileInformation(false)
                         ->columnSpanFull(),
                 ])
                 ->columns(2),

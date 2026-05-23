@@ -139,7 +139,7 @@ class PayrollCalculator
         $regularHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'regular');
         $specialHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'special');
         $allowance = $this->money($employee->allowance ?? 0);
-        $salaryAdjustment = 0.0;
+        $salaryAdjustment = $this->money($employee->salary_adjustment ?? 0);
 
         $undertimeAmount = $this->money(($undertimeMinutes / 60) * $ratePerHour);
         $lateAmount = $this->money(($lateMinutes / 60) * $ratePerHour);
@@ -176,6 +176,7 @@ class PayrollCalculator
             'employee_id' => $employee->id,
             'branch_id' => $employee->branch_id,
             'payment_type' => $employee->payment_type ?: '',
+            'bank_id_no' => $employee->bank_id_no ?? '',
             'name' => $this->employeeName($employee),
             'designation' => $employee->designation?->title ?? '',
             'department' => $employee->department?->name ?? '',
@@ -251,6 +252,7 @@ class PayrollCalculator
     {
         return [
             'number' => '#',
+            'bank_id_no' => 'BANK ID NO.',
             'name' => 'NAME',
             'designation' => 'DESIGNATION',
             'branch' => 'BRANCH',
@@ -324,7 +326,9 @@ class PayrollCalculator
 
     protected function dtrs(Employee $employee, PayrollPeriod $period): Collection
     {
-        if (blank($employee->fingerprint_id) || blank($employee->branch_id)) {
+        $fingerprintId = $employee->fingerprint_id ?: $employee->uid;
+
+        if (blank($fingerprintId) || blank($employee->branch_id)) {
             return collect();
         }
 
@@ -332,7 +336,7 @@ class PayrollCalculator
             ->with(['holiday.type'])
             ->where('payroll_period_id', $period->id)
             ->where('branch_id', $employee->branch_id)
-            ->where('fingerprint_id', $employee->fingerprint_id)
+            ->where('fingerprint_id', $fingerprintId)
             ->get();
     }
 

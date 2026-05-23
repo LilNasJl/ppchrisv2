@@ -238,6 +238,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
                         ])
                         ->maxSize(2048)
                         ->storeFileNamesIn('attachment_original_name')
+                        ->fetchFileInformation(false)
                         ->downloadable()
                         ->openable()
                         ->columnSpanFull(),

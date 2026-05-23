@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Models\Employee;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -29,9 +30,7 @@ class UsersTable
                 ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
                 ->select('users.*'))
             ->defaultSort(fn (Builder $query): Builder => $query
-                ->orderBy('account_employees.lastname')
-                ->orderBy('account_employees.middlename')
-                ->orderBy('account_employees.firstname'))
+                ->orderBy('account_employees.uid'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -45,7 +44,7 @@ class UsersTable
                 TextColumn::make('employee.uid')
                     ->label('ID No.')
                     ->badge()
-                    ->formatStateUsing(fn ($state) => 'PF-'.$state),
+                    ->formatStateUsing(fn ($state): string => Employee::companyIdFromUid($state) ?? 'N/A'),
                 TextColumn::make('employee.lastname')
                     ->label('Employee Name')
                     ->formatStateUsing(fn ($record): string => $record->employee?->full_name ?? 'N/A')

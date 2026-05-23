@@ -199,6 +199,7 @@ trait ManagesEmployeeDetailsForm
         $data['birthday_leave_credits'] = $record->birthday_leave_credits;
         $data['leave_credits_year'] = $record->leave_credits_year;
         $data['allowance'] = $record->allowance ?? 0;
+        $data['salary_adjustment'] = $record->salary_adjustment ?? 0;
         $data['kids'] = $record->kids ?? 0;
         $data['tenure'] = $record->tenure;
         $data['profile_photo_path'] = $record->user?->profile_photo_path;
@@ -229,8 +230,7 @@ trait ManagesEmployeeDetailsForm
                                 ->disk('public')
                                 ->directory('profile-photos')
                                 ->visibility('public')
-                                ->downloadable()
-                                ->openable()
+                                ->fetchFileInformation(false)
                                 ->columnSpanFull(),
                         ]),
 
@@ -313,7 +313,7 @@ trait ManagesEmployeeDetailsForm
                                 ]),
 
                             Placeholder::make('divider2')
-                                ->label("GOVERNMENT ID's")
+                                ->label('GOVERNMENT AND BANK ID')
                                 ->content(new HtmlString('<hr class="my-4">')),
 
                             Group::make()
@@ -359,6 +359,11 @@ trait ManagesEmployeeDetailsForm
                                         ->validationMessages([
                                             'regex' => 'The SSS number must follow the 00-0000000-0 format.',
                                         ]),
+
+                                    TextInput::make('bank_id_no')
+                                        ->label('Bank ID No.')
+                                        ->placeholder('e.g., 1234567890')
+                                        ->maxLength(191),
                                 ])
                                 ->columns([
                                     'default' => 1,
@@ -553,6 +558,13 @@ trait ManagesEmployeeDetailsForm
                                         ->prefix('₱')
                                         ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->default(0),
+
+                                    TextInput::make('salary_adjustment')
+                                        ->label('Salary Adjustment')
+                                        ->numeric()
+                                        ->prefix('₱')
+                                        ->dehydrateStateUsing(fn ($state) => $state ?? 0)
+                                        ->default(0),
                                 ])
                                 ->columns([
                                     'default' => 1,
@@ -575,8 +587,8 @@ trait ManagesEmployeeDetailsForm
         $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);
 
         DB::transaction(function () use ($record, $data, $deductions, $otherDeductionIds, $profilePhotoPath): void {
-            foreach (['gsis', 'philhealth', 'pagibig', 'tin', 'sss'] as $field) {
-                $data[$field] = $data[$field] ?? '';
+            foreach (['gsis', 'philhealth', 'pagibig', 'tin', 'sss', 'bank_id_no', 'fingerprint_id'] as $field) {
+                $data[$field] = filled($data[$field] ?? null) ? $data[$field] : null;
             }
 
             $record->update($data);

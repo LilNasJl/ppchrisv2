@@ -48,6 +48,7 @@ class DtrManageTable extends BaseWidget
     {
         return $table
             ->query(fn (): Builder => $this->getDtrQuery())
+            ->recordClasses('text-xs')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -64,7 +65,7 @@ class DtrManageTable extends BaseWidget
                     ->date(),
 
                 TextColumn::make('time_in')
-                    ->label('Time In')
+                    ->label('IN')
                     ->placeholder('-'),
 
                 TextColumn::make('date_out')
@@ -73,19 +74,19 @@ class DtrManageTable extends BaseWidget
                     ->placeholder('-'),
 
                 TextColumn::make('time_out')
-                    ->label('Time Out')
+                    ->label('OUT')
                     ->placeholder('-'),
 
                 TextColumn::make('schedule_start')
-                    ->label('Schedule Start')
+                    ->label('SCHED. START')
                     ->placeholder('-'),
 
                 TextColumn::make('schedule_end')
-                    ->label('Schedule End')
+                    ->label('SCHED. END')
                     ->placeholder('-'),
 
                 TextColumn::make('schedule_type')
-                    ->label('Schedule Type')
+                    ->label('SCHED. TYPE')
                     ->badge()
                     ->placeholder('-')
                     ->color(fn (?string $state): string => match ($state) {
@@ -96,41 +97,37 @@ class DtrManageTable extends BaseWidget
                     }),
 
                 TextColumn::make('late')
-                    ->label('Late (min)')
+                    ->label('LATE')
                     ->numeric(),
 
                 TextColumn::make('undertime')
-                    ->label('Undertime (min)')
+                    ->label('UNDERTIME')
                     ->numeric(),
 
                 TextColumn::make('overtime')
-                    ->label('Overtime (min)')
-                    ->numeric(),
-
-                TextColumn::make('early_clock_in')
-                    ->label('Early Clock In (min)')
+                    ->label('OVERTIME')
                     ->numeric(),
 
                 TextColumn::make('credited_overtime')
-                    ->label('Credited OT (min)')
+                    ->label('CRED. OT')
                     ->numeric(),
 
                 TextColumn::make('work_hrs')
-                    ->label('Work Hours (min)')
+                    ->label('WORK HOURS')
                     ->numeric(),
 
                 TextColumn::make('credited_work_hrs')
-                    ->label('Credited Work Hours (min)')
+                    ->label('CRED. WORK HOURS')
                     ->numeric(),
 
                 TextColumn::make('holiday_type')
-                    ->label('Holiday Type')
+                    ->label('HOL.')
                     ->badge()
                     ->placeholder('n/a')
                     ->color('warning'),
 
                 TextColumn::make('holiday_rate')
-                    ->label('Holiday Rate (%)')
+                    ->label('HOL. RATE')
                     ->placeholder('n/a'),
 
                 TextColumn::make('overtime_status')
@@ -209,24 +206,6 @@ class DtrManageTable extends BaseWidget
                     ->button(),
             ])
             ->recordActions([
-                Action::make('approveEarlyClockIn')
-                    ->label('Approve Early')
-                    ->icon('heroicon-m-check-circle')
-                    ->color('warning')
-                    ->requiresConfirmation()
-                    ->modalHeading('Approve early clock-in overtime?')
-                    ->modalDescription('This will credit the early clock-in minutes to credited work hours.')
-                    ->visible(fn (ModelsDtr $record): bool => $this->shouldShowEarlyClockInApproval($record))
-                    ->action(function (ModelsDtr $record): void {
-                        $record->early_clock_in_approved = true;
-                        $this->updateApprovalTotals($record);
-
-                        Notification::make()
-                            ->title('Early clock-in approved')
-                            ->success()
-                            ->send();
-                    }),
-
                 Action::make('approveOvertime')
                     ->label('Approve OT')
                     ->icon('heroicon-m-check-circle')
@@ -667,14 +646,6 @@ class DtrManageTable extends BaseWidget
             : 0;
     }
 
-    protected function shouldShowEarlyClockInApproval(ModelsDtr $record): bool
-    {
-        return ! $this->isRecordLocked($record)
-            && $record->overtime_status === 'Pending'
-            && ((int) $record->early_clock_in >= 30)
-            && ! (bool) $record->early_clock_in_approved;
-    }
-
     protected function shouldShowOvertimeApproval(ModelsDtr $record): bool
     {
         return ! $this->isRecordLocked($record)
@@ -695,18 +666,16 @@ class DtrManageTable extends BaseWidget
         $overtime = (int) $record->overtime;
         $workMinutes = (int) $record->work_hrs;
 
-        $approvedEarlyClockIn = ((bool) $record->early_clock_in_approved && $earlyClockIn >= 30) ? $earlyClockIn : 0;
         $approvedOvertime = ((bool) $record->overtime_approved && $overtime >= 30) ? $overtime : 0;
-        $creditedOvertime = $approvedEarlyClockIn + $approvedOvertime;
+        $creditedOvertime = $approvedOvertime;
 
-        $hasPendingEarlyClockIn = $earlyClockIn >= 30 && ! (bool) $record->early_clock_in_approved;
         $hasPendingOvertime = $overtime >= 30 && ! (bool) $record->overtime_approved;
-        $hasApprovableOvertime = $earlyClockIn >= 30 || $overtime >= 30;
+        $hasApprovableOvertime = $overtime >= 30;
 
         $record->forceFill([
             'credited_overtime' => $creditedOvertime,
             'credited_work_hrs' => max(0, $workMinutes - $earlyClockIn - $overtime + $creditedOvertime),
-            'overtime_status' => ($hasPendingEarlyClockIn || $hasPendingOvertime)
+            'overtime_status' => $hasPendingOvertime
                 ? 'Pending'
                 : ($hasApprovableOvertime ? 'Approved' : 'n/a'),
         ])->save();
