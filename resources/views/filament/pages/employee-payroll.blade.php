@@ -1,9 +1,5 @@
 <x-filament-panels::page>
     <style>
-        .employee-payroll-filter {
-            max-width: 360px;
-        }
-
         .employee-payroll-summary {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -22,10 +18,6 @@
         }
 
         @media (max-width: 560px) {
-            .employee-payroll-filter {
-                max-width: 100%;
-            }
-
             .employee-payroll-summary {
                 grid-template-columns: 1fr;
             }
@@ -33,8 +25,9 @@
     </style>
 
     <div style="display: grid; gap: 16px;">
-        <div class="employee-payroll-filter">
-            {{ $this->form }}
+        <div style="font-size: 14px; color: #64748b;">
+            Payroll Period:
+            <span style="font-weight: 700; color: inherit;">{{ $this->selectedPeriod?->title ?: 'No payroll period selected' }}</span>
         </div>
 
         @if ($this->employee)

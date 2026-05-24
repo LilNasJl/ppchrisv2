@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PayrollPeriod extends Model
@@ -66,5 +67,10 @@ class PayrollPeriod extends Model
     public function employeeExclusions(): HasMany
     {
         return $this->hasMany(PayrollPeriodEmployeeExclusion::class);
+    }
+
+    public function calculationSetting(): HasOne
+    {
+        return $this->hasOne(PayrollCalculationSetting::class);
     }
 }

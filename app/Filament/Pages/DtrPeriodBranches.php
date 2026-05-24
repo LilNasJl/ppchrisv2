@@ -2,8 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Widgets\BranchPayrollEmployeeTable;
-use App\Models\Branch;
+use App\Filament\Widgets\DtrPeriodBranchTable;
 use App\Models\PayrollPeriod;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -12,45 +11,38 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
 
-class BranchPayrollEmployees extends Page
+class DtrPeriodBranches extends Page
 {
     use HasPageShield;
 
-    protected string $view = 'filament.pages.branch-payroll-employees';
+    protected string $view = 'filament.pages.dtr-period-branches';
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Branch Payroll';
+    protected static ?string $title = 'D.T.R Period';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::Users;
-
-    public ?int $branchId = null;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::QueueList;
 
     public ?int $periodId = null;
-
-    public ?Branch $branch = null;
 
     public ?PayrollPeriod $period = null;
 
     public function mount(): void
     {
-        $this->branchId = (int) request()->query('branchId');
         $this->periodId = (int) request()->query('periodId');
-        $this->branch = Branch::query()->find($this->branchId);
         $this->period = PayrollPeriod::query()->find($this->periodId);
     }
 
     public function getTitle(): string
     {
-        return $this->branch?->branch_name
-            ? 'Payroll - '.$this->branch->branch_name.' - '.($this->period?->title ?? 'No Period')
-            : 'Branch Payroll';
+        return $this->period?->title
+            ? 'D.T.R - '.$this->period->title
+            : 'D.T.R Period';
     }
 
     public function getWidgetData(): array
     {
         return [
-            'branchId' => $this->branchId,
             'periodId' => $this->periodId,
         ];
     }
@@ -62,7 +54,7 @@ class BranchPayrollEmployees extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => PayrollPeriodBranches::getUrl(['periodId' => $this->periodId])),
+                ->url(Dtr::getUrl()),
         ];
     }
 
@@ -70,7 +62,7 @@ class BranchPayrollEmployees extends Page
     protected function getHeaderWidgets(): array
     {
         return [
-            BranchPayrollEmployeeTable::class,
+            DtrPeriodBranchTable::class,
         ];
     }
 }

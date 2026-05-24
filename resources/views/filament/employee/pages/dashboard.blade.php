@@ -5,6 +5,10 @@
         $upcomingActivities = $this->upcomingActivities;
         $employee = auth()->user()?->employee;
         $userName = filled($employee?->firstname) ? $employee->firstname : (auth()->user()?->name ?? 'Employee');
+        $birthdate = $employee?->birthdate;
+        $hasBirthdayToday = $birthdate
+            && (int) $birthdate->format('m') === (int) now()->format('m')
+            && (int) $birthdate->format('d') === (int) now()->format('d');
     @endphp
 
     <style>
@@ -127,6 +131,43 @@
             font-size: 12px;
             font-weight: 700;
             line-height: 1.25;
+        }
+
+        .employee-dashboard-birthday {
+            align-items: center;
+            background:
+                linear-gradient(135deg, rgba(254, 243, 199, .95), rgba(219, 234, 254, .88)),
+                var(--ed-surface);
+            border: 1px solid var(--ed-border);
+            border-radius: 8px;
+            box-shadow: var(--ed-shadow);
+            display: flex;
+            gap: 14px;
+            min-width: 0;
+            padding: clamp(16px, 2.4vw, 22px);
+            width: 100%;
+        }
+
+        .dark .employee-dashboard-birthday {
+            background:
+                linear-gradient(135deg, rgba(120, 53, 15, .38), rgba(30, 64, 175, .28)),
+                var(--ed-surface);
+        }
+
+        .employee-dashboard-birthday h3 {
+            color: var(--ed-text);
+            font-size: clamp(22px, 2.8vw, 34px);
+            font-weight: 900;
+            line-height: 1.08;
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .employee-dashboard-birthday p {
+            color: var(--ed-muted);
+            font-size: 14px;
+            font-weight: 750;
+            margin: 6px 0 0;
         }
 
         .employee-dashboard-main {
@@ -295,6 +336,10 @@
             .employee-dashboard-summary-item {
                 min-height: 74px;
             }
+
+            .employee-dashboard-birthday {
+                align-items: flex-start;
+            }
         }
     </style>
 
@@ -321,6 +366,18 @@
                 </div>
             </div>
         </section>
+
+        @if ($hasBirthdayToday)
+            <section class="employee-dashboard-birthday">
+                <span class="employee-dashboard-icon employee-dashboard-icon-amber">
+                    <x-filament::icon icon="heroicon-o-cake" />
+                </span>
+                <div>
+                    <h3>Happy Birthday, {{ $employee?->firstname ?: $userName }}</h3>
+                    <p>Wishing you a wonderful birthday today.</p>
+                </div>
+            </section>
+        @endif
 
         <div class="employee-dashboard-main">
             <section class="employee-dashboard-panel">

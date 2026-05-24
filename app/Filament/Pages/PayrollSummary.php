@@ -93,7 +93,9 @@ class PayrollSummary extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Payroll::getUrl()),
+                ->url(fn (): string => filled($this->period_id)
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period_id])
+                    : Payroll::getUrl()),
 
             Action::make('signatories')
                 ->label('Signatories')

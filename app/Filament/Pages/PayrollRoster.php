@@ -3,6 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Widgets\PayrollRosterTable;
+use App\Models\PayrollPeriod;
+use App\Services\PayrollCalculator;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -22,6 +24,30 @@ class PayrollRoster extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ClipboardDocumentList;
 
+    public ?int $periodId = null;
+
+    public ?PayrollPeriod $period = null;
+
+    public function mount(): void
+    {
+        $this->periodId = (int) (request()->query('periodId') ?: app(PayrollCalculator::class)->defaultPeriod()?->id);
+        $this->period = PayrollPeriod::query()->find($this->periodId);
+    }
+
+    public function getTitle(): string
+    {
+        return $this->period?->title
+            ? 'Payroll Roster - '.$this->period->title
+            : 'Payroll Roster';
+    }
+
+    public function getWidgetData(): array
+    {
+        return [
+            'periodId' => $this->periodId,
+        ];
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {
@@ -29,7 +55,9 @@ class PayrollRoster extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Payroll::getUrl()),
+                ->url(fn (): string => filled($this->periodId)
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->periodId])
+                    : Payroll::getUrl()),
         ];
     }
 

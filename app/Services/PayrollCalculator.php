@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
@@ -130,42 +131,48 @@ class PayrollCalculator
     {
         $employee->loadMissing(['designation', 'department', 'branch', 'employeeDeductions.deduction']);
 
+        $settings = PayrollCalculationSetting::forPeriod($period);
         $dtrs = $this->dtrs($employee, $period);
         $rateType = $this->rateType($employee);
         $isDaily = $rateType === 'Daily';
-        $ratePerDay = $this->ratePerDay($employee, $dtrs);
+        $workDaysPerMonth = $settings->divisor('regular_work_days_per_month');
+        $halfMonthDays = $settings->value('regular_half_month_days');
+        $workHoursPerDay = $settings->divisor('work_hours_per_day');
+        $halfDayValue = $settings->value('half_day_work_day_value');
+        $overtimeMultiplier = $settings->value('overtime_rate_multiplier');
+        $ratePerDay = $this->ratePerDay($employee, $dtrs, $settings);
         $hasStoredDailyRate = $this->storedDailyRate($dtrs) > 0;
         $monthlyRate = $isDaily ? null : $this->money($hasStoredDailyRate
-            ? $ratePerDay * self::REGULAR_WORK_DAYS_PER_MONTH
-            : ($employee->monthly_rate ?: ($ratePerDay * self::REGULAR_WORK_DAYS_PER_MONTH)));
+            ? $ratePerDay * $workDaysPerMonth
+            : ($employee->monthly_rate ?: ($ratePerDay * $workDaysPerMonth)));
         $halfMonthPay = $isDaily ? null : $this->money(($monthlyRate ?? 0) / 2);
-        $ratePerHour = $this->money($ratePerDay / 8);
+        $ratePerHour = $this->money($ratePerDay / $workHoursPerDay);
 
         $absenceDays = $this->absenceDays($dtrs);
         $halfDayCount = $this->approvedHalfDayCount($employee, $period);
         $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) : $this->workedDtrDays($dtrs);
         $daysWorked = $isDaily
-            ? max(0, $dtrWorkDays - ($halfDayCount * 0.5))
-            : max(0, self::REGULAR_HALF_MONTH_DAYS - $absenceDays - ($halfDayCount * 0.5));
+            ? max(0, $dtrWorkDays - ($halfDayCount * $halfDayValue))
+            : max(0, $halfMonthDays - $absenceDays - ($halfDayCount * $halfDayValue));
 
         $basePay = $isDaily
             ? $this->money($ratePerDay * $daysWorked)
-            : $this->money($ratePerDay * self::REGULAR_HALF_MONTH_DAYS);
+            : $this->money($ratePerDay * $halfMonthDays);
 
         $deductibleDtrs = $this->deductibleDtrs($dtrs);
         $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
         $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
-        $overtimeAmount = $this->money($overtimeHours * $ratePerHour);
-        $regularHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'regular');
-        $specialHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'special');
+        $overtimeAmount = $this->money($overtimeHours * $ratePerHour * $overtimeMultiplier);
+        $regularHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'regular', $settings);
+        $specialHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'special', $settings);
         $allowance = $this->money($employee->allowance ?? 0);
         $salaryAdjustment = $this->money($employee->salary_adjustment ?? 0);
 
         $undertimeAmount = $this->money(($undertimeMinutes / 60) * $ratePerHour);
         $lateAmount = $this->money(($lateMinutes / 60) * $ratePerHour);
-        $halfDayAmount = $this->money($halfDayCount * ($ratePerDay / 2));
+        $halfDayAmount = $this->money($halfDayCount * ($ratePerDay * $halfDayValue));
         $absentAmount = $isDaily ? 0.0 : $this->money($absenceDays * $ratePerDay);
         $deductions = $this->deductions($employee);
 
@@ -367,7 +374,7 @@ class PayrollCalculator
         return Str::contains(Str::lower((string) $employee->rate_type), 'daily') ? 'Daily' : 'Monthly';
     }
 
-    protected function ratePerDay(Employee $employee, ?Collection $dtrs = null): float
+    protected function ratePerDay(Employee $employee, ?Collection $dtrs = null, ?PayrollCalculationSetting $settings = null): float
     {
         $storedDailyRate = $this->storedDailyRate($dtrs);
 
@@ -382,9 +389,10 @@ class PayrollCalculator
         }
 
         $monthlyRate = (float) ($employee->monthly_rate ?? 0);
+        $workDaysPerMonth = $settings?->divisor('regular_work_days_per_month') ?? self::REGULAR_WORK_DAYS_PER_MONTH;
 
         return $monthlyRate > 0
-            ? $this->money($monthlyRate / self::REGULAR_WORK_DAYS_PER_MONTH)
+            ? $this->money($monthlyRate / $workDaysPerMonth)
             : 0.0;
     }
 
@@ -470,7 +478,7 @@ class PayrollCalculator
         return $this->number($minutes / 60);
     }
 
-    protected function holidayAmount(Collection $dtrs, float $ratePerDay, string $type): float
+    protected function holidayAmount(Collection $dtrs, float $ratePerDay, string $type, PayrollCalculationSetting $settings): float
     {
         return $this->money(
             $dtrs
@@ -485,10 +493,10 @@ class PayrollCalculator
 
                     return Str::contains($holidayType, 'special') || ($holidayRate > 0 && $holidayRate < 100);
                 })
-                ->sum(function (Dtr $dtr) use ($ratePerDay): float {
-                    $holidayRate = (float) ($dtr->holiday_rate ?: $dtr->holiday?->type?->rate ?: 0);
+                ->sum(function (Dtr $dtr) use ($ratePerDay, $settings, $type): float {
+                    $holidayRate = $this->holidayRate($dtr, $settings, $type);
                     $dailyRate = (float) ($dtr->daily_rate ?: $ratePerDay);
-                    $ratePerHour = $dailyRate / 8;
+                    $ratePerHour = $dailyRate / $settings->divisor('work_hours_per_day');
                     $creditedHours = ((float) ($dtr->credited_work_hrs ?? 0)) / 60;
                     $baseWorkedPay = $creditedHours * $ratePerHour;
                     $premiumMultiplier = $holidayRate >= 100
@@ -498,6 +506,19 @@ class PayrollCalculator
                     return $baseWorkedPay * $premiumMultiplier;
                 })
         );
+    }
+
+    protected function holidayRate(Dtr $dtr, PayrollCalculationSetting $settings, string $type): float
+    {
+        $holidayRate = (float) ($dtr->holiday_rate ?: $dtr->holiday?->type?->rate ?: 0);
+
+        if ($holidayRate > 0) {
+            return $holidayRate;
+        }
+
+        return $type === 'regular'
+            ? $settings->value('regular_holiday_rate')
+            : $settings->value('special_holiday_rate');
     }
 
     protected function deductions(Employee $employee): array

@@ -2,7 +2,7 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\EmployeePayroll;
+use App\Filament\Pages\DtrManage;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
@@ -14,7 +14,7 @@ use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 
-class BranchPayrollEmployeeTable extends TableWidget
+class DtrBranchEmployeeTable extends TableWidget
 {
     use HasWidgetShield;
 
@@ -22,9 +22,9 @@ class BranchPayrollEmployeeTable extends TableWidget
 
     protected static ?string $heading = 'Employees';
 
-    public ?int $branchId = null;
-
     public ?int $periodId = null;
+
+    public ?int $branchId = null;
 
     public function table(Table $table): Table
     {
@@ -66,13 +66,13 @@ class BranchPayrollEmployeeTable extends TableWidget
             ])
             ->recordActions([
                 ActionGroup::make([
-                    Action::make('viewPayroll')
-                        ->label('View Payroll')
-                        ->icon(Heroicon::Eye)
-                        ->url(fn (Employee $record): string => EmployeePayroll::getUrl([
-                            'employeeId' => $record->id,
-                            'branchId' => $record->branch_id,
+                    Action::make('manageDtr')
+                        ->label('Manage D.T.R')
+                        ->icon(Heroicon::Cog6Tooth)
+                        ->url(fn (Employee $record): string => DtrManage::getUrl([
                             'periodId' => $this->periodId,
+                            'branchId' => $record->branch_id,
+                            'employeeId' => $record->id,
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

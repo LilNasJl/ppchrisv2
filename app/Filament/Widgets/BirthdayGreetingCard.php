@@ -9,7 +9,15 @@ use Illuminate\Database\Eloquent\Builder;
 
 class BirthdayGreetingCard extends StatsOverviewWidget
 {
-    protected int|string|array $columnSpan = 'full';
+    protected int|string|array $columnSpan = [
+        'default' => 'full',
+        'lg' => 2,
+    ];
+
+    protected function getColumns(): int|array
+    {
+        return 1;
+    }
 
     public static function canView(): bool
     {

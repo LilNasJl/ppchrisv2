@@ -7,17 +7,13 @@ use App\Models\PayrollPeriod;
 use App\Services\PayrollCalculator;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
 
-class EmployeePayroll extends Page implements HasForms
+class EmployeePayroll extends Page
 {
     use HasPageShield;
-    use InteractsWithForms;
 
     protected string $view = 'filament.pages.employee-payroll';
 
@@ -36,21 +32,6 @@ class EmployeePayroll extends Page implements HasForms
         $this->employeeId = request()->query('employeeId');
         $this->branchId = request()->query('branchId');
         $this->period_id = request()->query('periodId') ?: (string) app(PayrollCalculator::class)->defaultPeriod()?->id;
-
-        $this->form->fill([
-            'period_id' => $this->period_id,
-        ]);
-    }
-
-    protected function getFormSchema(): array
-    {
-        return [
-            Select::make('period_id')
-                ->label('Payroll Period')
-                ->options(fn (): array => app(PayrollCalculator::class)->periodOptions())
-                ->searchable()
-                ->reactive(),
-        ];
     }
 
     public function getEmployeeProperty(): ?Employee
@@ -90,7 +71,10 @@ class EmployeePayroll extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Payroll::getUrl()),
+                ->url(fn (): string => BranchPayrollEmployees::getUrl([
+                    'periodId' => $this->period_id,
+                    'branchId' => $this->branchId,
+                ])),
         ];
     }
 }

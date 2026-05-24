@@ -25,11 +25,18 @@ class PayrollRosterTable extends TableWidget
 
     protected static ?string $heading = 'Payroll Period Roster Exemptions';
 
+    public ?int $periodId = null;
+
     public function table(Table $table): Table
     {
         return $table
             ->query(fn (): Builder => PayrollPeriod::query()
                 ->withCount('employeeExclusions')
+                ->when(
+                    filled($this->periodId),
+                    fn (Builder $query) => $query->whereKey($this->periodId),
+                    fn (Builder $query) => $query->whereRaw('1 = 0')
+                )
                 ->latest('date_start'))
             ->columns([
                 TextColumn::make('index')

@@ -28,8 +28,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Enums\FiltersLayout;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
@@ -44,9 +42,12 @@ class DtrManageTable extends BaseWidget
 
     public ?string $branchId = null;
 
+    public ?string $periodId = null;
+
     public function table(Table $table): Table
     {
         return $table
+            ->heading(fn (): string => 'Payroll Period: '.($this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected'))
             ->query(fn (): Builder => $this->getDtrQuery())
             ->recordClasses('text-xs')
             ->columns([
@@ -139,17 +140,6 @@ class DtrManageTable extends BaseWidget
                         default => 'gray',
                     }),
             ])
-            ->filters([
-                SelectFilter::make('payroll_period_id')
-                    ->label('Payroll Period')
-                    ->options(fn () => PayrollPeriod::latest()->pluck('title', 'id'))
-                    ->default(fn () => PayrollPeriod::latest()->value('id'))
-                    ->selectablePlaceholder(false)
-                    ->query(fn (Builder $query, array $data) => $query->where('payroll_period_id', $data['value'] ?? PayrollPeriod::latest()->value('id'))
-                    ),
-            ])
-            ->filtersLayout(FiltersLayout::AboveContent)
-            ->filtersFormColumns(2)
             ->headerActions([
                 ExportAction::make('exportDtr')
                     ->label('Export D.T.R')
@@ -552,14 +542,16 @@ class DtrManageTable extends BaseWidget
     {
         $fingerprintId = $this->getFingerprintId();
         $branchId = $this->getBranchId();
+        $payrollPeriodId = $this->getSelectedPayrollPeriodId();
 
         return ModelsDtr::query()
             ->with(['payrollPeriod', 'holiday'])
             ->when(
-                filled($fingerprintId) && filled($branchId),
+                filled($fingerprintId) && filled($branchId) && filled($payrollPeriodId),
                 fn (Builder $query) => $query
                     ->where('fingerprint_id', $fingerprintId)
-                    ->where('branch_id', $branchId),
+                    ->where('branch_id', $branchId)
+                    ->where('payroll_period_id', $payrollPeriodId),
                 fn (Builder $query) => $query->whereRaw('1 = 0')
             )
             ->latest('date_in')
@@ -963,8 +955,7 @@ class DtrManageTable extends BaseWidget
 
     protected function getSelectedPayrollPeriodId(): ?int
     {
-        $payrollPeriodId = $this->getTableFilterState('payroll_period_id')['value']
-            ?? PayrollPeriod::latest()->value('id');
+        $payrollPeriodId = $this->periodId ?: PayrollPeriod::latest()->value('id');
 
         return filled($payrollPeriodId) ? (int) $payrollPeriodId : null;
     }

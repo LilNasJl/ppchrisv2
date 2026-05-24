@@ -37,6 +37,8 @@ class PayrollByBranch extends Page implements HasForms
 
     public ?string $branch_id = null;
 
+    public ?string $period_display = null;
+
     public ?string $prepared_by = null;
 
     public ?string $checked_by = null;
@@ -47,9 +49,10 @@ class PayrollByBranch extends Page implements HasForms
     {
         $this->period_id = request()->query('periodId') ?: (string) app(PayrollCalculator::class)->defaultPeriod()?->id;
         $this->branch_id = request()->query('branchId') ?: (string) Branch::query()->orderBy('branch_name')->value('id');
+        $this->period_display = PayrollPeriod::query()->find($this->period_id)?->title ?? 'No payroll period selected';
 
         $this->form->fill([
-            'period_id' => $this->period_id,
+            'period_display' => $this->period_display,
             'branch_id' => $this->branch_id,
         ]);
 
@@ -60,11 +63,10 @@ class PayrollByBranch extends Page implements HasForms
     {
         return [
             Group::make([
-                Select::make('period_id')
+                TextInput::make('period_display')
                     ->label('Payroll Period')
-                    ->options(fn (): array => app(PayrollCalculator::class)->periodOptions())
-                    ->searchable()
-                    ->reactive(),
+                    ->disabled()
+                    ->dehydrated(false),
 
                 Select::make('branch_id')
                     ->label('Branch')
@@ -121,7 +123,9 @@ class PayrollByBranch extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Payroll::getUrl()),
+                ->url(fn (): string => filled($this->period_id)
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period_id])
+                    : Payroll::getUrl()),
 
             Action::make('signatories')
                 ->label('Signatories')

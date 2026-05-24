@@ -2,8 +2,8 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\PayrollPeriodBranches;
-use App\Models\PayrollPeriod;
+use App\Filament\Pages\BranchPayrollEmployees;
+use App\Models\Branch;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -13,44 +13,42 @@ use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 
-class PayrollEmployeeTable extends TableWidget
+class PayrollPeriodBranchTable extends TableWidget
 {
     use HasWidgetShield;
 
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $heading = 'Payroll Periods';
+    protected static ?string $heading = 'Branches';
+
+    public ?int $periodId = null;
 
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => PayrollPeriod::query()->latest('date_start'))
+            ->query(fn (): Builder => Branch::query()->orderBy('branch_name'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
                     ->rowIndex(),
 
-                TextColumn::make('title')
-                    ->label('Payroll Period')
+                TextColumn::make('branch_name')
+                    ->label('Branch')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
-
-                TextColumn::make('is_locked')
-                    ->label('Status')
-                    ->badge()
-                    ->formatStateUsing(fn (bool $state): string => $state ? 'Locked' : 'Open')
-                    ->color(fn (bool $state): string => $state ? 'danger' : 'success'),
             ])
             ->recordActions([
                 ActionGroup::make([
-                    Action::make('viewPayroll')
+                    Action::make('viewEmployees')
                         ->label('View')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (PayrollPeriod $record): string => PayrollPeriodBranches::getUrl([
-                            'periodId' => $record->id,
+                        ->url(fn (Branch $record): string => BranchPayrollEmployees::getUrl([
+                            'periodId' => $this->periodId,
+                            'branchId' => $record->id,
                         ])),
-                ]),
+                ])
+                    ->icon(Heroicon::EllipsisHorizontal),
             ]);
     }
 }

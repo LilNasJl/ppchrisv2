@@ -7,7 +7,6 @@ use App\Filament\Widgets\PayrollEmployeeTable;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
@@ -29,30 +28,10 @@ class Payroll extends Page
     protected function getHeaderActions(): array
     {
         return [
-            ActionGroup::make([
-                Action::make('payrollSummary')
-                    ->label('Payroll Summary')
-                    ->icon(Heroicon::ChartBar)
-                    ->url(PayrollSummary::getUrl()),
-
-                Action::make('payrollByBranch')
-                    ->label('Payroll By Branch')
-                    ->icon(Heroicon::BuildingStorefront)
-                    ->url(PayrollByBranch::getUrl()),
-
-                Action::make('payrollRoster')
-                    ->label('Payroll Roster')
-                    ->icon(Heroicon::ClipboardDocumentList)
-                    ->url(PayrollRoster::getUrl()),
-
-                Action::make('managePayrollPeriods')
-                    ->label('Manage Payroll Periods')
-                    ->icon(Heroicon::CalendarDays)
-                    ->url(PayrollPeriodResource::getUrl()),
-            ])
-                ->label('Manage Payroll')
-                ->icon(Heroicon::ChevronDown)
-                ->button(),
+            Action::make('managePayrollPeriods')
+                ->label('Manage Payroll Periods')
+                ->icon(Heroicon::CalendarDays)
+                ->url(PayrollPeriodResource::getUrl()),
         ];
     }
 
