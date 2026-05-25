@@ -8,14 +8,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Holiday extends Model
 {
     protected $fillable = [
+        'branch_id',
         'date',
+        'month_day',
         'holiday_type_id',
         'title',
+        'is_recurring',
+        'source',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'is_recurring' => 'boolean',
     ];
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
 
     public function type(): BelongsTo
     {

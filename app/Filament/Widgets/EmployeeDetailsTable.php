@@ -73,6 +73,15 @@ class EmployeeDetailsTable extends TableWidget
         return $rateType === 'daily' ? 'daily' : 'regular';
     }
 
+    protected function dailyRateFromMonthly(mixed $monthlyRate): ?float
+    {
+        $monthlyRate = filled($monthlyRate) ? (float) $monthlyRate : 0.0;
+
+        return $monthlyRate > 0
+            ? round($monthlyRate / ModelsEmployee::REGULAR_WORK_DAYS_PER_MONTH, 2)
+            : null;
+    }
+
     protected function profilePreview(?ModelsEmployee $record): HtmlString
     {
         if (! $record) {
@@ -511,9 +520,21 @@ class EmployeeDetailsTable extends TableWidget
                                         ->required(),
 
                                     TextInput::make('daily_rate')
+                                        ->label('Daily Rate')
                                         ->numeric()
                                         ->prefix('₱')
-                                        ->required(),
+                                        ->readOnly(fn (Get $get): bool => $get('rate_type') === 'monthly')
+                                        ->dehydrated(true)
+                                        ->required(fn (Get $get): bool => $get('rate_type') === 'daily'),
+
+                                    TextInput::make('monthly_rate')
+                                        ->label('Basic Monthly')
+                                        ->numeric()
+                                        ->prefix('₱')
+                                        ->live(onBlur: true)
+                                        ->visible(fn (Get $get): bool => $get('rate_type') === 'monthly')
+                                        ->afterStateUpdated(fn (Set $set, mixed $state): mixed => $set('daily_rate', $this->dailyRateFromMonthly($state)))
+                                        ->required(fn (Get $get): bool => $get('rate_type') === 'monthly'),
 
                                     TextInput::make('allowance')
                                         ->label('Monthly Allowance')

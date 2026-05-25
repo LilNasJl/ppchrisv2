@@ -18,19 +18,19 @@ class DepartmentForm
                     ->schema([
                         TextInput::make('name')
                             ->label('Department Name')
-                            ->placeholder('e.g., Provincial Information Communication Technology Office')
+                            ->placeholder('e.g., Accounting Management Office')
                             ->maxLength(100)
                             ->required(),
                         TextInput::make('acronym')
                             ->label('Acronym')
-                            ->placeholder('e.g., PICTO')
+                            ->placeholder('e.g., AMO')
                             ->required(),
                         Textarea::make('description')
                             ->placeholder('Description...')
                             ->label('Department description')
                             ->maxLength(255)
                             ->rows(5)
-                            ->columnSpanFull()
+                            ->columnSpanFull(),
                     ])->columns(2),
             ])->columns(1);
     }

@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\Memo;
 use App\Models\PayrollPeriod;
+use App\Services\HolidayResolver;
 use App\Services\PayrollCalculator;
 use App\Support\CompanyExportHeader;
 use BackedEnum;
@@ -348,13 +349,10 @@ class Reports extends Page implements HasForms
     {
         $month = filled($this->month) ? Carbon::parse($this->month.'-01') : now();
 
-        return Holiday::query()
-            ->with('type')
-            ->whereBetween('date', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
-            ->orderBy('date')
-            ->get()
+        return app(HolidayResolver::class)
+            ->nationalHolidaysForMonth($month)
             ->map(fn (Holiday $holiday): array => [
-                $holiday->date->format('Y-m-d'),
+                Carbon::parse($holiday->occurrence_date)->format('Y-m-d'),
                 $holiday->title,
                 $holiday->type?->type,
                 $holiday->type?->rate,

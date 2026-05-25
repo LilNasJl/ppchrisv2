@@ -295,7 +295,10 @@
 
         <aside class="holiday-stack">
             <section class="holiday-card">
-                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 14px;">Set Holiday</h3>
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">Set Holiday</h3>
+                <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+                    {{ $this->calendarScopeLabel }} holiday. Saved dates repeat every year automatically.
+                </p>
 
                 <form wire:submit.prevent="saveHoliday" class="holiday-form">
                     <div class="holiday-field">

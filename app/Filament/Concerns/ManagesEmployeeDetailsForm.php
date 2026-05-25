@@ -13,6 +13,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -63,6 +64,30 @@ trait ManagesEmployeeDetailsForm
     protected function scheduleTypeForRateType(?string $rateType): string
     {
         return $rateType === 'daily' ? 'daily' : 'regular';
+    }
+
+    protected function dailyRateFromMonthly(mixed $monthlyRate): ?float
+    {
+        $monthlyRate = filled($monthlyRate) ? (float) $monthlyRate : 0.0;
+
+        return $monthlyRate > 0
+            ? round($monthlyRate / ModelsEmployee::REGULAR_WORK_DAYS_PER_MONTH, 2)
+            : null;
+    }
+
+    protected function normalizeSalaryData(array $data): array
+    {
+        $data['rate_type'] = ($data['rate_type'] ?? null) === 'daily' ? 'daily' : 'monthly';
+
+        if ($data['rate_type'] === 'monthly') {
+            $data['daily_rate'] = $this->dailyRateFromMonthly($data['monthly_rate'] ?? null);
+
+            return $data;
+        }
+
+        $data['monthly_rate'] = null;
+
+        return $data;
     }
 
     protected function profilePreview(?ModelsEmployee $record): HtmlString
@@ -565,9 +590,21 @@ trait ManagesEmployeeDetailsForm
                                         ->required(),
 
                                     TextInput::make('daily_rate')
+                                        ->label('Daily Rate')
                                         ->numeric()
                                         ->prefix('₱')
-                                        ->required(),
+                                        ->readOnly(fn (Get $get): bool => $get('rate_type') === 'monthly')
+                                        ->dehydrated(true)
+                                        ->required(fn (Get $get): bool => $get('rate_type') === 'daily'),
+
+                                    TextInput::make('monthly_rate')
+                                        ->label('Basic Monthly')
+                                        ->numeric()
+                                        ->prefix('₱')
+                                        ->live(onBlur: true)
+                                        ->visible(fn (Get $get): bool => $get('rate_type') === 'monthly')
+                                        ->afterStateUpdated(fn (Set $set, mixed $state): mixed => $set('daily_rate', $this->dailyRateFromMonthly($state)))
+                                        ->required(fn (Get $get): bool => $get('rate_type') === 'monthly'),
 
                                     TextInput::make('allowance')
                                         ->label('Monthly Allowance')
@@ -599,6 +636,7 @@ trait ManagesEmployeeDetailsForm
         $profilePhotoPath = $data['profile_photo_path'] ?? null;
 
         unset($data['deductions'], $data['other_deduction_ids'], $data['tenure'], $data['profile_photo_path']);
+        $data = $this->normalizeSalaryData($data);
         $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);
 
         DB::transaction(function () use ($record, $data, $profilePhotoPath): void {

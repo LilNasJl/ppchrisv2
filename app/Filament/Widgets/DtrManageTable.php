@@ -6,9 +6,9 @@ use App\Filament\Exports\DtrExporter;
 use App\Models\Branch;
 use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
-use App\Models\Holiday;
 use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
+use App\Services\HolidayResolver;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
@@ -20,6 +20,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ExportAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -141,6 +142,17 @@ class DtrManageTable extends BaseWidget
                     }),
             ])
             ->headerActions([
+                Action::make('viewComments')
+                    ->label('View Comments')
+                    ->icon('heroicon-m-chat-bubble-left-right')
+                    ->modalHeading('D.T.R Comments')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->modalWidth('4xl')
+                    ->modalContent(fn () => view('filament.widgets.dtr-comments-modal', [
+                        'comments' => $this->getDtrComments(),
+                    ])),
+
                 ExportAction::make('exportDtr')
                     ->label('Export D.T.R')
                     ->icon('heroicon-m-arrow-down-tray')
@@ -165,6 +177,12 @@ class DtrManageTable extends BaseWidget
                             DatePicker::make('absence_date')
                                 ->label('Absence Date')
                                 ->required(),
+
+                            Textarea::make('comment')
+                                ->label('Comment')
+                                ->rows(3)
+                                ->maxLength(1000)
+                                ->columnSpanFull(),
                         ])
                         ->modalHeading('Add Absence')
                         ->modalSubmitActionLabel('Save')
@@ -297,6 +315,12 @@ class DtrManageTable extends BaseWidget
                         ->disabled()
                         ->dehydrated(true)
                         ->visible(fn (Get $get): bool => ! (bool) $get('overtime_only') && $this->usesSaturdaySchedule($get('date_in'))),
+
+                    Textarea::make('comment')
+                        ->label('Comment')
+                        ->rows(3)
+                        ->maxLength(1000)
+                        ->columnSpanFull(),
                 ])
                 ->columns(2),
         ];
@@ -305,6 +329,10 @@ class DtrManageTable extends BaseWidget
     protected function addDtr(array $data): void
     {
         if (! $this->canMutateDtr()) {
+            return;
+        }
+
+        if (! $this->ensureDtrDatesWithinSelectedPayrollPeriod($data, 'Unable to add D.T.R record')) {
             return;
         }
 
@@ -342,6 +370,10 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
+        if (! $this->ensureDtrDatesWithinSelectedPayrollPeriod($data, 'Unable to update D.T.R record')) {
+            return;
+        }
+
         if ($this->hasAbsenceOnDate($data['date_in'], $record->id) || $this->hasAbsenceOnDate($data['date_out'], $record->id)) {
             Notification::make()
                 ->title('Unable to update D.T.R record')
@@ -369,6 +401,10 @@ class DtrManageTable extends BaseWidget
         }
 
         $absenceDate = Carbon::parse($data['absence_date'])->toDateString();
+
+        if (! $this->ensureDatesWithinSelectedPayrollPeriod([$absenceDate], 'Unable to add absence')) {
+            return;
+        }
 
         if ($this->getScopedDtrQuery()->whereDate('date_in', $absenceDate)->exists()) {
             Notification::make()
@@ -401,6 +437,7 @@ class DtrManageTable extends BaseWidget
             'early_clock_in_approved' => false,
             'overtime_approved' => false,
             'daily_rate' => $this->getDailyRate(),
+            'comment' => $this->normalizeComment($data['comment'] ?? null),
             'is_absent' => true,
             'is_imported' => 0,
             'is_locked' => 0,
@@ -521,6 +558,53 @@ class DtrManageTable extends BaseWidget
             ->send();
     }
 
+    public function deleteDtrComment(int $dtrId): void
+    {
+        $record = $this->getScopedDtrQuery()
+            ->with('payrollPeriod')
+            ->whereKey($dtrId)
+            ->first();
+
+        if (! $record) {
+            Notification::make()
+                ->title('Comment not found')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($this->isRecordLocked($record)) {
+            $this->sendLockedNotification();
+
+            return;
+        }
+
+        $record->forceFill(['comment' => null])->save();
+
+        $this->flushCachedTableRecords();
+
+        Notification::make()
+            ->title('Comment deleted')
+            ->success()
+            ->send();
+    }
+
+    protected function getDtrComments()
+    {
+        if (blank($this->getSelectedPayrollPeriodId()) || blank($this->getBranchId()) || blank($this->getFingerprintId())) {
+            return collect();
+        }
+
+        return $this->getScopedDtrQuery()
+            ->with('payrollPeriod')
+            ->whereNotNull('comment')
+            ->where('comment', '!=', '')
+            ->orderBy('date_in')
+            ->orderBy('time_in')
+            ->get();
+    }
+
     protected function getEditFormData(ModelsDtr $record): array
     {
         $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true);
@@ -535,6 +619,7 @@ class DtrManageTable extends BaseWidget
             'saturday_schedule_start' => '08:00:00',
             'saturday_schedule_end' => '11:00:00',
             'overtime_only' => $record->schedule_type === 'Overtime',
+            'comment' => $record->comment,
         ];
     }
 
@@ -600,6 +685,7 @@ class DtrManageTable extends BaseWidget
             'schedule_start' => $scheduleStart,
             'schedule_end' => $scheduleEnd,
             'daily_rate' => $this->getDailyRate(),
+            'comment' => $this->normalizeComment($data['comment'] ?? null),
             ...$this->getHolidayData($dateIn),
             ...$this->calculateDtr($calculationData),
         ];
@@ -815,6 +901,89 @@ class DtrManageTable extends BaseWidget
         return Carbon::parse($time)->second(0)->format('H:i:s');
     }
 
+    protected function normalizeComment(mixed $comment): ?string
+    {
+        $comment = trim((string) ($comment ?? ''));
+
+        return $comment === '' ? null : $comment;
+    }
+
+    protected function ensureDatesWithinSelectedPayrollPeriod(array $dates, string $title): bool
+    {
+        $payrollPeriod = $this->getSelectedPayrollPeriod();
+
+        if (! $payrollPeriod || blank($payrollPeriod->date_start) || blank($payrollPeriod->date_end)) {
+            Notification::make()
+                ->title($title)
+                ->body('Payroll period details are missing.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        $periodStart = Carbon::parse($payrollPeriod->date_start)->startOfDay();
+        $periodEnd = Carbon::parse($payrollPeriod->date_end)->startOfDay();
+
+        foreach ($dates as $date) {
+            if (blank($date)) {
+                continue;
+            }
+
+            $date = Carbon::parse($date)->startOfDay();
+
+            if ($date->betweenIncluded($periodStart, $periodEnd)) {
+                continue;
+            }
+
+            Notification::make()
+                ->title($title)
+                ->body('Selected dates must be within '.$periodStart->format('M d, Y').' to '.$periodEnd->format('M d, Y').'.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function ensureDtrDatesWithinSelectedPayrollPeriod(array $data, string $title): bool
+    {
+        if (! $this->ensureDatesWithinSelectedPayrollPeriod([$data['date_in'] ?? null], $title)) {
+            return false;
+        }
+
+        if (blank($data['date_in'] ?? null) || blank($data['date_out'] ?? null)) {
+            return true;
+        }
+
+        $dateIn = Carbon::parse($data['date_in'])->startOfDay();
+        $dateOut = Carbon::parse($data['date_out'])->startOfDay();
+
+        if ($dateOut->lessThan($dateIn)) {
+            Notification::make()
+                ->title($title)
+                ->body('Date out cannot be earlier than date in.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        if ($dateOut->greaterThan($dateIn->copy()->addDay())) {
+            Notification::make()
+                ->title($title)
+                ->body('Date out can only be the same date or the next date for overnight schedules.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        return true;
+    }
+
     protected function canMutateDtr(): bool
     {
         if ($this->isSelectedPayrollPeriodLocked()) {
@@ -905,10 +1074,8 @@ class DtrManageTable extends BaseWidget
 
     protected function getHolidayData(string $date): array
     {
-        $holiday = Holiday::query()
-            ->with('type')
-            ->whereDate('date', Carbon::parse($date)->toDateString())
-            ->first();
+        $holiday = app(HolidayResolver::class)
+            ->resolveForDate($date, $this->getBranchId());
 
         if (! $holiday) {
             return [

@@ -5,8 +5,8 @@ namespace App\Filament\Imports;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
-use App\Models\Holiday;
 use App\Services\DtrCalculator;
+use App\Services\HolidayResolver;
 use Carbon\Carbon;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -159,10 +159,8 @@ class DtrImporter extends Importer
             ];
         }
 
-        $holiday = Holiday::query()
-            ->with('type')
-            ->whereDate('date', Carbon::parse($dateIn)->toDateString())
-            ->first();
+        $holiday = app(HolidayResolver::class)
+            ->resolveForDate($dateIn, $this->getImportedBranchId());
 
         if (! $holiday) {
             return [

@@ -20,8 +20,8 @@ class Dtr extends Model
         'date_out',
         'time_out',
         'schedule_type',
-        'schedule_start', 
-        'schedule_end',   
+        'schedule_start',
+        'schedule_end',
         'late',
         'undertime',
         'overtime',
@@ -37,6 +37,7 @@ class Dtr extends Model
         'holiday_type',
         'holiday_rate',
         'daily_rate',
+        'comment',
         'is_absent',
         'is_imported',
         'is_locked',
@@ -52,7 +53,7 @@ class Dtr extends Model
         'daily_rate' => 'decimal:2',
     ];
 
-    public function branch() 
+    public function branch()
     {
         return $this->belongsTo(Branch::class);
     }

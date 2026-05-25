@@ -4,7 +4,7 @@ namespace App\Filament\Employee\Pages;
 
 use App\Models\Activity;
 use App\Models\Announcement;
-use App\Models\Holiday;
+use App\Services\HolidayResolver;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -18,7 +18,7 @@ class Dashboard extends Page
 
     protected static ?string $title = 'Dashboard';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::Squares2x2;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
     protected static ?int $navigationSort = 1;
 
@@ -34,12 +34,7 @@ class Dashboard extends Page
 
     public function getUpcomingHolidaysProperty(): Collection
     {
-        return Holiday::query()
-            ->with('type')
-            ->whereDate('date', '>=', now()->toDateString())
-            ->orderBy('date')
-            ->limit(5)
-            ->get();
+        return app(HolidayResolver::class)->upcomingNationalHolidays(5);
     }
 
     public function getUpcomingActivitiesProperty(): Collection

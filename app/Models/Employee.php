@@ -12,6 +12,8 @@ class Employee extends Model
 {
     use SoftDeletes;
 
+    public const REGULAR_WORK_DAYS_PER_MONTH = 26;
+
     public const ENDED_EMPLOYMENT_TYPES = [
         'Resigned',
         'Terminated',
@@ -81,6 +83,15 @@ class Employee extends Model
             $employee->schedule_type = $employee->rate_type === 'daily'
                 ? 'daily'
                 : 'regular';
+
+            if ($employee->rate_type === 'monthly') {
+                $monthlyRate = (float) ($employee->monthly_rate ?? 0);
+                $employee->daily_rate = $monthlyRate > 0
+                    ? round($monthlyRate / self::REGULAR_WORK_DAYS_PER_MONTH, 2)
+                    : null;
+            } elseif ($employee->rate_type === 'daily') {
+                $employee->monthly_rate = null;
+            }
         });
 
         static::creating(function ($employee): void {

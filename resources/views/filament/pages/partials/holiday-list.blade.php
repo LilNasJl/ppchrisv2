@@ -6,6 +6,12 @@
                 <div style="font-size: 12px; color: #94a3b8;">
                     {{ $holiday->date->format('M d, Y') }} -
                     {{ $holiday->type?->type }} ({{ $holiday->type?->rate }}%)
+                    @if ($holiday->is_recurring)
+                        - Yearly
+                    @endif
+                    @if ($holiday->branch)
+                        - {{ $holiday->branch->branch_name }}
+                    @endif
                 </div>
             </div>
 
