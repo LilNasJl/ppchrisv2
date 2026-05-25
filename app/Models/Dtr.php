@@ -11,6 +11,7 @@ class Dtr extends Model
 
     protected $fillable = [
         'sample',
+        'leave_id',
         'payroll_period_id',
         'branch_id',
         'fingerprint_id',
@@ -71,5 +72,10 @@ class Dtr extends Model
     public function holiday()
     {
         return $this->belongsTo(Holiday::class);
+    }
+
+    public function leave()
+    {
+        return $this->belongsTo(Leave::class);
     }
 }

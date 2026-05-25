@@ -59,8 +59,15 @@ class DtrManageTable extends BaseWidget
                 TextColumn::make('attendance_status')
                     ->label('Status')
                     ->badge()
-                    ->getStateUsing(fn (ModelsDtr $record): string => $record->is_absent ? 'Absent' : 'Present')
-                    ->color(fn (string $state): string => $state === 'Absent' ? 'danger' : 'success'),
+                    ->getStateUsing(fn (ModelsDtr $record): string => $record->leave_id || $record->schedule_type === 'Leave'
+                            ? 'Leave'
+                            : ($record->is_absent ? 'Absent' : 'Present')
+                    )
+                    ->color(fn (string $state): string => match ($state) {
+                        'Leave' => 'info',
+                        'Absent' => 'danger',
+                        default => 'success',
+                    }),
 
                 TextColumn::make('date_in')
                     ->label('Date In')
@@ -93,6 +100,7 @@ class DtrManageTable extends BaseWidget
                     ->placeholder('-')
                     ->color(fn (?string $state): string => match ($state) {
                         'Saturday' => 'info',
+                        'Leave' => 'info',
                         'Overtime' => 'warning',
                         'Forgot to Punch', 'Absent' => 'danger',
                         default => 'gray',
