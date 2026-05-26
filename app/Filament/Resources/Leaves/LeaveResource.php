@@ -22,6 +22,8 @@ class LeaveResource extends Resource
 {
     protected static ?string $model = ModelsLeave::class;
 
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowLeftEndOnRectangle;
 
     protected static ?string $recordTitleAttribute = 'Leave';

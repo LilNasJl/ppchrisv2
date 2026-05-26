@@ -22,8 +22,8 @@ class BranchHolidayCalendar extends HolidayCalendar
 
     public function mount(): void
     {
-        $this->branchId = (int) request()->query('branchId');
-        $this->branch = Branch::query()->find($this->branchId);
+        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
+        $this->branch = filled($this->branchId) ? Branch::query()->find($this->branchId) : null;
 
         parent::mount();
     }

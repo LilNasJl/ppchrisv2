@@ -43,7 +43,7 @@ class BranchHolidayBranchTable extends TableWidget
                         ->label('Manage Holidays')
                         ->icon(Heroicon::CalendarDays)
                         ->url(fn (Branch $record): string => BranchHolidayCalendar::getUrl([
-                            'branchId' => $record->id,
+                            'branchId' => $record->publicKey(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

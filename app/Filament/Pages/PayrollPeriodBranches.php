@@ -30,8 +30,8 @@ class PayrollPeriodBranches extends Page
 
     public function mount(): void
     {
-        $this->periodId = (int) request()->query('periodId');
-        $this->period = PayrollPeriod::query()->find($this->periodId);
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
+        $this->period = filled($this->periodId) ? PayrollPeriod::query()->find($this->periodId) : null;
     }
 
     public function getTitle(): string
@@ -61,22 +61,22 @@ class PayrollPeriodBranches extends Page
                 Action::make('payrollSummary')
                     ->label('Payroll Summary')
                     ->icon(Heroicon::ChartBar)
-                    ->url(fn (): string => PayrollSummary::getUrl(['periodId' => $this->periodId])),
+                    ->url(fn (): string => PayrollSummary::getUrl(['periodId' => $this->period?->publicKey()])),
 
                 Action::make('payrollByBranch')
                     ->label('Payroll By Branch')
                     ->icon(Heroicon::BuildingStorefront)
-                    ->url(fn (): string => PayrollByBranch::getUrl(['periodId' => $this->periodId])),
+                    ->url(fn (): string => PayrollByBranch::getUrl(['periodId' => $this->period?->publicKey()])),
 
                 Action::make('payrollRoster')
                     ->label('Payroll Roster')
                     ->icon(Heroicon::ClipboardDocumentList)
-                    ->url(fn (): string => PayrollRoster::getUrl(['periodId' => $this->periodId])),
+                    ->url(fn (): string => PayrollRoster::getUrl(['periodId' => $this->period?->publicKey()])),
 
                 Action::make('payrollCalculation')
                     ->label('Payroll Calculation')
                     ->icon(Heroicon::Cog6Tooth)
-                    ->url(fn (): string => PayrollCalculation::getUrl(['periodId' => $this->periodId])),
+                    ->url(fn (): string => PayrollCalculation::getUrl(['periodId' => $this->period?->publicKey()])),
             ])
                 ->label('Manage Payroll')
                 ->icon(Heroicon::ChevronDown)

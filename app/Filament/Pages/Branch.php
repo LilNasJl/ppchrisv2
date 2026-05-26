@@ -4,7 +4,9 @@ namespace App\Filament\Pages;
 
 use App\Filament\Widgets\BranchTable;
 use App\Models\Branch as ModelsBranch;
+use App\Models\Employee;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Hidden;
@@ -13,23 +15,23 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group as ComponentsGroup;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Grouping\Group;
 use UnitEnum;
 
 class Branch extends Page
 {
     use HasPageShield;
-    protected string $view = 'filament.pages.branch';
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
-    protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
+    protected string $view = 'filament.pages.branch';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
     protected function getHeaderActions(): array
     {
@@ -50,7 +52,7 @@ class Branch extends Page
                                             ->maxLength('255')
                                             ->placeholder('e.g., Tagum Station')
                                             ->unique(
-                                                table: \App\Models\Branch::class,
+                                                table: ModelsBranch::class,
                                                 column: 'branch_name',
                                             )
                                             ->required(),
@@ -69,21 +71,20 @@ class Branch extends Page
 
                                         TextInput::make('mobile_no')
                                             ->label('Mobile No.')
-                                            ->mask('9999-999-9999') 
+                                            ->mask('9999-999-9999')
                                             ->placeholder('09-1234-56789')
-                                            ->rules(['regex:/^09/']) 
+                                            ->rules(['regex:/^09/'])
                                             ->validationMessages([
                                                 'regex' => 'The mobile number must start with 09.',
                                             ]),
                                     ])->columns(2),
-
 
                                 Textarea::make('branch_address')
                                     ->label('Address')
                                     ->placeholder('e.g, Tagum City, Davao del Norte')
                                     ->rows(3)
                                     ->required(),
-                                             
+
                                 // Hidden Inputs
                                 Hidden::make('no_of_shifts')
                                     ->default(0),
@@ -97,36 +98,36 @@ class Branch extends Page
                                 Hidden::make('scheduling')
                                     ->default('regular'),
 
-                             ComponentsGroup::make()
-                                ->schema([
-                                    TimePicker::make('reg_sched_start')
-                                        ->label('Schedule Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
+                                ComponentsGroup::make()
+                                    ->schema([
+                                        TimePicker::make('reg_sched_start')
+                                            ->label('Schedule Start')
+                                            ->required()
+                                            ->live()
+                                            ->afterStateUpdated(function (Set $set, $state) {
+                                                $set('opening_hrs', $state);
+                                            }),
 
-                                    TimePicker::make('reg_sched_end')
-                                        ->label('Schedule End')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('closed_hrs', $state);
-                                        }),
+                                        TimePicker::make('reg_sched_end')
+                                            ->label('Schedule End')
+                                            ->required()
+                                            ->live()
+                                            ->afterStateUpdated(function (Set $set, $state) {
+                                                $set('closed_hrs', $state);
+                                            }),
 
-                                    TimePicker::make('opening_hrs')
-                                        ->visible(false)
-                                        ->dehydrated(true),
+                                        TimePicker::make('opening_hrs')
+                                            ->visible(false)
+                                            ->dehydrated(true),
 
-                                    TimePicker::make('closed_hrs')
-                                        ->visible(false)
-                                        ->dehydrated(true),
+                                        TimePicker::make('closed_hrs')
+                                            ->visible(false)
+                                            ->dehydrated(true),
 
-                                ])
-                                ->columns(2)
-                            ])
-                     
+                                    ])
+                                    ->columns(2),
+                            ]),
+
                     ])
                     ->action(function (array $data) {
                         ModelsBranch::create([
@@ -139,8 +140,8 @@ class Branch extends Page
                             'scheduling' => $data['scheduling'],
                             'reg_sched_start' => $data['reg_sched_start'],
                             'reg_sched_end' => $data['reg_sched_end'],
-                            'opening_hrs'     => $data['opening_hrs'] ?? $data['reg_sched_start'],
-                            'closed_hrs'      => $data['closed_hrs'] ?? $data['reg_sched_end'],
+                            'opening_hrs' => $data['opening_hrs'] ?? $data['reg_sched_start'],
+                            'closed_hrs' => $data['closed_hrs'] ?? $data['reg_sched_end'],
                         ]);
 
                         $this->dispatch('refreshBranchTable');
@@ -150,12 +151,9 @@ class Branch extends Page
                             ->success()
                             ->send();
                     })
-                    ->modalHeading('Create New Branch: Regular Schedule')   
+                    ->modalHeading('Create New Branch: Regular Schedule')
                     ->modalSubmitActionLabel('Save'),
 
-                
-                
-                
                 // Regular & Shifting Schedule Branch
                 Action::make('regular&shift')
                     ->label('Regular & Shifting Schedule')
@@ -171,7 +169,7 @@ class Branch extends Page
                                             ->maxLength('255')
                                             ->placeholder('e.g., Tagum Station')
                                             ->unique(
-                                                table: \App\Models\Branch::class,
+                                                table: ModelsBranch::class,
                                                 column: 'branch_name',
                                             )
                                             ->required(),
@@ -179,31 +177,30 @@ class Branch extends Page
                                         Select::make('employee_id')
                                             ->label('Select SIC Employee')
                                             ->options(function () {
-                                                return \App\Models\Employee::query()
+                                                return Employee::query()
                                                     ->join('users', 'users.id', '=', 'employees.user_id')
                                                     ->where('users.role', 'employee')
                                                     ->pluck('users.name', 'employees.id');
                                             })
-                                            ->searchable() 
+                                            ->searchable()
                                             ->preload(),
 
                                         TextInput::make('mobile_no')
                                             ->label('Mobile No.')
-                                            ->mask('9999-999-9999') 
+                                            ->mask('9999-999-9999')
                                             ->placeholder('09-1234-56789')
-                                            ->rules(['regex:/^09/']) 
+                                            ->rules(['regex:/^09/'])
                                             ->validationMessages([
                                                 'regex' => 'The mobile number must start with 09.',
                                             ]),
                                     ])->columns(2),
-
 
                                 Textarea::make('branch_address')
                                     ->label('Address')
                                     ->placeholder('e.g, Tagum City, Davao del Norte')
                                     ->rows(3)
                                     ->required(),
-                                             
+
                                 // Hidden Inputs
                                 Hidden::make('no_of_shifts')
                                     ->default(2),
@@ -217,107 +214,103 @@ class Branch extends Page
                                 Hidden::make('scheduling')
                                     ->default('regular & shifting'),
 
-                                 ComponentsGroup::make()
+                                ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Regular Schedule')
-                                    ->schema([
-                                        TimePicker::make('reg_sched_start')
-                                        ->label('Regular Schedule Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
-                                        
-                                        TimePicker::make('reg_sched_end')
-                                            ->label('Regular Schedule End')
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function (Set $set, $state) {
-                                                $set('closed_hrs', $state);
-                                            }),
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2),
+                                        Fieldset::make('Regular Schedule')
+                                            ->schema([
+                                                TimePicker::make('reg_sched_start')
+                                                    ->label('Regular Schedule Start')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('opening_hrs', $state);
+                                                    }),
+
+                                                TimePicker::make('reg_sched_end')
+                                                    ->label('Regular Schedule End')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('closed_hrs', $state);
+                                                    }),
+                                            ])->columnSpanFull(),
+
+                                    ])->columns(2),
 
                                 ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Shifting Schedules')
-                                    ->schema([
-                                        TimePicker::make('shift1_start')
-                                        ->label('1st Shift Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
+                                        Fieldset::make('Shifting Schedules')
+                                            ->schema([
+                                                TimePicker::make('shift1_start')
+                                                    ->label('1st Shift Start')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('opening_hrs', $state);
+                                                    }),
 
-                                        TimePicker::make('shift1_end')
-                                            ->label('1st Shift End')
-                                            ->required(),
+                                                TimePicker::make('shift1_end')
+                                                    ->label('1st Shift End')
+                                                    ->required(),
 
-                                        TimePicker::make('shift2_start')
-                                            ->label('2nd Shift Start')
-                                            ->required(),
+                                                TimePicker::make('shift2_start')
+                                                    ->label('2nd Shift Start')
+                                                    ->required(),
 
-                                        TimePicker::make('shift2_end')
-                                            ->label('2nd Shift End')
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function (Set $set, $state) {
-                                                $set('closed_hrs', $state);
-                                            }),
+                                                TimePicker::make('shift2_end')
+                                                    ->label('2nd Shift End')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('closed_hrs', $state);
+                                                    }),
 
-                                        TimePicker::make('opening_hrs')
-                                            ->visible(false)
-                                            ->dehydrated(true),
+                                                TimePicker::make('opening_hrs')
+                                                    ->visible(false)
+                                                    ->dehydrated(true),
 
-                                        TimePicker::make('closed_hrs')
-                                            ->visible(false)
-                                            ->dehydrated(true),
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2),
+                                                TimePicker::make('closed_hrs')
+                                                    ->visible(false)
+                                                    ->dehydrated(true),
+                                            ])->columnSpanFull(),
+
+                                    ])->columns(2),
 
                                 ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Broken Time Schedules')
-                                    ->schema([
-                                        TimePicker::make('broken_shift1_start')
-                                        ->label('1st Shift Broken Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
+                                        Fieldset::make('Broken Time Schedules')
+                                            ->schema([
+                                                TimePicker::make('broken_shift1_start')
+                                                    ->label('1st Shift Broken Start')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('opening_hrs', $state);
+                                                    }),
 
-                                        TimePicker::make('broken_shift1_end')
-                                            ->label('1st Shift Broken End')
-                                            ->required(),
+                                                TimePicker::make('broken_shift1_end')
+                                                    ->label('1st Shift Broken End')
+                                                    ->required(),
 
-                                        TimePicker::make('broken_shift2_start')
-                                            ->label('2nd Shift Broken Start')
-                                            ->required(),
+                                                TimePicker::make('broken_shift2_start')
+                                                    ->label('2nd Shift Broken Start')
+                                                    ->required(),
 
-                                        TimePicker::make('broken_shift2_end')
-                                            ->label('2nd Shift Broken End')
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function (Set $set, $state) {
-                                                $set('closed_hrs', $state);
-                                            }),
+                                                TimePicker::make('broken_shift2_end')
+                                                    ->label('2nd Shift Broken End')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('closed_hrs', $state);
+                                                    }),
 
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2)
+                                            ])->columnSpanFull(),
 
+                                    ])->columns(2),
 
-
-
-
-                            ])
+                            ]),
                     ])
-                     ->action(function (array $data) {
+                    ->action(function (array $data) {
                         ModelsBranch::create([
                             'branch_name' => $data['branch_name'],
                             'branch_address' => $data['branch_address'],
@@ -337,8 +330,8 @@ class Branch extends Page
                             'broken_shift1_end' => $data['broken_shift1_end'],
                             'broken_shift2_start' => $data['broken_shift2_end'],
                             'broken_shift2_end' => $data['broken_shift2_start'],
-                            'opening_hrs'     => $data['opening_hrs'] ?? $data['shift1_start'],
-                            'closed_hrs'      => $data['closed_hrs'] ?? $data['shift2_end'],
+                            'opening_hrs' => $data['opening_hrs'] ?? $data['shift1_start'],
+                            'closed_hrs' => $data['closed_hrs'] ?? $data['shift2_end'],
                         ]);
 
                         $this->dispatch('refreshBranchTable');
@@ -348,16 +341,15 @@ class Branch extends Page
                             ->success()
                             ->send();
                     })
-                    ->modalHeading('Create New Branch: Regular & Shifting Schedule')   
+                    ->modalHeading('Create New Branch: Regular & Shifting Schedule')
                     ->modalSubmitActionLabel('Save'),
 
-
                 // REGULAR AND 24 HOURS SHIFT
-                Action::make('regular&24hrsshift')  
+                Action::make('regular&24hrsshift')
                     ->label('Regular & 24hrs Shifting Schedule')
                     ->tooltip('24/7 split-shift rotation with fixed hours')
                     ->icon(Heroicon::PlusCircle)
-                     ->schema([
+                    ->schema([
                         Section::make()
                             ->schema([
                                 ComponentsGroup::make()
@@ -367,7 +359,7 @@ class Branch extends Page
                                             ->maxLength('255')
                                             ->placeholder('e.g., Tagum Station')
                                             ->unique(
-                                                table: \App\Models\Branch::class,
+                                                table: ModelsBranch::class,
                                                 column: 'branch_name',
                                             )
                                             ->required(),
@@ -375,31 +367,30 @@ class Branch extends Page
                                         Select::make('employee_id')
                                             ->label('Select SIC Employee')
                                             ->options(function () {
-                                                return \App\Models\Employee::query()
+                                                return Employee::query()
                                                     ->join('users', 'users.id', '=', 'employees.user_id')
                                                     ->where('users.role', 'employee')
                                                     ->pluck('users.name', 'employees.id');
                                             })
-                                            ->searchable() 
+                                            ->searchable()
                                             ->preload(),
 
                                         TextInput::make('mobile_no')
                                             ->label('Mobile No.')
-                                            ->mask('9999-999-9999') 
+                                            ->mask('9999-999-9999')
                                             ->placeholder('09-1234-56789')
-                                            ->rules(['regex:/^09/']) 
+                                            ->rules(['regex:/^09/'])
                                             ->validationMessages([
                                                 'regex' => 'The mobile number must start with 09.',
                                             ]),
                                     ])->columns(2),
-
 
                                 Textarea::make('branch_address')
                                     ->label('Address')
                                     ->placeholder('e.g, Tagum City, Davao del Norte')
                                     ->rows(3)
                                     ->required(),
-                                             
+
                                 // Hidden Inputs
                                 Hidden::make('no_of_shifts')
                                     ->default(3),
@@ -415,105 +406,101 @@ class Branch extends Page
 
                                 ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Regular Schedule')
-                                    ->schema([
-                                        TimePicker::make('reg_sched_start')
-                                        ->label('Regular Schedule Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
-                                        
-                                        TimePicker::make('reg_sched_end')
-                                            ->label('Regular Schedule End')
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function (Set $set, $state) {
-                                                $set('closed_hrs', $state);
-                                            }),
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2),
+                                        Fieldset::make('Regular Schedule')
+                                            ->schema([
+                                                TimePicker::make('reg_sched_start')
+                                                    ->label('Regular Schedule Start')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('opening_hrs', $state);
+                                                    }),
+
+                                                TimePicker::make('reg_sched_end')
+                                                    ->label('Regular Schedule End')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('closed_hrs', $state);
+                                                    }),
+                                            ])->columnSpanFull(),
+
+                                    ])->columns(2),
 
                                 ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Shifting Schedules')
-                                    ->schema([
-                                        TimePicker::make('shift1_start')
-                                        ->label('1st Shift Start')
-                                        ->required()
-                                        ->live()
-                                        ->afterStateUpdated(function (Set $set, $state) {
-                                            $set('opening_hrs', $state);
-                                        }),
+                                        Fieldset::make('Shifting Schedules')
+                                            ->schema([
+                                                TimePicker::make('shift1_start')
+                                                    ->label('1st Shift Start')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('opening_hrs', $state);
+                                                    }),
 
-                                        TimePicker::make('shift1_end')
-                                            ->label('1st Shift End')
-                                            ->required(),
+                                                TimePicker::make('shift1_end')
+                                                    ->label('1st Shift End')
+                                                    ->required(),
 
-                                        TimePicker::make('shift2_start')
-                                            ->label('2nd Shift Start')
-                                            ->required(),
+                                                TimePicker::make('shift2_start')
+                                                    ->label('2nd Shift Start')
+                                                    ->required(),
 
-                                        TimePicker::make('shift2_end')
-                                            ->label('2nd Shift End')
-                                            ->required(),
-                                        
-                                        TimePicker::make('shift3_start')
-                                            ->label('3rd Shift Start')
-                                            ->required(),
+                                                TimePicker::make('shift2_end')
+                                                    ->label('2nd Shift End')
+                                                    ->required(),
 
-                                        TimePicker::make('shift3_end')
-                                            ->label('3rd Shift End')
-                                            ->required()
-                                            ->live()
-                                            ->afterStateUpdated(function (Set $set, $state) {
-                                                $set('closed_hrs', $state);
-                                            }),
+                                                TimePicker::make('shift3_start')
+                                                    ->label('3rd Shift Start')
+                                                    ->required(),
 
-                                        TimePicker::make('opening_hrs')
-                                            ->visible(false)
-                                            ->dehydrated(true),
+                                                TimePicker::make('shift3_end')
+                                                    ->label('3rd Shift End')
+                                                    ->required()
+                                                    ->live()
+                                                    ->afterStateUpdated(function (Set $set, $state) {
+                                                        $set('closed_hrs', $state);
+                                                    }),
 
-                                        TimePicker::make('closed_hrs')
-                                            ->visible(false)
-                                            ->dehydrated(true),
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2),
+                                                TimePicker::make('opening_hrs')
+                                                    ->visible(false)
+                                                    ->dehydrated(true),
+
+                                                TimePicker::make('closed_hrs')
+                                                    ->visible(false)
+                                                    ->dehydrated(true),
+                                            ])->columnSpanFull(),
+
+                                    ])->columns(2),
 
                                 ComponentsGroup::make()
                                     ->schema([
-                                    Fieldset::make('Broken Time Schedules')
-                                    ->schema([
-                                        TimePicker::make('broken_shift1_start')
-                                        ->label('1st Shift Broken Start')
-                                        ->required(),
+                                        Fieldset::make('Broken Time Schedules')
+                                            ->schema([
+                                                TimePicker::make('broken_shift1_start')
+                                                    ->label('1st Shift Broken Start')
+                                                    ->required(),
 
-                                        TimePicker::make('broken_shift1_end')
-                                            ->label('1st Shift Broken End')
-                                            ->required(),
+                                                TimePicker::make('broken_shift1_end')
+                                                    ->label('1st Shift Broken End')
+                                                    ->required(),
 
-                                        TimePicker::make('broken_shift2_start')
-                                            ->label('2nd Shift Broken Start')
-                                            ->required(),
+                                                TimePicker::make('broken_shift2_start')
+                                                    ->label('2nd Shift Broken Start')
+                                                    ->required(),
 
-                                        TimePicker::make('broken_shift2_end')
-                                            ->label('2nd Shift Broken End')
-                                            ->required(),
+                                                TimePicker::make('broken_shift2_end')
+                                                    ->label('2nd Shift Broken End')
+                                                    ->required(),
 
-                                        ])->columnSpanFull(),
-                                    
-                                ])->columns(2)
+                                            ])->columnSpanFull(),
 
+                                    ])->columns(2),
 
-
-
-
-                            ])
+                            ]),
                     ])
-                     ->action(function (array $data) {
+                    ->action(function (array $data) {
                         ModelsBranch::create([
                             'branch_name' => $data['branch_name'],
                             'branch_address' => $data['branch_address'],
@@ -535,8 +522,8 @@ class Branch extends Page
                             'broken_shift1_end' => $data['broken_shift1_end'],
                             'broken_shift2_start' => $data['broken_shift2_start'],
                             'broken_shift2_end' => $data['broken_shift2_end'],
-                            'opening_hrs'     => $data['opening_hrs'] ?? $data['shift1_start'],
-                            'closed_hrs'      => $data['closed_hrs'] ?? $data['shift3_end'],
+                            'opening_hrs' => $data['opening_hrs'] ?? $data['shift1_start'],
+                            'closed_hrs' => $data['closed_hrs'] ?? $data['shift3_end'],
                         ]);
 
                         $this->dispatch('refreshBranchTable');
@@ -546,20 +533,20 @@ class Branch extends Page
                             ->success()
                             ->send();
                     })
-                    ->modalHeading('Create New Branch: Regular & 24Hrs Shifting')   
+                    ->modalHeading('Create New Branch: Regular & 24Hrs Shifting')
                     ->modalSubmitActionLabel('Save'),
-    
+
             ])
-            ->label('Add new branch')
-            ->icon(Heroicon::BuildingOffice2)
-            ->button()
+                ->label('Add new branch')
+                ->icon(Heroicon::BuildingOffice2)
+                ->button(),
         ];
     }
 
     protected function getHeaderWidgets(): array
     {
         return [
-            BranchTable::class
+            BranchTable::class,
         ];
     }
 }

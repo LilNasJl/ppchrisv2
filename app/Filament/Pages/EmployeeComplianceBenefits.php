@@ -46,7 +46,7 @@ class EmployeeComplianceBenefits extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->employeeId = (int) request()->query('employeeId');
+        $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
         $this->employee = Employee::query()
             ->with(['employeeDeductions.deduction', 'branch', 'designation'])
             ->findOrFail($this->employeeId);

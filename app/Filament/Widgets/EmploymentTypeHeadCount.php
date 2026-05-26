@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 class EmploymentTypeHeadCount extends ChartWidget
 {
     use HasWidgetShield;
+
     protected ?string $heading = 'Employment Type Head Count';
 
     protected int|string|array $columnSpan = [

@@ -3,7 +3,9 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\EmployeePayroll;
+use App\Models\Branch;
 use App\Models\Employee;
+use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -70,9 +72,9 @@ class BranchPayrollEmployeeTable extends TableWidget
                         ->label('View Payroll')
                         ->icon(Heroicon::Eye)
                         ->url(fn (Employee $record): string => EmployeePayroll::getUrl([
-                            'employeeId' => $record->id,
-                            'branchId' => $record->branch_id,
-                            'periodId' => $this->periodId,
+                            'employeeId' => $record->publicKey(),
+                            'branchId' => Branch::query()->find($record->branch_id)?->publicKey(),
+                            'periodId' => PayrollPeriod::query()->find($this->periodId)?->publicKey(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

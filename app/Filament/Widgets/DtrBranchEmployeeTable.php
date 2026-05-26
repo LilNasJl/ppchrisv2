@@ -3,7 +3,9 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\DtrManage;
+use App\Models\Branch;
 use App\Models\Employee;
+use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -70,9 +72,9 @@ class DtrBranchEmployeeTable extends TableWidget
                         ->label('Manage D.T.R')
                         ->icon(Heroicon::Cog6Tooth)
                         ->url(fn (Employee $record): string => DtrManage::getUrl([
-                            'periodId' => $this->periodId,
-                            'branchId' => $record->branch_id,
-                            'employeeId' => $record->id,
+                            'periodId' => PayrollPeriod::query()->find($this->periodId)?->publicKey(),
+                            'branchId' => Branch::query()->find($record->branch_id)?->publicKey(),
+                            'employeeId' => $record->publicKey(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

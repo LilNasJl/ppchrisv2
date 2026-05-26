@@ -48,7 +48,7 @@ class PayrollEmployeeTable extends TableWidget
                         ->label('View')
                         ->icon(Heroicon::Eye)
                         ->url(fn (PayrollPeriod $record): string => PayrollPeriodBranches::getUrl([
-                            'periodId' => $record->id,
+                            'periodId' => $record->publicKey(),
                         ])),
                 ]),
             ]);

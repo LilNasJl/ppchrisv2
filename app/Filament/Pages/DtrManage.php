@@ -3,6 +3,9 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Widgets\DtrManageTable;
+use App\Models\Branch;
+use App\Models\Employee;
+use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -19,17 +22,17 @@ class DtrManage extends Page
 
     protected static ?string $title = 'Manage D.T.R';
 
-    public ?string $employeeId = null;
+    public ?int $employeeId = null;
 
-    public ?string $branchId = null;
+    public ?int $branchId = null;
 
-    public ?string $periodId = null;
+    public ?int $periodId = null;
 
     public function mount(): void
     {
-        $this->employeeId = request()->query('employeeId');
-        $this->branchId = request()->query('branchId');
-        $this->periodId = request()->query('periodId');
+        $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
+        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
     }
 
     public function getWidgetData(): array
@@ -49,8 +52,8 @@ class DtrManage extends Page
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => DtrBranchEmployees::getUrl([
-                    'periodId' => $this->periodId,
-                    'branchId' => $this->branchId,
+                    'periodId' => PayrollPeriod::query()->find($this->periodId)?->publicKey(),
+                    'branchId' => Branch::query()->find($this->branchId)?->publicKey(),
                 ])),
         ];
     }

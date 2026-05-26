@@ -12,6 +12,7 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 class DashboardCard extends StatsOverviewWidget
 {
     use HasWidgetShield;
+
     protected int|string|array $columnSpan = 'full';
 
     protected function getColumns(): int|array

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 
 class EmployeeDeduction extends Model
 {
+    use HasPublicUuid;
+
     protected $fillable = [
         'employee_id',
         'deduction_id',

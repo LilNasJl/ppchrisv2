@@ -39,11 +39,11 @@ class DtrManageTable extends BaseWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    public ?string $employeeId = null;
+    public ?int $employeeId = null;
 
-    public ?string $branchId = null;
+    public ?int $branchId = null;
 
-    public ?string $periodId = null;
+    public ?int $periodId = null;
 
     public function table(Table $table): Table
     {

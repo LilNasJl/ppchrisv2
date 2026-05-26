@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Deduction extends Model
 {
-    use SoftDeletes;
+    use HasPublicUuid, SoftDeletes;
 
     public const CATEGORY_COMPANY = 'company';
 

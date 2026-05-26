@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 
 class ActionHistory extends Model
 {
+    use HasPublicUuid;
+
     protected $fillable = [
         'actor_id',
         'actor_name',

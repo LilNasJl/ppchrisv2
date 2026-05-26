@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Builder;
 class DtrImportTable extends TableWidget
 {
     use HasWidgetShield;
+
     protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table

@@ -5,10 +5,10 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\ManagesEmployeeDetailsForm;
 use App\Models\Employee as ModelsEmployee;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +38,7 @@ class ViewEmployeeDetails extends Page implements HasForms
     {
         $this->employeeRecord = ModelsEmployee::query()
             ->with(['user', 'designation', 'department', 'branch', 'employeeDeductions.deduction'])
-            ->findOrFail(request()->query('employeeId'));
+            ->findOrFail(ModelsEmployee::resolvePublicId(request()->query('employeeId')));
 
         $this->form->fill($this->getEmployeeDetailsFormData($this->employeeRecord));
     }
@@ -65,7 +65,7 @@ class ViewEmployeeDetails extends Page implements HasForms
             Action::make('edit')
                 ->label('Edit')
                 ->icon(Heroicon::PencilSquare)
-                ->url(fn (): string => EditEmployeeDetails::getUrl(['employeeId' => $this->employeeRecord?->id])),
+                ->url(fn (): string => EditEmployeeDetails::getUrl(['employeeId' => $this->employeeRecord?->publicKey()])),
 
             Action::make('return')
                 ->label('Return')

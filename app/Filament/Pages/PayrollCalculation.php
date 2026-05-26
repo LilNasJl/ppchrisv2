@@ -55,8 +55,8 @@ class PayrollCalculation extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->periodId = (int) (request()->query('periodId') ?: app(PayrollCalculator::class)->defaultPeriod()?->id);
-        $this->period = PayrollPeriod::query()->find($this->periodId);
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $this->period = filled($this->periodId) ? PayrollPeriod::query()->find($this->periodId) : null;
         $this->period_display = $this->period?->title ?? 'No payroll period selected';
 
         $setting = $this->period
@@ -212,7 +212,7 @@ class PayrollCalculation extends Page implements HasForms
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->periodId)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->periodId])
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period?->publicKey()])
                     : Payroll::getUrl()),
         ];
     }

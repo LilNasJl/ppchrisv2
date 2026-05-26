@@ -320,10 +320,28 @@ class EmployeeImporter extends Importer
         $department = new Department;
         $department->forceFill([
             'name' => $name,
+            'acronym' => self::departmentAcronym($name),
             'description' => 'Imported',
         ])->save();
 
         return $department->id;
+    }
+
+    protected static function departmentAcronym(string $name): string
+    {
+        $words = collect(preg_split('/\s+/', trim($name)) ?: [])
+            ->map(fn (string $word): string => preg_replace('/[^A-Za-z0-9]/', '', $word) ?: '')
+            ->filter();
+
+        $acronym = $words
+            ->map(fn (string $word): string => Str::upper(Str::substr($word, 0, 1)))
+            ->implode('');
+
+        if (blank($acronym)) {
+            $acronym = Str::upper(Str::substr(preg_replace('/[^A-Za-z0-9]/', '', $name) ?: 'DEPT', 0, 20));
+        }
+
+        return Str::substr($acronym, 0, 20);
     }
 
     protected function branchId(?string $name): ?int

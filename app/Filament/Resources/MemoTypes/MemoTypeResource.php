@@ -20,6 +20,8 @@ class MemoTypeResource extends Resource
 {
     protected static ?string $model = MemoType::class;
 
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $recordTitleAttribute = 'title';

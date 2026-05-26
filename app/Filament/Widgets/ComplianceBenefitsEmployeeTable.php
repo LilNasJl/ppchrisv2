@@ -69,7 +69,7 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                     Action::make('viewDeductions')
                         ->label('View Deductions')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl(['employeeId' => $record->id])),
+                        ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl(['employeeId' => $record->publicKey()])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
             ]);

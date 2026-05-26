@@ -34,10 +34,10 @@ class DtrBranchEmployees extends Page
 
     public function mount(): void
     {
-        $this->periodId = (int) request()->query('periodId');
-        $this->branchId = (int) request()->query('branchId');
-        $this->period = PayrollPeriod::query()->find($this->periodId);
-        $this->branch = Branch::query()->find($this->branchId);
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
+        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
+        $this->period = filled($this->periodId) ? PayrollPeriod::query()->find($this->periodId) : null;
+        $this->branch = filled($this->branchId) ? Branch::query()->find($this->branchId) : null;
     }
 
     public function getTitle(): string
@@ -60,7 +60,7 @@ class DtrBranchEmployees extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => DtrPeriodBranches::getUrl(['periodId' => $this->periodId])),
+                ->url(fn (): string => DtrPeriodBranches::getUrl(['periodId' => $this->period?->publicKey()])),
         ];
     }
 

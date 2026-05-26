@@ -4,11 +4,11 @@ namespace App\Filament\Pages;
 
 use App\Models\Branch;
 use App\Models\PayrollPeriod;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Group;
 use Filament\Support\Icons\Heroicon;
@@ -20,8 +20,10 @@ class DtrViewer extends Page implements HasForms
     use InteractsWithForms;
 
     protected string $view = 'filament.pages.dtr-viewer';
+
     protected static bool $shouldRegisterNavigation = false;
-    protected static ?string $title = "D.T.R Viewer";
+
+    protected static ?string $title = 'D.T.R Viewer';
 
     public ?string $period_id = null;
 
@@ -38,11 +40,11 @@ class DtrViewer extends Page implements HasForms
         ]);
     }
 
-     protected function getFormSchema(): array
+    protected function getFormSchema(): array
     {
         return [
-           Group::make([
-               Select::make('period_id')
+            Group::make([
+                Select::make('period_id')
                     ->label('Payroll Period')
                     ->options(
                         PayrollPeriod::query()
@@ -52,7 +54,7 @@ class DtrViewer extends Page implements HasForms
                     ->searchable()
                     ->reactive(),
 
-               Select::make('branch_id')
+                Select::make('branch_id')
                     ->label('Branch')
                     ->options(
                         Branch::query()
@@ -60,12 +62,11 @@ class DtrViewer extends Page implements HasForms
                     )
                     ->searchable()
                     ->reactive(),
-           ])
+            ])
                 ->columns(2)
                 ->columnSpanFull(),
         ];
     }
-
 
     #[Override]
     public function getHeaderActions(): array
@@ -74,7 +75,7 @@ class DtrViewer extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Dtr::getUrl())
+                ->url(Dtr::getUrl()),
 
         ];
     }

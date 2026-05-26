@@ -30,8 +30,8 @@ class PayrollRoster extends Page
 
     public function mount(): void
     {
-        $this->periodId = (int) (request()->query('periodId') ?: app(PayrollCalculator::class)->defaultPeriod()?->id);
-        $this->period = PayrollPeriod::query()->find($this->periodId);
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $this->period = filled($this->periodId) ? PayrollPeriod::query()->find($this->periodId) : null;
     }
 
     public function getTitle(): string
@@ -56,7 +56,7 @@ class PayrollRoster extends Page
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->periodId)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->periodId])
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period?->publicKey()])
                     : Payroll::getUrl()),
         ];
     }

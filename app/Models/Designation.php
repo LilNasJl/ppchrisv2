@@ -2,16 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Designation extends Model
 {
-    use SoftDeletes;
+    use HasPublicUuid, SoftDeletes;
 
     protected $fillable = [
-        'title', 'description', 'salary_grade', 'specification'
+        'title', 'description', 'salary_grade', 'specification',
     ];
-
-
 }

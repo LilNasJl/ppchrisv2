@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -10,7 +11,7 @@ use RuntimeException;
 
 class Leave extends Model
 {
-    use SoftDeletes;
+    use HasPublicUuid, SoftDeletes;
 
     public const BIRTHDAY_LEAVE = 'Birthday Leave';
 

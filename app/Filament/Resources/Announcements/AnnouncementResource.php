@@ -26,9 +26,11 @@ class AnnouncementResource extends Resource
 {
     protected static ?string $model = Announcement::class;
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::Megaphone;
+    protected static ?string $recordRouteKeyName = 'uuid';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Updates and Activities';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::Megaphone;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
     protected static ?string $navigationLabel = 'Announcements';
 

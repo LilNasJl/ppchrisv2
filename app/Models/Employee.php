@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class Employee extends Model
 {
-    use SoftDeletes;
+    use HasPublicUuid, SoftDeletes;
 
     public const REGULAR_WORK_DAYS_PER_MONTH = 26;
 

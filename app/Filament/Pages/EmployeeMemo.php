@@ -40,11 +40,11 @@ class EmployeeMemo extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    public ?string $employeeId = null;
+    public ?int $employeeId = null;
 
     public function mount(): void
     {
-        $this->employeeId = request()->query('employeeId');
+        $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
     }
 
     public function table(Table $table): Table

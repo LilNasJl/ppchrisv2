@@ -31,6 +31,8 @@ class SystemAccountResource extends Resource
 {
     protected static ?string $model = SystemAccount::class;
 
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;
 
     protected static string|UnitEnum|null $navigationGroup = 'Settings';

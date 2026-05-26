@@ -21,6 +21,8 @@ class DeductionResource extends Resource
 {
     protected static ?string $model = ModelsDeduction::class;
 
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::MinusCircle;
 
     protected static ?string $recordTitleAttribute = 'Deduction';

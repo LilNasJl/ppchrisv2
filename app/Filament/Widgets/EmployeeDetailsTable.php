@@ -626,12 +626,12 @@ class EmployeeDetailsTable extends TableWidget
                     Action::make('viewEmployeeDetails')
                         ->label('View')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl(['employeeId' => $record->id])),
+                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl(['employeeId' => $record->publicKey()])),
 
                     Action::make('editEmployeeDetails')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
-                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl(['employeeId' => $record->id])),
+                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl(['employeeId' => $record->publicKey()])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
 

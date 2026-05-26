@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PayrollCalculationSetting extends Model
 {
+    use HasPublicUuid;
+
     public const DEFAULTS = [
         'regular_work_days_per_month' => 26.0,
         'regular_half_month_days' => 13.0,

@@ -31,6 +31,7 @@ use Livewire\Attributes\On;
 class BranchTable extends TableWidget
 {
     use HasWidgetShield;
+
     protected int|string|array $columnSpan = 'full';
 
     #[On('refreshBranchTable')]

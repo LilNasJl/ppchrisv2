@@ -4,7 +4,6 @@ namespace App\Filament\Widgets;
 
 use App\Models\Department;
 use App\Models\Employee;
-use App\Models\User;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -32,27 +31,25 @@ class EmployeeCardsDetails extends StatsOverviewWidget
                 ->count())
                 ->icon('heroicon-s-user-group'),
 
-                
             Stat::make('Department', Department::count())
                 ->icon('heroicon-s-building-office-2'),
 
-
-            Stat::make('Male', 
-                    Employee::where('gender', 'male')
-                        ->activeEmployment()
-                        ->whereHas('user', function ($query) {
-                            $query->where('role', 'employee');
-                        })
-                        ->count())
+            Stat::make('Male',
+                Employee::where('gender', 'male')
+                    ->activeEmployment()
+                    ->whereHas('user', function ($query) {
+                        $query->where('role', 'employee');
+                    })
+                    ->count())
                 ->icon('heroicon-s-user'),
 
-            Stat::make('Female', 
-                    Employee::where('gender', 'female')
-                        ->activeEmployment()
-                        ->whereHas('user', function ($query) {
-                            $query->where('role', 'employee');
-                        })
-                        ->count())
+            Stat::make('Female',
+                Employee::where('gender', 'female')
+                    ->activeEmployment()
+                    ->whereHas('user', function ($query) {
+                        $query->where('role', 'employee');
+                    })
+                    ->count())
                 ->icon('heroicon-s-user'),
 
         ];

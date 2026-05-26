@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 class HeadCountPerDept extends ChartWidget
 {
     use HasWidgetShield;
+
     protected ?string $heading = 'Head Count Per Department';
 
     protected int|string|array $columnSpan = [

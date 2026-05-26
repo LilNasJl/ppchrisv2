@@ -8,5 +8,4 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateDeduction extends CreateRecord
 {
     protected static string $resource = DeductionResource::class;
-
 }

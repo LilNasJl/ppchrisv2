@@ -40,9 +40,9 @@ class DeductionForm
                                     ->maxLength(255)
                                     ->rows(5)
                                     ->columnSpanFull()
-                                    ->required()
-                            ])->columns(2)
-                    ])->columnSpanFull()
+                                    ->required(),
+                            ])->columns(2),
+                    ])->columnSpanFull(),
             ]);
     }
 }

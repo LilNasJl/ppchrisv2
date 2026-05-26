@@ -30,9 +30,9 @@ class Memo extends Page implements HasTable
 
     protected static ?string $title = 'Memo';
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::DocumentText;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static string | UnitEnum | null $navigationGroup = 'Reports and Documents';
+    protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
 
     protected static ?int $navigationSort = 3;
 
@@ -78,8 +78,7 @@ class Memo extends Page implements HasTable
                 TextColumn::make('employment_type')
                     ->label('Employment Status')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state, Employee $record): string =>
-                        $record->hasEndedEmployment()
+                    ->formatStateUsing(fn (?string $state, Employee $record): string => $record->hasEndedEmployment()
                             ? "Employment End: {$state}"
                             : ($state ?: 'Active')
                     )
@@ -91,7 +90,7 @@ class Memo extends Page implements HasTable
                         ->label('View Memo')
                         ->icon(Heroicon::DocumentText)
                         ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
-                            'employeeId' => $record->id,
+                            'employeeId' => $record->publicKey(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

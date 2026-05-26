@@ -66,7 +66,7 @@ class DtrPageTable extends TableWidget
                         ->label('View')
                         ->icon(Heroicon::Eye)
                         ->url(fn (PayrollPeriod $record): string => DtrPeriodBranches::getUrl([
-                            'periodId' => $record->id,
+                            'periodId' => $record->publicKey(),
                         ])),
                 ]),
             ])

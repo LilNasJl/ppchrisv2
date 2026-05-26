@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollCalculator;
@@ -21,17 +22,17 @@ class EmployeePayroll extends Page
 
     protected static ?string $title = 'Employee Payroll';
 
-    public ?string $employeeId = null;
+    public ?int $employeeId = null;
 
-    public ?string $branchId = null;
+    public ?int $branchId = null;
 
-    public ?string $period_id = null;
+    public ?int $period_id = null;
 
     public function mount(): void
     {
-        $this->employeeId = request()->query('employeeId');
-        $this->branchId = request()->query('branchId');
-        $this->period_id = request()->query('periodId') ?: (string) app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
+        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
+        $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
     }
 
     public function getEmployeeProperty(): ?Employee
@@ -72,8 +73,8 @@ class EmployeePayroll extends Page
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => BranchPayrollEmployees::getUrl([
-                    'periodId' => $this->period_id,
-                    'branchId' => $this->branchId,
+                    'periodId' => PayrollPeriod::query()->find($this->period_id)?->publicKey(),
+                    'branchId' => Branch::query()->find($this->branchId)?->publicKey(),
                 ])),
         ];
     }

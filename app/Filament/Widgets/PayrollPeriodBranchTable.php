@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Pages\BranchPayrollEmployees;
 use App\Models\Branch;
+use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -44,8 +45,8 @@ class PayrollPeriodBranchTable extends TableWidget
                         ->label('View')
                         ->icon(Heroicon::Eye)
                         ->url(fn (Branch $record): string => BranchPayrollEmployees::getUrl([
-                            'periodId' => $this->periodId,
-                            'branchId' => $record->id,
+                            'periodId' => PayrollPeriod::query()->find($this->periodId)?->publicKey(),
+                            'branchId' => $record->publicKey(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

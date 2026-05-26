@@ -29,8 +29,8 @@ class DtrPeriodBranches extends Page
 
     public function mount(): void
     {
-        $this->periodId = (int) request()->query('periodId');
-        $this->period = PayrollPeriod::query()->find($this->periodId);
+        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
+        $this->period = filled($this->periodId) ? PayrollPeriod::query()->find($this->periodId) : null;
     }
 
     public function getTitle(): string

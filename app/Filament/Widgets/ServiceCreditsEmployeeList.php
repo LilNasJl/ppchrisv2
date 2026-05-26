@@ -12,6 +12,7 @@ use ServiceCredit;
 class ServiceCreditsEmployeeList extends TableWidget
 {
     use HasWidgetShield;
+
     public function table(Table $table): Table
     {
         return $table

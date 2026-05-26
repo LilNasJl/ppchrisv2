@@ -23,7 +23,6 @@ class ListDeductions extends ListRecords
     //     ];
     // }
 
-
     protected function getHeaderActions(): array
     {
         return [

@@ -15,6 +15,8 @@ class PayrollPeriodResource extends Resource
 {
     protected static ?string $model = PayrollPeriod::class;
 
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $recordTitleAttribute = 'title';

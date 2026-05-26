@@ -9,7 +9,6 @@ use App\Filament\Resources\Designations\Schemas\DesignationForm;
 use App\Filament\Resources\Designations\Tables\DesignationsTable;
 use App\Models\Designation as ModelsDesignation;
 use BackedEnum;
-use Designation;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -21,8 +20,13 @@ use UnitEnum;
 class DesignationResource extends Resource
 {
     protected static ?string $model = ModelsDesignation::class;
+
+    protected static ?string $recordRouteKeyName = 'uuid';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Briefcase;
+
     protected static ?string $recordTitleAttribute = 'Designations';
+
     protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
     public static function form(Schema $schema): Schema

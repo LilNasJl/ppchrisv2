@@ -42,7 +42,7 @@ class PayrollSummary extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->period_id = request()->query('periodId') ?: (string) app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
 
         $this->form->fill([
             'period_id' => $this->period_id,
@@ -94,7 +94,7 @@ class PayrollSummary extends Page implements HasForms
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->period_id)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period_id])
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->selectedPeriod?->publicKey()])
                     : Payroll::getUrl()),
 
             Action::make('signatories')

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 
 class PayrollPeriodEmployeeExclusion extends Model
 {
+    use HasPublicUuid;
+
     protected $fillable = [
         'payroll_period_id',
         'employee_id',
