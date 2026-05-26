@@ -9,7 +9,9 @@ use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -207,7 +209,7 @@ class BranchTable extends TableWidget
 
             ])
             ->filters([
-                // TrashedFilter::make(),
+                TrashedFilter::make(),
             ])
             ->headerActions([
 
@@ -239,6 +241,16 @@ class BranchTable extends TableWidget
                             'broken_shift2_end' => $record->broken_shift2_end,
                         ])
                         ->schema($this->getBranchViewSchema()),
+
+                    DeleteAction::make()
+                        ->label('Delete')
+                        ->modalHeading('Delete Branch')
+                        ->modalDescription('This will move the branch to trash. You can restore it from the trashed filter.')
+                        ->successNotificationTitle('Branch deleted successfully'),
+
+                    RestoreAction::make()
+                        ->label('Restore')
+                        ->successNotificationTitle('Branch restored successfully'),
 
                     // Edit for Regular Schedule
                     EditAction::make('edit_regular')
