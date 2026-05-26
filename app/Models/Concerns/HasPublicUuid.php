@@ -12,7 +12,7 @@ trait HasPublicUuid
 
     protected static function bootHasPublicUuid(): void
     {
-        static::creating(function (Model $model): void {
+        static::saving(function (Model $model): void {
             if (! $model->hasPublicUuidColumn()) {
                 return;
             }
