@@ -70,6 +70,10 @@ class DtrExporter extends Exporter
             ExportColumn::make('holiday_rate')
                 ->label('Holiday Rate'),
 
+            ExportColumn::make('holiday_excluded')
+                ->label('Holiday Excluded')
+                ->formatStateUsing(fn ($state): string => $state ? 'Yes' : 'No'),
+
             ExportColumn::make('daily_rate')
                 ->label('Daily Rate'),
         ];

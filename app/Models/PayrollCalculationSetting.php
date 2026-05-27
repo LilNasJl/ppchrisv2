@@ -18,6 +18,8 @@ class PayrollCalculationSetting extends Model
         'overtime_rate_multiplier' => 1.0,
         'regular_holiday_rate' => 200.0,
         'special_holiday_rate' => 30.0,
+        'holiday_overtime_premium_rate' => 30.0,
+        'unworked_regular_holiday_pay_enabled' => true,
     ];
 
     protected $fillable = [
@@ -29,6 +31,8 @@ class PayrollCalculationSetting extends Model
         'overtime_rate_multiplier',
         'regular_holiday_rate',
         'special_holiday_rate',
+        'holiday_overtime_premium_rate',
+        'unworked_regular_holiday_pay_enabled',
     ];
 
     protected $casts = [
@@ -40,6 +44,8 @@ class PayrollCalculationSetting extends Model
         'overtime_rate_multiplier' => 'decimal:2',
         'regular_holiday_rate' => 'decimal:2',
         'special_holiday_rate' => 'decimal:2',
+        'holiday_overtime_premium_rate' => 'decimal:2',
+        'unworked_regular_holiday_pay_enabled' => 'boolean',
     ];
 
     public static function forPeriod(PayrollPeriod $period): self
@@ -67,6 +73,11 @@ class PayrollCalculationSetting extends Model
         $value = $this->value($key);
 
         return $value > 0 ? $value : (float) self::DEFAULTS[$key];
+    }
+
+    public function enabled(string $key): bool
+    {
+        return (bool) ($this->{$key} ?? self::DEFAULTS[$key] ?? false);
     }
 
     public function payrollPeriod(): BelongsTo

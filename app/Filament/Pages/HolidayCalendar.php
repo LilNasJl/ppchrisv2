@@ -73,6 +73,11 @@ class HolidayCalendar extends Page
                         'holidays' => $this->allHolidays,
                     ])),
 
+                Action::make('holidayExclusions')
+                    ->label('Holiday Exclusions')
+                    ->icon('heroicon-m-user-minus')
+                    ->url(HolidayExclusions::getUrl()),
+
                 Action::make('branchHolidays')
                     ->label('Branch Holiday')
                     ->icon('heroicon-m-building-storefront')

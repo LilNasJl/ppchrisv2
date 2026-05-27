@@ -165,6 +165,11 @@ class Employee extends Model
         return $this->hasMany(Leave::class, 'employee_id');
     }
 
+    public function holidayExclusions()
+    {
+        return $this->hasMany(HolidayEmployeeExclusion::class, 'employee_id');
+    }
+
     public function memos()
     {
         return $this->hasMany(Memo::class, 'employee_id');

@@ -9,6 +9,7 @@ use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -165,8 +166,11 @@ class PayrollCalculator
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
         $overtimeAmount = $this->money($overtimeHours * $ratePerHour * $overtimeMultiplier);
-        $regularHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'regular', $settings);
-        $specialHolidayAmount = $this->holidayAmount($dtrs, $ratePerDay, 'special', $settings);
+        $regularHolidayAmount = $this->money(
+            $this->holidayAmount($employee, $dtrs, $ratePerDay, 'regular', $settings)
+            + $this->unworkedRegularHolidayAmount($employee, $period, $dtrs, $ratePerDay, $settings)
+        );
+        $specialHolidayAmount = $this->holidayAmount($employee, $dtrs, $ratePerDay, 'special', $settings);
         $allowance = $this->money($employee->allowance ?? 0);
         $salaryAdjustment = $this->money($employee->salary_adjustment ?? 0);
 
@@ -478,11 +482,12 @@ class PayrollCalculator
         return $this->number($minutes / 60);
     }
 
-    protected function holidayAmount(Collection $dtrs, float $ratePerDay, string $type, PayrollCalculationSetting $settings): float
+    protected function holidayAmount(Employee $employee, Collection $dtrs, float $ratePerDay, string $type, PayrollCalculationSetting $settings): float
     {
         return $this->money(
             $dtrs
                 ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_holiday)
+                ->reject(fn (Dtr $dtr): bool => $this->isHolidayExcludedForPayroll($employee, $dtr))
                 ->filter(function (Dtr $dtr) use ($type): bool {
                     $holidayType = Str::lower((string) ($dtr->holiday_type ?: $dtr->holiday?->type?->type));
                     $holidayRate = (float) ($dtr->holiday_rate ?: $dtr->holiday?->type?->rate ?: 0);
@@ -497,14 +502,78 @@ class PayrollCalculator
                     $holidayRate = $this->holidayRate($dtr, $settings, $type);
                     $dailyRate = (float) ($dtr->daily_rate ?: $ratePerDay);
                     $ratePerHour = $dailyRate / $settings->divisor('work_hours_per_day');
-                    $creditedHours = ((float) ($dtr->credited_work_hrs ?? 0)) / 60;
-                    $baseWorkedPay = $creditedHours * $ratePerHour;
+                    $creditedWorkMinutes = (float) ($dtr->credited_work_hrs ?? 0);
+                    $creditedOvertimeMinutes = $this->holidayOvertimeMinutes($dtr, $creditedWorkMinutes);
+                    $regularHolidayMinutes = max(0, $creditedWorkMinutes - $creditedOvertimeMinutes);
+                    $baseWorkedPay = ($regularHolidayMinutes / 60) * $ratePerHour;
                     $premiumMultiplier = $holidayRate >= 100
                         ? max(0, ($holidayRate - 100) / 100)
                         : $holidayRate / 100;
+                    $holidayOvertimePremium = ($creditedOvertimeMinutes / 60)
+                        * $ratePerHour
+                        * ($settings->value('holiday_overtime_premium_rate') / 100);
 
-                    return $baseWorkedPay * $premiumMultiplier;
+                    return ($baseWorkedPay * $premiumMultiplier) + $holidayOvertimePremium;
                 })
+        );
+    }
+
+    protected function holidayOvertimeMinutes(Dtr $dtr, float $creditedWorkMinutes): float
+    {
+        $scheduleType = Str::lower((string) $dtr->schedule_type);
+        $creditedOvertime = max(0, (float) ($dtr->credited_overtime ?? 0));
+
+        if ($scheduleType === 'overtime') {
+            return max($creditedOvertime, $creditedWorkMinutes);
+        }
+
+        return min($creditedWorkMinutes, $creditedOvertime);
+    }
+
+    protected function isHolidayExcludedForPayroll(Employee $employee, Dtr $dtr): bool
+    {
+        if ((bool) $dtr->holiday_excluded) {
+            return true;
+        }
+
+        if (! $dtr->holiday || blank($dtr->date_in)) {
+            return false;
+        }
+
+        return app(HolidayEntitlementService::class)
+            ->isExcluded($dtr->holiday, $employee, $dtr->date_in);
+    }
+
+    protected function unworkedRegularHolidayAmount(
+        Employee $employee,
+        PayrollPeriod $period,
+        Collection $dtrs,
+        float $ratePerDay,
+        PayrollCalculationSetting $settings,
+    ): float {
+        if (! $settings->enabled('unworked_regular_holiday_pay_enabled')) {
+            return 0.0;
+        }
+
+        if ($this->rateType($employee) !== 'Daily') {
+            return 0.0;
+        }
+
+        if (blank($period->date_start) || blank($period->date_end) || blank($employee->branch_id)) {
+            return 0.0;
+        }
+
+        $dtrDates = $dtrs
+            ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in))
+            ->map(fn (Dtr $dtr): string => Carbon::parse($dtr->date_in)->toDateString())
+            ->unique()
+            ->values();
+
+        return $this->money(
+            app(HolidayEntitlementService::class)
+                ->regularHolidaysForEmployeeRange($employee, $period->date_start, $period->date_end, $employee->branch_id)
+                ->reject(fn ($holiday): bool => $dtrDates->contains((string) $holiday->occurrence_date))
+                ->count() * $ratePerDay
         );
     }
 

@@ -6,11 +6,12 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Services\DtrCalculator;
-use App\Services\HolidayResolver;
+use App\Services\HolidayEntitlementService;
 use Carbon\Carbon;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
+use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Number;
 
@@ -81,6 +82,18 @@ class DtrImporter extends Importer
         ];
     }
 
+    public static function getOptionsFormComponents(): array
+    {
+        return [
+            TextInput::make('import_name')
+                ->label('Import Name')
+                ->required()
+                ->maxLength(191)
+                ->placeholder('e.g., May 2026 payroll D.T.R')
+                ->columnSpanFull(),
+        ];
+    }
+
     public function saveRecord(): void
     {
         $importData = $this->getImportMetadata();
@@ -124,11 +137,19 @@ class DtrImporter extends Importer
     {
         return [
             'is_imported' => 1,
+            'import_name' => $this->getImportName(),
             'branch_id' => $this->getImportedBranchId(),
             'daily_rate' => $this->getEmployeeDailyRate(),
             ...$this->getHolidayData(),
             ...$this->getImportedCalculationData(),
         ];
+    }
+
+    protected function getImportName(): ?string
+    {
+        $importName = trim((string) ($this->options['import_name'] ?? ''));
+
+        return filled($importName) ? $importName : null;
     }
 
     protected function getImportedFingerprintId(): mixed
@@ -159,24 +180,8 @@ class DtrImporter extends Importer
             ];
         }
 
-        $holiday = app(HolidayResolver::class)
-            ->resolveForDate($dateIn, $this->getImportedBranchId());
-
-        if (! $holiday) {
-            return [
-                'is_holiday' => 0,
-                'holiday_id' => null,
-                'holiday_type' => null,
-                'holiday_rate' => null,
-            ];
-        }
-
-        return [
-            'is_holiday' => 1,
-            'holiday_id' => $holiday->id,
-            'holiday_type' => $holiday->type?->type,
-            'holiday_rate' => $holiday->type?->rate,
-        ];
+        return app(HolidayEntitlementService::class)
+            ->dtrHolidayData($this->getEmployee(), $dateIn, $this->getImportedBranchId());
     }
 
     protected function getImportedCalculationData(): array

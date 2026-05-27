@@ -8,7 +8,7 @@ use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
-use App\Services\HolidayResolver;
+use App\Services\HolidayEntitlementService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
@@ -139,6 +139,12 @@ class DtrManageTable extends BaseWidget
                 TextColumn::make('holiday_rate')
                     ->label('HOL. RATE')
                     ->placeholder('n/a'),
+
+                TextColumn::make('holiday_excluded')
+                    ->label('HOL. EXCL.')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Yes' : 'No')
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
 
                 TextColumn::make('overtime_status')
                     ->label('OT Status')
@@ -1082,24 +1088,8 @@ class DtrManageTable extends BaseWidget
 
     protected function getHolidayData(string $date): array
     {
-        $holiday = app(HolidayResolver::class)
-            ->resolveForDate($date, $this->getBranchId());
-
-        if (! $holiday) {
-            return [
-                'is_holiday' => 0,
-                'holiday_id' => null,
-                'holiday_type' => null,
-                'holiday_rate' => null,
-            ];
-        }
-
-        return [
-            'is_holiday' => 1,
-            'holiday_id' => $holiday->id,
-            'holiday_type' => $holiday->type?->type,
-            'holiday_rate' => $holiday->type?->rate,
-        ];
+        return app(HolidayEntitlementService::class)
+            ->dtrHolidayData($this->getEmployee(), $date, $this->getBranchId());
     }
 
     protected function getBranch(): ?Branch

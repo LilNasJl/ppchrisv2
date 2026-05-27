@@ -9,6 +9,7 @@ use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -53,6 +54,10 @@ class PayrollCalculation extends Page implements HasForms
 
     public ?string $special_holiday_rate = null;
 
+    public ?string $holiday_overtime_premium_rate = null;
+
+    public ?bool $unworked_regular_holiday_pay_enabled = true;
+
     public function mount(): void
     {
         $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
@@ -72,6 +77,8 @@ class PayrollCalculation extends Page implements HasForms
             'overtime_rate_multiplier' => $setting->overtime_rate_multiplier,
             'regular_holiday_rate' => $setting->regular_holiday_rate,
             'special_holiday_rate' => $setting->special_holiday_rate,
+            'holiday_overtime_premium_rate' => $setting->holiday_overtime_premium_rate,
+            'unworked_regular_holiday_pay_enabled' => $setting->unworked_regular_holiday_pay_enabled,
         ]);
     }
 
@@ -133,6 +140,18 @@ class PayrollCalculation extends Page implements HasForms
                     ->required()
                     ->minValue(0)
                     ->helperText('Used only when the D.T.R row has no stored holiday rate.'),
+
+                TextInput::make('holiday_overtime_premium_rate')
+                    ->label('Holiday Overtime Premium (%)')
+                    ->numeric()
+                    ->required()
+                    ->minValue(0)
+                    ->helperText('Applied only to credited overtime minutes on holidays.'),
+
+                Toggle::make('unworked_regular_holiday_pay_enabled')
+                    ->label('Pay Unworked Regular Holidays for Daily Employees')
+                    ->helperText('Monthly employees are already covered by fixed half-month base pay.')
+                    ->columnSpanFull(),
             ])
                 ->columns(2)
                 ->columnSpanFull(),
@@ -160,10 +179,12 @@ class PayrollCalculation extends Page implements HasForms
             return;
         }
 
-        $data = collect($this->form->getState())
-            ->except('period_display')
+        $state = collect($this->form->getState())->except('period_display');
+        $data = $state
+            ->except('unworked_regular_holiday_pay_enabled')
             ->map(fn ($value): float => round((float) $value, 2))
             ->all();
+        $data['unworked_regular_holiday_pay_enabled'] = (bool) $state->get('unworked_regular_holiday_pay_enabled');
 
         PayrollCalculationSetting::query()->updateOrCreate(
             ['payroll_period_id' => $this->period->id],
@@ -188,6 +209,8 @@ class PayrollCalculation extends Page implements HasForms
         $workHours = $settings->divisor('work_hours_per_day');
         $halfDay = $settings->value('half_day_work_day_value');
         $overtimeMultiplier = $settings->value('overtime_rate_multiplier');
+        $holidayOvertimePremium = $settings->value('holiday_overtime_premium_rate');
+        $unworkedHolidayPolicy = $settings->enabled('unworked_regular_holiday_pay_enabled') ? 'enabled' : 'disabled';
 
         return [
             ['name' => 'Rate per day', 'formula' => "Monthly employee: Monthly Rate / {$daysPerMonth}. Daily employee: Employee Daily Rate or D.T.R daily-rate snapshot."],
@@ -196,7 +219,8 @@ class PayrollCalculation extends Page implements HasForms
             ['name' => 'Daily employee days worked', 'formula' => 'Count payable D.T.R entries, excluding absences and overtime-only rows, then deduct approved half-days.'],
             ['name' => 'Base pay', 'formula' => "Monthly employee: Rate Per Day x {$halfMonthDays}. Daily employee: Rate Per Day x Days Worked."],
             ['name' => 'Overtime amount', 'formula' => "Credited Overtime Minutes / 60 x Rate Per Hour x {$overtimeMultiplier}."],
-            ['name' => 'Holiday premium', 'formula' => 'Credited work hours x rate per hour x holiday premium multiplier. Regular 200% adds the extra 100%; Special 30% adds 30%.'],
+            ['name' => 'Holiday premium', 'formula' => "Regular credited holiday hours use the holiday premium multiplier. Credited overtime minutes on a holiday always use {$holidayOvertimePremium}%."],
+            ['name' => 'Unworked regular holiday pay', 'formula' => "Daily employees with no D.T.R row on a regular holiday receive one daily rate when this setting is {$unworkedHolidayPolicy}. Monthly employees are already covered by base pay."],
             ['name' => 'Gross pay', 'formula' => 'Base Pay + Salary Adjustment + Allowance + Overtime Amount + Regular Holiday + Special Holiday.'],
             ['name' => 'Deductions', 'formula' => 'Undertime Amount + Half-Day Amount + Absent Amount + Late Amount + Company Deductions + Remittances + Other Deductions.'],
             ['name' => 'Net pay', 'formula' => 'Gross Pay - Total Deductions.'],

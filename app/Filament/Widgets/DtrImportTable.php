@@ -36,7 +36,7 @@ class DtrImportTable extends TableWidget
                     'payrollPeriod',
                     fn (Builder $query) => $query->where('is_locked', true)
                 )
-                ->selectRaw('MIN(id) as id, batch_id, COUNT(*) as total, MAX(created_at) as imported_at, MAX(id) as latest_id')
+                ->selectRaw('MIN(id) as id, batch_id, MAX(import_name) as import_name, COUNT(*) as total, MAX(created_at) as imported_at, MAX(id) as latest_id')
                 ->groupBy('batch_id')
                 ->orderByDesc('imported_at')
                 ->orderByDesc('latest_id')
@@ -50,6 +50,11 @@ class DtrImportTable extends TableWidget
                 TextColumn::make('batch_id')
                     ->label('Batch ID')
                     ->badge(),
+
+                TextColumn::make('import_name')
+                    ->label('Import Name')
+                    ->placeholder('-')
+                    ->wrap(),
 
                 TextColumn::make('total')
                     ->label('Total Records'),

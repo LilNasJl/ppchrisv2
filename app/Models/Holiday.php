@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Holiday extends Model
 {
@@ -33,5 +34,10 @@ class Holiday extends Model
     public function type(): BelongsTo
     {
         return $this->belongsTo(HolidayType::class, 'holiday_type_id');
+    }
+
+    public function employeeExclusions(): HasMany
+    {
+        return $this->hasMany(HolidayEmployeeExclusion::class);
     }
 }
