@@ -76,7 +76,11 @@ class HolidayCalendar extends Page
                 Action::make('holidayExclusions')
                     ->label('Holiday Exclusions')
                     ->icon('heroicon-m-user-minus')
-                    ->url(HolidayExclusions::getUrl()),
+                    ->url(fn (): string => HolidayExclusions::getUrl(
+                        filled($this->getHolidayBranchId())
+                            ? ['branchId' => $this->branch?->publicKey()]
+                            : []
+                    )),
 
                 Action::make('branchHolidays')
                     ->label('Branch Holiday')

@@ -23,12 +23,19 @@ class HolidayExclusionTable extends TableWidget
 
     protected static ?string $heading = 'Holiday Exclusions';
 
+    public ?int $branchId = null;
+
     public function table(Table $table): Table
     {
         return $table
             ->query(fn (): Builder => Holiday::query()
                 ->with(['type', 'branch'])
                 ->withCount('employeeExclusions')
+                ->when(
+                    filled($this->branchId),
+                    fn (Builder $query): Builder => $query->where('branch_id', $this->branchId),
+                    fn (Builder $query): Builder => $query->whereNull('branch_id'),
+                )
                 ->latest('date'))
             ->columns([
                 TextColumn::make('index')

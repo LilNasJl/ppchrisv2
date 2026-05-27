@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Widgets\HolidayExclusionTable;
+use App\Models\Branch;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -22,6 +23,23 @@ class HolidayExclusions extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::UserMinus;
 
+    public ?int $branchId = null;
+
+    public ?Branch $branch = null;
+
+    public function mount(): void
+    {
+        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
+        $this->branch = filled($this->branchId) ? Branch::query()->find($this->branchId) : null;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->branch?->branch_name
+            ? 'Holiday Exclusions - '.$this->branch->branch_name
+            : 'National Holiday Exclusions';
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {
@@ -29,7 +47,16 @@ class HolidayExclusions extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(HolidayCalendar::getUrl()),
+                ->url(fn (): string => $this->branch
+                    ? BranchHolidayCalendar::getUrl(['branchId' => $this->branch->publicKey()])
+                    : HolidayCalendar::getUrl()),
+        ];
+    }
+
+    public function getWidgetData(): array
+    {
+        return [
+            'branchId' => $this->branchId,
         ];
     }
 
