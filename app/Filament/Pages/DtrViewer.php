@@ -34,7 +34,7 @@ class DtrViewer extends Page implements HasForms
         $this->form->fill([
             'period_id' => PayrollPeriod::query()
                 ->where('is_locked', false)
-                ->latest()
+                ->newestFirst()
                 ->value('id'),
             'branch_id' => Branch::query()->latest()->value('id'),
         ]);
@@ -49,6 +49,7 @@ class DtrViewer extends Page implements HasForms
                     ->options(
                         PayrollPeriod::query()
                             ->where('is_locked', false)
+                            ->newestFirst()
                             ->pluck('title', 'id')
                     )
                     ->searchable()

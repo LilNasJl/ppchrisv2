@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -58,6 +59,14 @@ class PayrollPeriod extends Model
                 ->where('payroll_period_id', $payrollPeriod->id)
                 ->restore();
         });
+    }
+
+    public function scopeNewestFirst(Builder $query): Builder
+    {
+        return $query
+            ->orderByDesc('date_start')
+            ->orderByDesc('date_end')
+            ->orderByDesc('id');
     }
 
     public function dtrs(): HasMany

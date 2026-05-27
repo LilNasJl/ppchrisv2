@@ -49,6 +49,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        date_default_timezone_set(config('app.timezone', 'Asia/Manila'));
+
         foreach ($this->hrNotifiableModels() as $model) {
             $model::observe(HrActionNotificationObserver::class);
         }

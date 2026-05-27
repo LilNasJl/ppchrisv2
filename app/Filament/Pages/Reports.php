@@ -75,7 +75,7 @@ class Reports extends Page implements HasForms
 
             Select::make('payroll_period_id')
                 ->label('Payroll Period')
-                ->options(fn (): array => PayrollPeriod::query()->latest()->pluck('title', 'id')->all())
+                ->options(fn (): array => PayrollPeriod::query()->newestFirst()->pluck('title', 'id')->all())
                 ->searchable()
                 ->reactive()
                 ->visible(fn (Get $get): bool => $this->reportNeedsPeriod((string) $get('report_type'))),

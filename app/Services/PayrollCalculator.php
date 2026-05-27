@@ -33,13 +33,13 @@ class PayrollCalculator
 
     public function defaultPeriod(): ?PayrollPeriod
     {
-        return PayrollPeriod::query()->latest()->first();
+        return PayrollPeriod::query()->newestFirst()->first();
     }
 
     public function periodOptions(): array
     {
         return PayrollPeriod::query()
-            ->latest()
+            ->newestFirst()
             ->pluck('title', 'id')
             ->all();
     }
@@ -342,7 +342,7 @@ class PayrollCalculator
             return PayrollPeriod::query()
                 ->whereKeyNot($period->id)
                 ->where('id', '<', $period->id)
-                ->latest()
+                ->newestFirst()
                 ->first();
         }
 
@@ -353,7 +353,7 @@ class PayrollCalculator
             ?: PayrollPeriod::query()
                 ->whereKeyNot($period->id)
                 ->where('id', '<', $period->id)
-                ->latest()
+                ->newestFirst()
                 ->first();
     }
 

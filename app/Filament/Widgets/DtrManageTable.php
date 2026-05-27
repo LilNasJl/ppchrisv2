@@ -48,7 +48,7 @@ class DtrManageTable extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->heading(fn (): string => 'Payroll Period: '.($this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected'))
+            ->heading(fn (): string => 'Employee: '.($this->getEmployee()?->full_name ?? 'No employee selected').' | Payroll Period: '.($this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected'))
             ->query(fn (): Builder => $this->getDtrQuery())
             ->recordClasses('text-xs')
             ->columns([
@@ -1120,7 +1120,7 @@ class DtrManageTable extends BaseWidget
 
     protected function getSelectedPayrollPeriodId(): ?int
     {
-        $payrollPeriodId = $this->periodId ?: PayrollPeriod::latest()->value('id');
+        $payrollPeriodId = $this->periodId ?: PayrollPeriod::query()->newestFirst()->value('id');
 
         return filled($payrollPeriodId) ? (int) $payrollPeriodId : null;
     }

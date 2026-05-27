@@ -16,6 +16,7 @@ class PayrollPeriodsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('date_start', 'desc')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')

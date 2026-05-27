@@ -32,7 +32,7 @@ class Payroll extends Page implements HasForms
     {
         $this->period_id = (string) PayrollPeriod::query()
             ->where('is_locked', true)
-            ->latest()
+            ->newestFirst()
             ->value('id');
 
         $this->form->fill([
@@ -47,7 +47,7 @@ class Payroll extends Page implements HasForms
                 ->label('Payroll Period')
                 ->options(fn (): array => PayrollPeriod::query()
                     ->where('is_locked', true)
-                    ->latest()
+                    ->newestFirst()
                     ->pluck('title', 'id')
                     ->all())
                 ->searchable()
