@@ -29,6 +29,10 @@ use UnitEnum;
 
 class SystemAccountResource extends Resource
 {
+    public const HIDDEN_SYSTEM_USERNAMES = [
+        'masteradmin',
+    ];
+
     protected static ?string $model = SystemAccount::class;
 
     protected static ?string $recordRouteKeyName = 'uuid';
@@ -178,6 +182,7 @@ class SystemAccountResource extends Resource
     {
         return parent::getEloquentQuery()
             ->whereIn('role', ['hr', 'admin'])
+            ->whereNotIn('username', self::HIDDEN_SYSTEM_USERNAMES)
             ->with('roles');
     }
 
@@ -185,6 +190,7 @@ class SystemAccountResource extends Resource
     {
         return parent::getRecordRouteBindingEloquentQuery()
             ->whereIn('role', ['hr', 'admin'])
+            ->whereNotIn('username', self::HIDDEN_SYSTEM_USERNAMES)
             ->with('roles');
     }
 
