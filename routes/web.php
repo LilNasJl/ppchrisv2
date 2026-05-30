@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Hr\DtrExportController;
+use App\Http\Controllers\Hr\DtrImportController;
+use App\Http\Controllers\Hr\EmployeeImportController;
 use App\Models\Leave;
 use App\Models\Memo;
 use Illuminate\Support\Facades\Route;
@@ -32,5 +35,14 @@ Route::get('/leave-attachments/{leave}', function (Leave $leave) {
 })
     ->middleware('auth')
     ->name('leave.attachments.show');
+
+Route::middleware('auth')
+    ->prefix('hr-tools')
+    ->name('hr_tools.')
+    ->group(function (): void {
+        Route::post('/import/employees', EmployeeImportController::class)->name('import.employees');
+        Route::post('/import/dtr', DtrImportController::class)->name('import.dtr');
+        Route::get('/export/dtr.csv', DtrExportController::class)->name('export.dtr');
+    });
 
 Route::redirect('/', '/hr');

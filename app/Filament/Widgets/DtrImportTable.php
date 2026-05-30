@@ -2,8 +2,8 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Imports\DtrImporter;
 use App\Filament\Pages\DtrImportBatchEntries;
+use App\Filament\Pages\DtrImportUpload;
 use App\Models\Dtr as ModelsImport;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -11,7 +11,6 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\ImportAction;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -68,10 +67,10 @@ class DtrImportTable extends TableWidget
                 //
             ])
             ->headerActions([
-                ImportAction::make()
+                Action::make('importDtr')
                     ->label('Import D.T.R')
                     ->icon(Heroicon::ArrowDownTray)
-                    ->importer(DtrImporter::class),
+                    ->url(DtrImportUpload::getUrl()),
             ])
             ->recordActions([
                 ActionGroup::make([

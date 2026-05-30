@@ -2,7 +2,6 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Exports\DtrExporter;
 use App\Models\Branch;
 use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
@@ -17,7 +16,6 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ExportAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -167,11 +165,16 @@ class DtrManageTable extends BaseWidget
                         'comments' => $this->getDtrComments(),
                     ])),
 
-                ExportAction::make('exportDtr')
+                Action::make('exportDtr')
                     ->label('Export D.T.R')
                     ->icon('heroicon-m-arrow-down-tray')
-                    ->exporter(DtrExporter::class)
-                    ->fileName(fn (): string => 'managedtr-'.now()->format('Ymd-His')),
+                    ->url(fn (): string => route('hr_tools.export.dtr', [
+                        'employee_id' => $this->employeeId,
+                        'branch_id' => $this->branchId,
+                        'period_id' => $this->periodId,
+                    ]))
+                    ->openUrlInNewTab()
+                    ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
 
                 ActionGroup::make([
                     Action::make('addDtr')
