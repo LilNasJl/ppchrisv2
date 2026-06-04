@@ -16,10 +16,6 @@ class EditUser extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        if (filled($data['username'] ?? null)) {
-            $data['name'] = $data['username'];
-        }
-
         return $data;
     }
 
@@ -34,6 +30,15 @@ class EditUser extends EditRecord
 
     protected function afterSave(): void
     {
+        $username = User::companyUsernameFromUid($this->record->employee?->uid);
+
+        if (filled($username)) {
+            $this->record->forceFill([
+                'username' => $username,
+                'name' => $username,
+            ])->saveQuietly();
+        }
+
         $users = User::all();
 
         foreach ($users as $user) {

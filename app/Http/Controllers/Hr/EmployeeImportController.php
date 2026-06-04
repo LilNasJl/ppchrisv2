@@ -14,11 +14,17 @@ class EmployeeImportController extends Controller
         $this->authorizeHr($request);
 
         $data = $request->validate([
+            'batch_id' => ['required', 'string', 'max:191'],
+            'import_name' => ['required', 'string', 'max:191'],
             'rows' => ['required', 'array', 'min:1', 'max:500'],
             'rows.*' => ['array'],
         ]);
 
-        return response()->json($importer->importRows($data['rows']));
+        return response()->json($importer->importRows(
+            rows: $data['rows'],
+            batchId: $data['batch_id'],
+            importName: $data['import_name'],
+        ));
     }
 
     protected function authorizeHr(Request $request): void

@@ -24,6 +24,11 @@ class EmployeeImport extends Page
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(UserResource::getUrl('index')),
+
+            Action::make('importHistory')
+                ->label('Import History')
+                ->icon(Heroicon::QueueList)
+                ->url(UserResource::getUrl('import-history')),
         ];
     }
 }

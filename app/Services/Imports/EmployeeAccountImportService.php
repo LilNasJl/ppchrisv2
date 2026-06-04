@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeAccountImportService
@@ -22,7 +23,7 @@ class EmployeeAccountImportService
      * @param  array<int, array<string, mixed>>  $rows
      * @return array{total:int, successful:int, failed:int, errors:array<int, array<string, mixed>>}
      */
-    public function importRows(array $rows): array
+    public function importRows(array $rows, string $batchId, ?string $importName = null): array
     {
         $result = [
             'total' => count($rows),
@@ -35,7 +36,7 @@ class EmployeeAccountImportService
             $rowNumber = $index + 1;
 
             try {
-                $this->importRow(is_array($row) ? $row : [], $rowNumber);
+                $this->importRow(is_array($row) ? $row : [], $rowNumber, $batchId, $importName);
                 $result['successful']++;
             } catch (ValidationException $exception) {
                 $result['failed']++;
@@ -61,12 +62,13 @@ class EmployeeAccountImportService
      * @param  array<string, mixed>  $row
      * @return array{user_id:int, employee_id:int, username:?string}
      */
-    public function importRow(array $row, int $rowNumber): array
+    public function importRow(array $row, int $rowNumber, ?string $batchId = null, ?string $importName = null): array
     {
         $data = $this->normalizeRow($row);
 
         $validator = Validator::make($data, [
             'lastname' => ['required', 'string', 'max:191'],
+            'uid' => ['nullable', 'string', 'max:20', Rule::unique('employees', 'uid')],
             'firstname' => ['required', 'string', 'max:191'],
             'middlename' => ['nullable', 'string', 'max:191'],
             'birthdate' => ['nullable', 'date'],
@@ -99,7 +101,7 @@ class EmployeeAccountImportService
             throw ValidationException::withMessages($validator->errors()->toArray());
         }
 
-        return DB::transaction(function () use ($data): array {
+        return DB::transaction(function () use ($data, $batchId, $importName): array {
             $temporaryUsername = 'import_'.Str::lower((string) Str::ulid());
 
             $user = new User;
@@ -112,7 +114,7 @@ class EmployeeAccountImportService
                 'is_disabled' => false,
             ])->save();
 
-            $employee = Employee::create($this->employeeData($user, $data));
+            $employee = Employee::create($this->employeeData($user, $data, $batchId, $importName));
             $username = User::companyUsernameFromUid($employee->uid);
 
             $user->forceFill([
@@ -136,6 +138,7 @@ class EmployeeAccountImportService
     {
         return [
             'lastname' => $this->normalizeNullableString($this->pick($row, ['lastname', 'last name', 'last_name', 'surname'])),
+            'uid' => Employee::normalizeUid($this->pick($row, ['uid', 'employee id', 'employee_id', 'id no', 'id_no', 'company id', 'company_id'])),
             'firstname' => $this->normalizeNullableString($this->pick($row, ['firstname', 'first name', 'first_name', 'given name'])),
             'middlename' => $this->normalizeNullableString($this->pick($row, ['middlename', 'middle name', 'middle_name'])),
             'birthdate' => $this->parseDate($this->pick($row, ['birthdate', 'birth date', 'birth_date'])),
@@ -169,12 +172,16 @@ class EmployeeAccountImportService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    protected function employeeData(User $user, array $data): array
+    protected function employeeData(User $user, array $data, ?string $batchId = null, ?string $importName = null): array
     {
         $salary = $this->salaryData($data);
 
         return [
             'user_id' => $user->id,
+            'employee_import_batch_id' => $batchId,
+            'employee_import_name' => $importName,
+            'employee_imported_at' => filled($batchId) ? now() : null,
+            'uid' => $data['uid'] ?? null,
             'firstname' => $data['firstname'] ?? null,
             'middlename' => $data['middlename'] ?? null,
             'lastname' => $data['lastname'] ?? null,

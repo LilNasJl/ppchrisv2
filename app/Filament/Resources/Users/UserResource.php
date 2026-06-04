@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Users;
 
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
+use App\Filament\Resources\Users\Pages\EmployeeImportBatchEntries;
+use App\Filament\Resources\Users\Pages\EmployeeImportHistory;
 use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Tables\UsersTable;
@@ -59,6 +61,8 @@ class UserResource extends Resource
     {
         return [
             'index' => ListUsers::route('/'),
+            'import-history' => EmployeeImportHistory::route('/import-history'),
+            'import-batch' => EmployeeImportBatchEntries::route('/import-history/{batchId}'),
             'create' => CreateUser::route('/create'),
             'edit' => EditUser::route('/{record}/edit'),
         ];

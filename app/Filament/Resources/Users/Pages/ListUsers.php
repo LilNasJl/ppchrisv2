@@ -22,6 +22,11 @@ class ListUsers extends ListRecords
                 ->icon(Heroicon::ArrowDownTray)
                 ->url(EmployeeImport::getUrl()),
 
+            Action::make('importHistory')
+                ->label('Import History')
+                ->icon(Heroicon::QueueList)
+                ->url(UserResource::getUrl('import-history')),
+
             CreateAction::make(),
         ];
     }

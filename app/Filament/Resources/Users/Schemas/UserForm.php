@@ -2,9 +2,7 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
-use App\Models\Counter;
 use App\Models\Employee;
-use App\Models\User;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -12,6 +10,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserForm
 {
@@ -25,18 +24,24 @@ class UserForm
                     ->relationship('employee')
                     ->description('Personal identification information.')
                     ->schema([
-                        // 👇 Pre-loaded UID preview — lives inside the relationship section
                         TextInput::make('uid')
-                            ->label('Employee ID (Auto-generated)')
-                            ->default(function (): string {
-                                $counter = Counter::first();
-                                $next = $counter ? $counter->uid + 1 : 1;
-
-                                return Employee::companyIdFromUid($next);
-                            })
-                            ->formatStateUsing(fn ($state): ?string => Employee::companyIdFromUid($state))
-                            ->disabled()
-                            ->dehydrated(false)
+                            ->label('Employee ID')
+                            ->prefix('PF-')
+                            ->placeholder('0001')
+                            ->helperText('Enter the employee ID number only. The PF- prefix is added automatically.')
+                            ->required()
+                            ->maxLength(20)
+                            ->formatStateUsing(fn ($state): ?string => Employee::normalizeUid($state))
+                            ->dehydrateStateUsing(fn ($state): ?string => Employee::normalizeUid($state))
+                            ->rules(fn (?Employee $record): array => [
+                                'regex:/^[0-9]+$/',
+                                Rule::unique('employees', 'uid')->ignore($record?->id),
+                            ])
+                            ->validationAttribute('employee ID')
+                            ->validationMessages([
+                                'regex' => 'The employee ID must contain numbers only.',
+                                'unique' => 'This employee ID is already registered.',
+                            ])
                             ->columnSpanFull(),
 
                         TextInput::make('firstname')
@@ -77,29 +82,9 @@ class UserForm
                     ->schema([
                         TextInput::make('username')
                             ->label('Username')
-                            ->placeholder('e.g., PF0001')
-                            ->default(function (): string {
-                                $counter = Counter::first();
-                                $next = $counter ? $counter->uid + 1 : 1;
-
-                                return 'PF'.str_pad($next, 4, '0', STR_PAD_LEFT);
-                            })
+                            ->helperText('This is automatically set from the employee ID without the dash, e.g. PF0001.')
                             ->readOnly()
                             ->dehydrated(false),
-
-                        TextInput::make('email')
-                            ->placeholder('e.g., juandelacruz@gmail.com')
-                            ->email()
-                            ->required()
-                            ->unique(
-                                table: User::class,
-                                column: 'email',
-                                ignoreRecord: true,
-                            )
-                            ->validationAttribute('email address')
-                            ->validationMessages([
-                                'unique' => 'This email address is already registered.',
-                            ]),
 
                         TextInput::make('password')
                             ->password()

@@ -25,6 +25,9 @@ class Employee extends Model
 
     protected $fillable = [
         'user_id',
+        'employee_import_batch_id',
+        'employee_import_name',
+        'employee_imported_at',
         'uid',
         'firstname',
         'middlename',
@@ -76,11 +79,13 @@ class Employee extends Model
         'salary_adjustment' => 'decimal:2',
         'leave_credits' => 'decimal:2',
         'birthday_leave_credits' => 'decimal:2',
+        'employee_imported_at' => 'datetime',
     ];
 
     protected static function booted(): void
     {
         static::saving(function ($employee): void {
+            $employee->uid = self::normalizeUid($employee->uid);
             $employee->schedule_type = $employee->rate_type === 'daily'
                 ? 'daily'
                 : 'regular';
@@ -96,17 +101,8 @@ class Employee extends Model
         });
 
         static::creating(function ($employee): void {
-            DB::transaction(function () use ($employee): void {
-                $counter = Counter::lockForUpdate()->first();
-
-                if (! $counter) {
-                    $counter = Counter::create(['uid' => 0]);
-                }
-
-                $counter->increment('uid');
-
-                $employee->uid = str_pad($counter->uid, 4, '0', STR_PAD_LEFT);
-            });
+            $employee->uid ??= self::reserveNextUid();
+            self::syncCounterToUid($employee->uid);
 
             $employee->schedule_type = $employee->rate_type === 'daily'
                 ? 'daily'
@@ -120,7 +116,7 @@ class Employee extends Model
         });
     }
 
-    public static function companyIdFromUid(int|string|null $uid): ?string
+    public static function normalizeUid(int|string|null $uid): ?string
     {
         if (blank($uid)) {
             return null;
@@ -132,7 +128,55 @@ class Employee extends Model
             return null;
         }
 
-        return 'PF-'.str_pad((string) ((int) $uid), 4, '0', STR_PAD_LEFT);
+        return str_pad((string) ((int) $uid), 4, '0', STR_PAD_LEFT);
+    }
+
+    public static function reserveNextUid(): string
+    {
+        return DB::transaction(function (): string {
+            $counter = Counter::lockForUpdate()->first();
+
+            if (! $counter) {
+                $counter = Counter::create(['uid' => 0]);
+            }
+
+            $counter->increment('uid');
+
+            return str_pad((string) $counter->uid, 4, '0', STR_PAD_LEFT);
+        });
+    }
+
+    public static function syncCounterToUid(int|string|null $uid): void
+    {
+        $number = (int) self::normalizeUid($uid);
+
+        if ($number < 1) {
+            return;
+        }
+
+        DB::transaction(function () use ($number): void {
+            $counter = Counter::lockForUpdate()->first();
+
+            if (! $counter) {
+                Counter::create(['uid' => $number]);
+
+                return;
+            }
+
+            if ((int) $counter->uid < $number) {
+                $counter->forceFill(['uid' => $number])->save();
+            }
+        });
+    }
+
+    public static function companyIdFromUid(int|string|null $uid): ?string
+    {
+        $uid = self::normalizeUid($uid);
+        if (blank($uid)) {
+            return null;
+        }
+
+        return 'PF-'.$uid;
     }
 
     public function getCompanyIdAttribute(): ?string
