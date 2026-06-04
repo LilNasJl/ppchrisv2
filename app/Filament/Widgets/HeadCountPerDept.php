@@ -2,10 +2,10 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Employee;
+use App\Models\Department;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 
 class HeadCountPerDept extends ChartWidget
 {
@@ -20,29 +20,26 @@ class HeadCountPerDept extends ChartWidget
 
     protected function getData(): array
     {
-        $data = Employee::select('department_id', DB::raw('count(*) as total'))
-            ->activeEmployment()
-            // Filter by the role in the related 'user' table
-            ->whereHas('user', function ($query) {
-                $query->where('role', 'employee');
-            })
-            ->groupBy('department_id')
-            ->with('department')
+        $departments = Department::query()
+            ->withCount([
+                'employees as active_employee_count' => fn (Builder $query): Builder => $query
+                    ->activeEmployment()
+                    ->whereHas('user', fn (Builder $userQuery): Builder => $userQuery->where('role', 'employee')),
+            ])
+            ->orderBy('name')
             ->get();
 
         return [
             'datasets' => [
                 [
                     'label' => 'No. of employees',
-                    'data' => $data->pluck('total'),
+                    'data' => $departments->pluck('active_employee_count')->all(),
                 ],
             ],
-            'labels' => $data->map(function ($item) {
-                // Using department acronym as requested
-                return $item->department->acronym ?? 'Unknown';
-            }),
+            'labels' => $departments
+                ->map(fn (Department $department): string => $department->acronym ?: ($department->name ?: 'Unnamed Department'))
+                ->all(),
         ];
-
     }
 
     protected function getType(): string

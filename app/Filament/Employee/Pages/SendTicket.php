@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Ticket;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -66,6 +67,11 @@ class SendTicket extends Page implements HasTable
                     ->placeholder('No comment yet')
                     ->limit(70)
                     ->wrap(),
+
+                TextColumn::make('employee_attachment_name')
+                    ->label('Attached File')
+                    ->placeholder('No file')
+                    ->toggleable(),
             ])
             ->recordActions([
                 Action::make('view')
@@ -73,14 +79,9 @@ class SendTicket extends Page implements HasTable
                     ->icon(Heroicon::Eye)
                     ->modalHeading('Ticket Details')
                     ->modalSubmitAction(false)
-                    ->schema($this->ticketDetailsSchema())
-                    ->fillForm(fn (Ticket $record): array => [
-                        'date_sent' => optional($record->created_at)->format('M d, Y h:i A'),
-                        'status' => $record->status,
-                        'title' => $record->title,
-                        'description' => $record->description,
-                        'hr_comment' => $record->hr_comment ?: 'No comment yet',
-                    ]),
+                    ->modalContent(fn (Ticket $record) => view('filament.pages.partials.ticket-details', [
+                        'ticket' => $record,
+                    ])),
             ]);
     }
 
@@ -118,6 +119,23 @@ class SendTicket extends Page implements HasTable
                     Textarea::make('description')
                         ->required()
                         ->rows(5)
+                        ->columnSpanFull(),
+
+                    FileUpload::make('employee_attachment_path')
+                        ->label('Attached File')
+                        ->disk('local')
+                        ->directory('tickets/employee')
+                        ->previewable(false)
+                        ->storeFileNamesIn('employee_attachment_original_name')
+                        ->acceptedFileTypes([
+                            'image/png',
+                            'image/jpeg',
+                            'application/pdf',
+                            'application/vnd.ms-excel',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        ])
+                        ->maxSize(2048)
+                        ->fetchFileInformation(false)
                         ->columnSpanFull(),
                 ])
                 ->columns(2),
@@ -161,6 +179,10 @@ class SendTicket extends Page implements HasTable
             'employee_id' => $employee->id,
             'title' => $data['title'],
             'description' => $data['description'],
+            'employee_attachment_path' => $data['employee_attachment_path'] ?? null,
+            'employee_attachment_original_name' => $data['employee_attachment_original_name'] ?? (filled($data['employee_attachment_path'] ?? null)
+                ? basename($data['employee_attachment_path'])
+                : null),
             'status' => Ticket::STATUS_PENDING,
         ]);
 

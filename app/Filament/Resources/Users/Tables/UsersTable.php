@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Models\AccountStatusHistory;
 use App\Models\Employee;
+use App\Models\User;
+use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -10,10 +13,11 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -72,10 +76,11 @@ class UsersTable
                     )
                     ->color(fn ($record): string => $record->employee?->hasEndedEmployment() ? 'danger' : 'success'),
 
-                ToggleColumn::make('is_disabled')
-                    ->label('Disabled')
-                    ->onColor('danger')
-                    ->offColor('success'),
+                TextColumn::make('is_disabled')
+                    ->label('Account')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Disabled' : 'Enabled')
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'success'),
 
                 TextColumn::make('created_at')
                     ->label('Created At')
@@ -132,6 +137,50 @@ class UsersTable
                             'record' => $record,
                         ])),
                     EditAction::make(),
+                    Action::make('toggleAccountStatus')
+                        ->label(fn (User $record): string => $record->is_disabled ? 'Enable Account' : 'Disable Account')
+                        ->icon(fn (User $record): Heroicon => $record->is_disabled ? Heroicon::CheckCircle : Heroicon::NoSymbol)
+                        ->color(fn (User $record): string => $record->is_disabled ? 'success' : 'danger')
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (User $record): string => $record->is_disabled ? 'Enable employee account?' : 'Disable employee account?')
+                        ->modalDescription('Please add remarks for this account status change. This will be saved in the account history.')
+                        ->schema([
+                            Textarea::make('remarks')
+                                ->label('Remarks')
+                                ->required()
+                                ->rows(4)
+                                ->maxLength(1000)
+                                ->columnSpanFull(),
+                        ])
+                        ->action(function (User $record, array $data): void {
+                            $newState = ! (bool) $record->is_disabled;
+
+                            $record->forceFill([
+                                'is_disabled' => $newState,
+                            ])->save();
+
+                            AccountStatusHistory::create([
+                                'user_id' => $record->id,
+                                'changed_by_user_id' => auth()->id(),
+                                'is_disabled' => $newState,
+                                'remarks' => $data['remarks'] ?? null,
+                            ]);
+
+                            Notification::make()
+                                ->title($newState ? 'Account disabled' : 'Account enabled')
+                                ->success()
+                                ->send();
+                        }),
+                    Action::make('accountHistory')
+                        ->label('Account History')
+                        ->icon(Heroicon::Clock)
+                        ->modalHeading(fn (User $record): string => ($record->employee?->full_name ?? 'Employee').' Account History')
+                        ->modalSubmitAction(false)
+                        ->modalContent(fn (User $record) => view('filament.resources.users.partials.account-history', [
+                            'histories' => $record->accountStatusHistories()
+                                ->with('changedBy')
+                                ->get(),
+                        ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
 

@@ -120,11 +120,14 @@ class Reports extends Page implements HasForms
     public function getReportHeadersProperty(): array
     {
         return match ($this->report_type) {
+            'employee_all' => ['Employee ID', 'Fullname', 'Designation', 'Department', 'Branch', 'Employment Status'],
+
             'employee_headcount_branch',
             'employee_headcount_designation',
             'employee_headcount_department',
             'employee_demographics',
             'employee_status' => ['Group', 'Count'],
+            'employee_tenure' => ['#', 'Employee', 'Branch', 'Hired Date', 'Tenure'],
 
             'payroll_total_period' => ['Payroll Period', 'Workers', 'Gross Pay', 'Total Deductions', 'Net Pay'],
             'payroll_branch_period' => ['#', 'Branch', 'Workers', 'Gross Pay', 'Total Deductions', 'Net Pay'],
@@ -144,11 +147,13 @@ class Reports extends Page implements HasForms
     public function getReportRowsProperty(): Collection
     {
         return match ($this->report_type) {
+            'employee_all' => $this->allEmployeeRows(),
             'employee_headcount_branch' => $this->headcountBy('branch.branch_name', 'No Branch'),
             'employee_headcount_designation' => $this->headcountBy('designation.title', 'No Designation'),
             'employee_headcount_department' => $this->headcountBy('department.name', 'No Department'),
             'employee_demographics' => $this->demographicRows(),
             'employee_status' => $this->employmentStatusRows(),
+            'employee_tenure' => $this->employeeTenureRows(),
             'payroll_total_period' => $this->payrollTotalRows(),
             'payroll_branch_period' => $this->payrollBranchRows(),
             'dtr_late' => $this->dtrMetricRows('late'),
@@ -235,6 +240,22 @@ class Reports extends Page implements HasForms
             ->values();
     }
 
+    protected function allEmployeeRows(): Collection
+    {
+        return $this->activeEmployeeQuery()
+            ->orderBy('uid')
+            ->orderBy('lastname')
+            ->get()
+            ->map(fn (Employee $employee): array => [
+                $employee->company_id ?: 'No Employee ID',
+                $employee->full_name,
+                $employee->designation?->title ?: 'No Designation',
+                $employee->department?->name ?: 'No Department',
+                $employee->branch?->branch_name ?: 'No Branch',
+                $employee->employment_type ?: 'Active',
+            ]);
+    }
+
     protected function demographicRows(): Collection
     {
         $employees = $this->activeEmployeeQuery()->get();
@@ -261,6 +282,23 @@ class Reports extends Page implements HasForms
         return collect([
             ['Active Employee', $employees->count()],
         ]);
+    }
+
+    protected function employeeTenureRows(): Collection
+    {
+        return $this->activeEmployeeQuery()
+            ->orderByRaw('hired_date IS NULL')
+            ->orderBy('hired_date')
+            ->orderBy('lastname')
+            ->get()
+            ->values()
+            ->map(fn (Employee $employee, int $index): array => [
+                $index + 1,
+                $employee->full_name,
+                $employee->branch?->branch_name ?: 'No Branch',
+                $employee->hired_date ? Carbon::parse($employee->hired_date)->format('Y-m-d') : 'Not Set',
+                $employee->tenure,
+            ]);
     }
 
     protected function payrollTotalRows(): Collection
@@ -460,11 +498,13 @@ class Reports extends Page implements HasForms
                 'title' => 'Employee Report',
                 'subtitle' => 'Headcount, demographics, and employment status',
                 'options' => [
+                    'employee_all' => 'All Employees',
                     'employee_headcount_branch' => 'Headcount by Branch',
                     'employee_headcount_designation' => 'Headcount by Designation',
                     'employee_headcount_department' => 'Headcount by Department',
                     'employee_demographics' => 'Workforce Demographics',
                     'employee_status' => 'Active and End Contract',
+                    'employee_tenure' => 'Employee Tenure',
                 ],
             ],
             'payroll' => [

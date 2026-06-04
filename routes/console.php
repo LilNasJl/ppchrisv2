@@ -12,11 +12,15 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Artisan::command('leave:reset-yearly', function (): void {
-    Employee::query()->update([
-        'leave_credits' => 10,
-        'birthday_leave_credits' => 1,
-        'leave_credits_year' => now()->year,
-    ]);
+    Employee::query()
+        ->with('designation')
+        ->each(function (Employee $employee): void {
+            $employee->forceFill([
+                'leave_credits' => $employee->annualLeaveCredits(),
+                'birthday_leave_credits' => 1,
+                'leave_credits_year' => now()->year,
+            ])->saveQuietly();
+        });
 
     $this->info('Employee leave credits have been reset for '.now()->year.'.');
 })->purpose('Reset employee leave and birthday leave credits for the current year');

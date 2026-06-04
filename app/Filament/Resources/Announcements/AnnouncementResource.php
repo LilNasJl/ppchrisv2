@@ -32,7 +32,11 @@ class AnnouncementResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
-    protected static ?string $navigationLabel = 'Announcements';
+    protected static ?string $navigationLabel = 'Memo & Annc.';
+
+    protected static ?string $modelLabel = 'Memo & Announcement';
+
+    protected static ?string $pluralModelLabel = 'Memo & Annc.';
 
     protected static ?int $navigationSort = 5;
 
@@ -40,7 +44,7 @@ class AnnouncementResource extends Resource
     {
         return $schema
             ->components([
-                Section::make('Announcement')
+                Section::make('Memo & Announcement')
                     ->schema([
                         TextInput::make('title')
                             ->required()

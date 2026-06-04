@@ -24,7 +24,9 @@ class Memo extends Page implements HasTable
 
     protected static ?string $slug = 'memo';
 
-    protected static ?string $title = 'Memo';
+    protected static ?string $title = 'Notices';
+
+    protected static ?string $navigationLabel = 'Notices';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
@@ -48,13 +50,13 @@ class Memo extends Page implements HasTable
                     ->sortable(),
 
                 TextColumn::make('title')
-                    ->label('Memo Title')
+                    ->label('Notice Title')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
                 TextColumn::make('type.title')
-                    ->label('Memo Type')
+                    ->label('Notice Type')
                     ->badge()
                     ->searchable()
                     ->sortable(),
@@ -69,7 +71,7 @@ class Memo extends Page implements HasTable
                     ->label('View')
                     ->icon(Heroicon::Eye)
                     ->modalSubmitAction(false)
-                    ->modalHeading('Memo Details')
+                    ->modalHeading('Notice Details')
                     ->modalContent(fn (MemoModel $record) => view('filament.pages.partials.memo-details', [
                         'memo' => $record,
                     ])),

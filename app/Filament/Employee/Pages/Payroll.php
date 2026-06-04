@@ -28,6 +28,16 @@ class Payroll extends Page implements HasForms
 
     public ?string $period_id = null;
 
+    public static function canAccess(): bool
+    {
+        return parent::canAccess() && (bool) auth()->user()?->can_view_payroll;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return (bool) auth()->user()?->can_view_payroll;
+    }
+
     public function mount(): void
     {
         $this->period_id = (string) PayrollPeriod::query()

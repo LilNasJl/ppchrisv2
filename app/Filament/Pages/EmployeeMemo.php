@@ -36,7 +36,7 @@ class EmployeeMemo extends Page implements HasTable
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Employee Memo';
+    protected static ?string $title = 'Employee Notices';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
@@ -50,7 +50,7 @@ class EmployeeMemo extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->heading(fn (): string => $this->employee()?->full_name.' Memo Records')
+            ->heading(fn (): string => $this->employee()?->full_name.' Notice Records')
             ->query(fn (): Builder => MemoModel::query()
                 ->with(['type', 'employee'])
                 ->where('employee_id', $this->employeeId)
@@ -66,13 +66,13 @@ class EmployeeMemo extends Page implements HasTable
                     ->sortable(),
 
                 TextColumn::make('title')
-                    ->label('Memo Title')
+                    ->label('Notice Title')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
                 TextColumn::make('type.title')
-                    ->label('Memo Type')
+                    ->label('Notice Type')
                     ->badge()
                     ->searchable()
                     ->sortable(),
@@ -84,11 +84,11 @@ class EmployeeMemo extends Page implements HasTable
             ])
             ->headerActions([
                 Action::make('addMemo')
-                    ->label('Add Memo')
+                    ->label('Add Notice')
                     ->icon(Heroicon::Plus)
                     ->schema($this->memoFormSchema())
-                    ->modalHeading('Add Memo')
-                    ->modalSubmitActionLabel('Save Memo')
+                    ->modalHeading('Add Notice')
+                    ->modalSubmitActionLabel('Save Notice')
                     ->action(fn (array $data): mixed => $this->createMemo($data)),
             ])
             ->recordActions([
@@ -97,7 +97,7 @@ class EmployeeMemo extends Page implements HasTable
                         ->label('View')
                         ->icon(Heroicon::Eye)
                         ->modalSubmitAction(false)
-                        ->modalHeading('Memo Details')
+                        ->modalHeading('Notice Details')
                         ->modalContent(fn (MemoModel $record) => view('filament.pages.partials.memo-details', [
                             'memo' => $record,
                         ])),
@@ -106,8 +106,8 @@ class EmployeeMemo extends Page implements HasTable
                         ->label('Update')
                         ->icon(Heroicon::PencilSquare)
                         ->schema($this->memoFormSchema())
-                        ->modalHeading('Update Memo')
-                        ->modalSubmitActionLabel('Update Memo')
+                        ->modalHeading('Update Notice')
+                        ->modalSubmitActionLabel('Update Notice')
                         ->using(fn (MemoModel $record, array $data): MemoModel => $this->updateMemo($record, $data)),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal)
@@ -140,18 +140,18 @@ class EmployeeMemo extends Page implements HasTable
             Section::make()
                 ->schema([
                     TextInput::make('title')
-                        ->label('Memo Title')
+                        ->label('Notice Title')
                         ->required()
                         ->maxLength(255),
 
                     Select::make('memo_type_id')
-                        ->label('Memo Type')
+                        ->label('Notice Type')
                         ->options(fn (): array => MemoType::query()->orderBy('title')->pluck('title', 'id')->all())
                         ->searchable()
                         ->required(),
 
                     Textarea::make('description')
-                        ->label('Memo Description')
+                        ->label('Notice Description')
                         ->rows(5)
                         ->columnSpanFull(),
 
@@ -187,7 +187,7 @@ class EmployeeMemo extends Page implements HasTable
         ]);
 
         Notification::make()
-            ->title('Memo added')
+            ->title('Notice added')
             ->success()
             ->send();
     }
@@ -202,7 +202,7 @@ class EmployeeMemo extends Page implements HasTable
         ]);
 
         Notification::make()
-            ->title('Memo updated')
+            ->title('Notice updated')
             ->success()
             ->send();
 

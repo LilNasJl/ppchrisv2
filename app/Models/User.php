@@ -16,7 +16,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled'])]
+#[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled', 'can_view_payroll'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -85,6 +85,7 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_disabled' => 'boolean',
+            'can_view_payroll' => 'boolean',
         ];
     }
 
@@ -110,6 +111,11 @@ class User extends Authenticatable implements FilamentUser
     public function employee()
     {
         return $this->hasOne(Employee::class, 'user_id')->withTrashed();
+    }
+
+    public function accountStatusHistories()
+    {
+        return $this->hasMany(AccountStatusHistory::class)->latest();
     }
 
     public function deduction()

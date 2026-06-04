@@ -5,13 +5,13 @@ namespace App\Filament\Widgets;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
 
 class EmploymentTypeHeadCount extends ChartWidget
 {
     use HasWidgetShield;
 
-    protected ?string $heading = 'Employment Type Head Count';
+    protected ?string $heading = 'Gender Distribution';
 
     protected int|string|array $columnSpan = [
         'default' => 'full',
@@ -20,31 +20,31 @@ class EmploymentTypeHeadCount extends ChartWidget
 
     protected function getData(): array
     {
-        $data = Employee::query()
+        $baseQuery = Employee::query()
             ->activeEmployment()
-            // Join the users table
-            ->join('users', 'employees.user_id', '=', 'users.id')
-            // Filter by the role in the users table
-            ->where('users.role', 'employee')
-            ->select('employees.employment_type', DB::raw('count(*) as total'))
-            ->groupBy('employees.employment_type')
-            ->get();
+            ->whereHas('user', fn (Builder $query): Builder => $query->where('role', 'employee'));
+
+        $male = (clone $baseQuery)->where('gender', 'male')->count();
+        $female = (clone $baseQuery)->where('gender', 'female')->count();
+        $unspecified = (clone $baseQuery)
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNull('gender')
+                ->orWhereNotIn('gender', ['male', 'female']))
+            ->count();
 
         return [
             'datasets' => [
                 [
                     'label' => 'Employees',
-                    'data' => $data->pluck('total')->toArray(),
+                    'data' => [$male, $female, $unspecified],
                     'backgroundColor' => [
                         '#36A2EB',
                         '#FF6384',
-                        '#FFCE56',
-                        '#4BC0C0',
+                        '#94A3B8',
                     ],
                 ],
             ],
-            // Ensure labels match the grouped employment types
-            'labels' => $data->pluck('employment_type')->toArray(),
+            'labels' => ['Male', 'Female', 'Unspecified'],
         ];
     }
 

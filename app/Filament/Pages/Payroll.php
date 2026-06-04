@@ -32,6 +32,11 @@ class Payroll extends Page
                 ->label('Manage Payroll Periods')
                 ->icon(Heroicon::CalendarDays)
                 ->url(PayrollPeriodResource::getUrl()),
+
+            Action::make('payrollVisibility')
+                ->label('Payroll Visibility')
+                ->icon(Heroicon::Eye)
+                ->url(PayrollVisibility::getUrl()),
         ];
     }
 

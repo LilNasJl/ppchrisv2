@@ -2,14 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\AgeGroupSummary;
 use App\Filament\Widgets\BirthdayGreetingCard;
 use App\Filament\Widgets\DashboardCard;
-use App\Filament\Widgets\EmployeeTenureTable;
+use App\Filament\Widgets\EducationLevelSummary;
 use App\Filament\Widgets\EmploymentTypeHeadCount;
 use App\Filament\Widgets\HeadCountPerDept;
-use App\Filament\Widgets\UpcomingActivitiesTable;
-use App\Filament\Widgets\UpcomingBirthdaysTable;
-use App\Filament\Widgets\UpcomingHolidaysTable;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
@@ -30,10 +28,8 @@ class Dashboard extends Page
             BirthdayGreetingCard::class,
             HeadCountPerDept::class,
             EmploymentTypeHeadCount::class,
-            EmployeeTenureTable::class,
-            UpcomingHolidaysTable::class,
-            UpcomingActivitiesTable::class,
-            UpcomingBirthdaysTable::class,
+            EducationLevelSummary::class,
+            AgeGroupSummary::class,
         ];
     }
 

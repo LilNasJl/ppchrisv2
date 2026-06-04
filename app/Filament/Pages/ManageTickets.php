@@ -8,6 +8,7 @@ use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -74,6 +75,16 @@ class ManageTickets extends Page implements HasTable
                     ->placeholder('No comment')
                     ->limit(60)
                     ->wrap(),
+
+                TextColumn::make('employee_attachment_name')
+                    ->label('Employee File')
+                    ->placeholder('No file')
+                    ->toggleable(),
+
+                TextColumn::make('hr_attachment_name')
+                    ->label('HR File')
+                    ->placeholder('No file')
+                    ->toggleable(),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -82,8 +93,9 @@ class ManageTickets extends Page implements HasTable
                         ->icon(Heroicon::Eye)
                         ->modalHeading('Ticket Details')
                         ->modalSubmitAction(false)
-                        ->schema($this->ticketDetailsSchema())
-                        ->fillForm(fn (Ticket $record): array => $this->ticketDetailsData($record)),
+                        ->modalContent(fn (Ticket $record) => view('filament.pages.partials.ticket-details', [
+                            'ticket' => $record,
+                        ])),
 
                     Action::make('updateStatus')
                         ->label('Update Status')
@@ -94,6 +106,8 @@ class ManageTickets extends Page implements HasTable
                         ->fillForm(fn (Ticket $record): array => [
                             'status' => $record->status,
                             'hr_comment' => $record->hr_comment,
+                            'hr_attachment_path' => $record->hr_attachment_path,
+                            'hr_attachment_original_name' => $record->hr_attachment_original_name,
                         ])
                         ->action(fn (Ticket $record, array $data): mixed => $this->updateTicketStatus($record, $data)),
 
@@ -126,6 +140,23 @@ class ManageTickets extends Page implements HasTable
                 ->label('HR Comment')
                 ->rows(4)
                 ->columnSpanFull(),
+
+            FileUpload::make('hr_attachment_path')
+                ->label('HR Attached File')
+                ->disk('local')
+                ->directory('tickets/hr')
+                ->previewable(false)
+                ->storeFileNamesIn('hr_attachment_original_name')
+                ->acceptedFileTypes([
+                    'image/png',
+                    'image/jpeg',
+                    'application/pdf',
+                    'application/vnd.ms-excel',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                ])
+                ->maxSize(2048)
+                ->fetchFileInformation(false)
+                ->columnSpanFull(),
         ];
     }
 
@@ -156,6 +187,8 @@ class ManageTickets extends Page implements HasTable
             'title' => $ticket->title,
             'description' => $ticket->description,
             'hr_comment' => $ticket->hr_comment ?: 'No comment',
+            'employee_attachment' => $ticket->employee_attachment_name ?: 'No file',
+            'hr_attachment' => $ticket->hr_attachment_name ?: 'No file',
         ];
     }
 
@@ -166,6 +199,8 @@ class ManageTickets extends Page implements HasTable
         $ticket->update([
             'status' => $data['status'],
             'hr_comment' => $data['hr_comment'] ?? null,
+            'hr_attachment_path' => $data['hr_attachment_path'] ?? $ticket->hr_attachment_path,
+            'hr_attachment_original_name' => $data['hr_attachment_original_name'] ?? $ticket->hr_attachment_original_name,
             'handled_by_user_id' => auth()->id(),
             'done_at' => $isDone ? now() : null,
         ]);

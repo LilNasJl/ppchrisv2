@@ -5,6 +5,7 @@ use App\Http\Controllers\Hr\DtrImportController;
 use App\Http\Controllers\Hr\EmployeeImportController;
 use App\Models\Leave;
 use App\Models\Memo;
+use App\Models\Ticket;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
@@ -35,6 +36,27 @@ Route::get('/leave-attachments/{leave}', function (Leave $leave) {
 })
     ->middleware('auth')
     ->name('leave.attachments.show');
+
+Route::get('/ticket-attachments/{ticket}/{source}', function (Ticket $ticket, string $source) {
+    $user = request()->user();
+
+    abort_unless($user, 403);
+    abort_unless(in_array($source, ['employee', 'hr'], true), 404);
+    abort_unless(in_array($user->role, ['hr', 'admin'], true) || (int) $user->employee?->id === (int) $ticket->employee_id, 403);
+
+    $path = $source === 'hr'
+        ? $ticket->hr_attachment_path
+        : $ticket->employee_attachment_path;
+    $name = $source === 'hr'
+        ? $ticket->hr_attachment_name
+        : $ticket->employee_attachment_name;
+
+    abort_if(blank($path) || ! Storage::disk('local')->exists($path), 404);
+
+    return Storage::disk('local')->response($path, $name);
+})
+    ->middleware('auth')
+    ->name('ticket.attachments.show');
 
 Route::middleware('auth')
     ->prefix('hr-tools')

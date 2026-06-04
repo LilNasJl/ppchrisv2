@@ -6,7 +6,6 @@ use App\Models\Employee;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Hash;
@@ -96,11 +95,6 @@ class UserForm
                             ->required(fn (string $context): bool => $context === 'create')
                             ->helperText('New employee accounts start with PASSWORD1.'),
 
-                        Toggle::make('is_disabled')
-                            ->label('Disable Account')
-                            ->helperText('Disabled employee accounts cannot log in until enabled again.')
-                            ->default(false)
-                            ->inline(false),
                     ])->columns(2),
 
             ]);

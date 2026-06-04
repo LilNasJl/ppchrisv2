@@ -28,7 +28,9 @@ class Memo extends Page implements HasTable
 
     protected string $view = 'filament-panels::pages.page';
 
-    protected static ?string $title = 'Memo';
+    protected static ?string $title = 'Notices';
+
+    protected static ?string $navigationLabel = 'Notices';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
@@ -40,7 +42,8 @@ class Memo extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => Employee::query()
-                ->with(['user', 'designation', 'department', 'branch'])
+                ->with(['user', 'designation', 'branch'])
+                ->withCount('memos')
                 ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
                 ->orderBy('lastname')
                 ->orderBy('firstname'))
@@ -65,29 +68,24 @@ class Memo extends Page implements HasTable
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('department.name')
-                    ->label('Department')
-                    ->searchable()
-                    ->sortable(),
-
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('employment_type')
-                    ->label('Employment Status')
+                TextColumn::make('memos_count')
+                    ->label('No. of Notices')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state, Employee $record): string => $record->hasEndedEmployment()
-                            ? "Employment End: {$state}"
-                            : ($state ?: 'Active')
-                    )
-                    ->color(fn (Employee $record): string => $record->hasEndedEmployment() ? 'danger' : 'success'),
+                    ->color(fn (int $state): string => match (true) {
+                        $state >= 3 => 'danger',
+                        $state === 2 => 'warning',
+                        default => 'success',
+                    }),
             ])
             ->recordActions([
                 ActionGroup::make([
                     Action::make('viewMemo')
-                        ->label('View Memo')
+                        ->label('View Notices')
                         ->icon(Heroicon::DocumentText)
                         ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
                             'employeeId' => $record->publicKey(),
@@ -110,7 +108,7 @@ class Memo extends Page implements HasTable
     {
         return [
             Action::make('manageMemoTypes')
-                ->label('Manage Memo Types')
+                ->label('Manage Notice Types')
                 ->icon(Heroicon::Cog6Tooth)
                 ->url(MemoTypeResource::getUrl()),
         ];
