@@ -38,7 +38,13 @@ class EmployeeImportBatchEntries extends Page implements HasTable
         return $table
             ->heading(fn (): string => "Batch {$this->batchId} Employees")
             ->query(fn (): Builder => Employee::query()
-                ->with(['user', 'branch', 'designation', 'department'])
+                ->withTrashed()
+                ->with([
+                    'user' => fn ($query) => $query->withTrashed(),
+                    'branch',
+                    'designation',
+                    'department',
+                ])
                 ->where('employee_import_batch_id', $this->batchId)
                 ->orderBy('uid'))
             ->columns([
@@ -93,6 +99,12 @@ class EmployeeImportBatchEntries extends Page implements HasTable
                 TextColumn::make('employee_imported_at')
                     ->label('Date Imported')
                     ->date()
+                    ->sortable(),
+
+                TextColumn::make('deleted_at')
+                    ->label('Deleted At')
+                    ->date()
+                    ->placeholder('-')
                     ->sortable(),
             ]);
     }

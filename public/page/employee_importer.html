@@ -26,6 +26,7 @@
       </div>
       <div class="actions">
         <button class="btn" id="choose">Choose File</button>
+        <button class="btn" id="sample" type="button">Download Sample CSV</button>
         <button class="btn primary" id="import" disabled>Import Employees</button>
         <button class="btn bad" id="clear" disabled>Clear</button>
       </div>
@@ -50,8 +51,14 @@ const chunkSize=100;
 let rows=[];
 let batchId='';
 const el=id=>document.getElementById(id);
+const sampleHeaders=['employee_id','lastname','firstname','middlename','birthdate','gender','status','hired_date','designation','branch','department','address','pagibig','philhealth','tin','sss','bank_id','fingerprint_id','employment_type','rate_type','payment_type','daily_rate','monthly_rate'];
+const sampleRows=[
+  ['PF-0001','Dela Cruz','Juan','Santos','1996-05-12','male','Single','2024-01-15','IT Staff','Admin','Information Communication Technology Office','Tagum City, Davao del Norte','HDMF-0001','PH-0001','TIN-0001','SSS-0001','BANK-0001','1001','Regular','daily','atm','600',''],
+  ['PF-0002','Ladroma','Joelyn','Piquero','1998-05-31','female','Single','2025-03-01','HR Staff','Admin','Human Resource Management Office','Nabunturan, Davao de Oro','HDMF-0002','PH-0002','TIN-0002','SSS-0002','BANK-0002','1002','Regular','monthly','atm','','15600']
+];
 
 el('choose').onclick=()=>el('file').click();
+el('sample').onclick=downloadSampleCsv;
 el('file').onchange=e=>loadFile(e.target.files[0]);
 el('clear').onclick=reset;
 el('import').onclick=runImport;
@@ -124,6 +131,27 @@ async function postRows(chunk,importName,batchId){
   const json=await res.json().catch(()=>({message:'Invalid server response.'}));
   if(!res.ok)throw new Error(json.message||'Import request failed.');
   return json;
+}
+
+function downloadSampleCsv(){
+  const csv=[sampleHeaders,...sampleRows].map(csvLine).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;
+  link.download='employee_import_sample.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setStatus('Sample CSV downloaded. Keep designation, branch, department, gender, rate_type, and payment_type values exact.');
+}
+
+function csvLine(values){
+  return values.map(value=>{
+    value=String(value??'');
+    return /[",\r\n]/.test(value)?'"'+value.replace(/"/g,'""')+'"':value;
+  }).join(',');
 }
 
 function renderErrors(errors,offset){
