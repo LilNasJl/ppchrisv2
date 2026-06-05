@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Pages\ComplianceBenefits;
 use App\Filament\Pages\EmployeeComplianceBenefits;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -13,6 +14,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 
 class ComplianceBenefitsEmployeeTable extends TableWidget
 {
@@ -26,7 +28,7 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
     {
         return $table
             ->query(fn (): Builder => Employee::query()
-                ->with(['user', 'branch', 'designation'])
+                ->with(['user', 'branch', 'designation', 'department'])
                 ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
                 ->orderBy('uid'))
             ->columns([
@@ -59,6 +61,12 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('department.name')
+                    ->label('Department')
+                    ->searchable()
+                    ->sortable()
+                    ->wrap(),
+
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')
                     ->searchable()
@@ -69,9 +77,28 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                     Action::make('viewDeductions')
                         ->label('View Deductions')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl(['employeeId' => $record->publicKey()])),
+                        ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl([
+                            'employeeId' => $record->publicKey(),
+                            'returnUrl' => $this->tableReturnUrl(ComplianceBenefits::getUrl()),
+                        ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
             ]);
+    }
+
+    protected function tableReturnUrl(string $baseUrl): string
+    {
+        $query = request()->query();
+        unset($query['returnUrl']);
+
+        $query[$this->getTablePaginationPageName()] = $this->getTablePage();
+
+        foreach (['tableRecordsPerPage', 'tableSearch', 'tableFilters', 'tableSort'] as $property) {
+            if (filled($this->{$property})) {
+                $query[$property] = $this->{$property};
+            }
+        }
+
+        return $baseUrl.(blank($query) ? '' : '?'.Arr::query($query));
     }
 }

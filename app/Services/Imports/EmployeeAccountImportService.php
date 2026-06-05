@@ -151,9 +151,9 @@ class EmployeeAccountImportService
             'philhealth' => $this->normalizeNullableString($this->pick($row, ['philhealth', 'philhealth no', 'philhealth_no'])),
             'tin' => $this->normalizeNullableString($this->pick($row, ['tin', 'tin no', 'tin_no'])),
             'sss' => $this->normalizeNullableString($this->pick($row, ['sss', 'sss no', 'sss_no'])),
-            'bank_id_no' => $this->normalizeNullableString($this->pick($row, ['bank_id', 'bank_id_no', 'bank id no', 'bank id', 'bankid'])),
+            'bank_id_no' => $this->normalizePreservedString($this->pick($row, ['bank_id', 'bank_id_no', 'bank id no', 'bank id', 'bankid'])),
             'fingerprint_id' => $this->normalizeNullableString($this->pick($row, ['fingerprint_id', 'fingerprint id', 'fingerprint', 'fp'])),
-            'employment_type' => $this->normalizeNullableString($this->pick($row, ['employment_type', 'employment type'])),
+            'employment_type' => $this->employmentTypeValue($this->pick($row, ['employment_type', 'employment type', 'employment status', 'status of employment'])),
             'rate_type' => $this->normalizeLowerString($this->pick($row, ['rate_type', 'rate type'])),
             'payment_type' => $this->normalizeLowerString($this->pick($row, ['payment_type', 'payment type'])),
             'daily_rate' => $this->parseDecimal($this->pick($row, ['daily_rate', 'daily rate'])),
@@ -257,7 +257,9 @@ class EmployeeAccountImportService
         $title = $this->normalizeNullableString($title);
 
         return filled($title)
-            ? Designation::query()->where('title', $title)->value('id')
+            ? Designation::query()
+                ->whereRaw('LOWER(TRIM(title)) = ?', [$this->comparisonValue($title)])
+                ->value('id')
             : null;
     }
 
@@ -266,7 +268,9 @@ class EmployeeAccountImportService
         $name = $this->normalizeNullableString($name);
 
         return filled($name)
-            ? Department::query()->where('name', $name)->value('id')
+            ? Department::query()
+                ->whereRaw('LOWER(TRIM(name)) = ?', [$this->comparisonValue($name)])
+                ->value('id')
             : null;
     }
 
@@ -275,8 +279,45 @@ class EmployeeAccountImportService
         $name = $this->normalizeNullableString($name);
 
         return filled($name)
-            ? Branch::query()->where('branch_name', $name)->value('id')
+            ? Branch::query()
+                ->whereRaw('LOWER(TRIM(branch_name)) = ?', [$this->comparisonValue($name)])
+                ->value('id')
             : null;
+    }
+
+    protected function employmentTypeValue(mixed $state): ?string
+    {
+        $state = $this->normalizeNullableString($state);
+
+        if (blank($state)) {
+            return null;
+        }
+
+        $options = [
+            'Permanent',
+            'Probationary',
+            'Temporary',
+            'Coterminous',
+            'Contractual',
+            'Casual',
+            'Job Order',
+            'Contract of Service',
+            'Substitute',
+            'Resigned',
+            'Terminated',
+            'Force Resigned',
+            'Death of Employee',
+        ];
+
+        $lookup = collect($options)
+            ->mapWithKeys(fn (string $option): array => [$this->comparisonValue($option) => $option]);
+
+        return $lookup->get($this->comparisonValue($state), $state);
+    }
+
+    protected function comparisonValue(string $value): string
+    {
+        return Str::lower(trim(preg_replace('/\s+/', ' ', $value)));
     }
 
     /**
@@ -386,5 +427,20 @@ class EmployeeAccountImportService
         $state = trim($state);
 
         return filled($state) ? $state : null;
+    }
+
+    protected function normalizePreservedString(mixed $state): ?string
+    {
+        if (is_string($state)) {
+            $state = trim($state);
+
+            if (preg_match('/^=\s*"([^"]*)"$/', $state, $matches)) {
+                $state = $matches[1];
+            }
+
+            return filled($state) ? $state : null;
+        }
+
+        return filled($state) ? (string) $state : null;
     }
 }

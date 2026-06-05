@@ -13,6 +13,25 @@ use Illuminate\Support\Facades\Storage;
 //     return view('welcome');
 // });
 
+Route::get('/{livewirePrefix}/update', function () {
+    $fallbackUrl = url('/hr');
+    $referer = request()->headers->get('referer');
+    $refererHost = is_string($referer) ? parse_url($referer, PHP_URL_HOST) : null;
+    $refererPath = is_string($referer) ? parse_url($referer, PHP_URL_PATH) : null;
+
+    if (
+        is_string($referer) &&
+        $refererHost === request()->getHost() &&
+        ! preg_match('#^/livewire(?:-[A-Za-z0-9]+)?/update$#', (string) $refererPath)
+    ) {
+        return redirect()->to($referer);
+    }
+
+    return redirect()->to($fallbackUrl);
+})
+    ->where('livewirePrefix', 'livewire(?:-[A-Za-z0-9]+)?')
+    ->name('livewire.update.get-fallback');
+
 Route::get('/memo-attachments/{memo}', function (Memo $memo) {
     $user = request()->user();
 

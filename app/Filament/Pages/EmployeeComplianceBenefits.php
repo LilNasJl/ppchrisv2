@@ -44,8 +44,12 @@ class EmployeeComplianceBenefits extends Page implements HasForms
 
     public ?array $data = [];
 
+    public ?string $returnUrl = null;
+
     public function mount(): void
     {
+        $this->returnUrl = $this->normalizeReturnUrl(request()->query('returnUrl'));
+
         $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
         $this->employee = Employee::query()
             ->with(['employeeDeductions.deduction', 'branch', 'designation'])
@@ -107,13 +111,33 @@ class EmployeeComplianceBenefits extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(ComplianceBenefits::getUrl()),
+                ->url(fn (): string => $this->getReturnUrl()),
 
             Action::make('save')
                 ->label('Save Deductions')
                 ->icon(Heroicon::Check)
                 ->action('save'),
         ];
+    }
+
+    protected function getReturnUrl(): string
+    {
+        return $this->returnUrl ?: ComplianceBenefits::getUrl();
+    }
+
+    protected function normalizeReturnUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || blank($url)) {
+            return null;
+        }
+
+        $appUrl = url('/');
+
+        if (str_starts_with($url, $appUrl) || str_starts_with($url, '/')) {
+            return $url;
+        }
+
+        return null;
     }
 
     public function save(): void

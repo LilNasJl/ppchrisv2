@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\EditEmployeeDetails;
+use App\Filament\Pages\EmployeeDetails;
 use App\Filament\Pages\ViewEmployeeDetails;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
@@ -26,6 +27,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\HtmlString;
 
 class EmployeeDetailsTable extends TableWidget
@@ -599,6 +601,12 @@ class EmployeeDetailsTable extends TableWidget
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('department.name')
+                    ->label('Department')
+                    ->searchable()
+                    ->sortable()
+                    ->wrap(),
+
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')
                     ->searchable()
@@ -626,12 +634,18 @@ class EmployeeDetailsTable extends TableWidget
                     Action::make('viewEmployeeDetails')
                         ->label('View')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl(['employeeId' => $record->publicKey()])),
+                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl([
+                            'employeeId' => $record->publicKey(),
+                            'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                        ])),
 
                     Action::make('editEmployeeDetails')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
-                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl(['employeeId' => $record->publicKey()])),
+                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl([
+                            'employeeId' => $record->publicKey(),
+                            'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                        ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
 
@@ -641,6 +655,22 @@ class EmployeeDetailsTable extends TableWidget
                     //
                 ]),
             ]);
+    }
+
+    protected function tableReturnUrl(string $baseUrl): string
+    {
+        $query = request()->query();
+        unset($query['returnUrl']);
+
+        $query[$this->getTablePaginationPageName()] = $this->getTablePage();
+
+        foreach (['tableRecordsPerPage', 'tableSearch', 'tableFilters', 'tableSort'] as $property) {
+            if (filled($this->{$property})) {
+                $query[$property] = $this->{$property};
+            }
+        }
+
+        return $baseUrl.(blank($query) ? '' : '?'.Arr::query($query));
     }
 
     protected function syncEmployeeDeductions(ModelsEmployee $record, array $deductions, array $otherDeductionIds): void

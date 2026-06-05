@@ -14,6 +14,13 @@ class EditUser extends EditRecord
 {
     protected static string $resource = UserResource::class;
 
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->previousUrl = $this->normalizeReturnUrl(request()->query('returnUrl')) ?: $this->previousUrl;
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         return $data;
@@ -47,5 +54,20 @@ class EditUser extends EditRecord
                 'A user record has been updated.'
             ));
         }
+    }
+
+    protected function normalizeReturnUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || blank($url)) {
+            return null;
+        }
+
+        $appUrl = url('/');
+
+        if (str_starts_with($url, $appUrl) || str_starts_with($url, '/')) {
+            return $url;
+        }
+
+        return null;
     }
 }

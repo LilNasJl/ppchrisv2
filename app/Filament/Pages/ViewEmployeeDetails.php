@@ -34,8 +34,12 @@ class ViewEmployeeDetails extends Page implements HasForms
 
     public ?ModelsEmployee $employeeRecord = null;
 
+    public ?string $returnUrl = null;
+
     public function mount(): void
     {
+        $this->returnUrl = $this->normalizeReturnUrl(request()->query('returnUrl'));
+
         $this->employeeRecord = ModelsEmployee::query()
             ->with(['user', 'designation', 'department', 'branch', 'employeeDeductions.deduction'])
             ->findOrFail(ModelsEmployee::resolvePublicId(request()->query('employeeId')));
@@ -65,12 +69,35 @@ class ViewEmployeeDetails extends Page implements HasForms
             Action::make('edit')
                 ->label('Edit')
                 ->icon(Heroicon::PencilSquare)
-                ->url(fn (): string => EditEmployeeDetails::getUrl(['employeeId' => $this->employeeRecord?->publicKey()])),
+                ->url(fn (): string => EditEmployeeDetails::getUrl([
+                    'employeeId' => $this->employeeRecord?->publicKey(),
+                    'returnUrl' => $this->getReturnUrl(),
+                ])),
 
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(EmployeeDetails::getUrl()),
+                ->url(fn (): string => $this->getReturnUrl()),
         ];
+    }
+
+    protected function getReturnUrl(): string
+    {
+        return $this->returnUrl ?: EmployeeDetails::getUrl();
+    }
+
+    protected function normalizeReturnUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || blank($url)) {
+            return null;
+        }
+
+        $appUrl = url('/');
+
+        if (str_starts_with($url, $appUrl) || str_starts_with($url, '/')) {
+            return $url;
+        }
+
+        return null;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Filament\Resources\Users\UserResource;
 use App\Models\AccountStatusHistory;
 use App\Models\Employee;
 use App\Models\User;
@@ -21,6 +22,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 
 class UsersTable
 {
@@ -28,7 +30,7 @@ class UsersTable
     {
         return $table
             ->modifyQueryUsing(fn (Builder $query) => $query
-                ->with(['employee.branch'])
+                ->with(['employee.branch', 'employee.department'])
                 ->where('role', 'employee')
                 ->whereHas('employee')
                 ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
@@ -61,6 +63,12 @@ class UsersTable
                         ->orderBy('account_employees.lastname', $direction)
                         ->orderBy('account_employees.middlename', $direction)
                         ->orderBy('account_employees.firstname', $direction)),
+                TextColumn::make('employee.department.name')
+                    ->label('Department')
+                    ->searchable()
+                    ->sortable()
+                    ->wrap(),
+
                 TextColumn::make('employee.branch.branch_name')
                     ->label('Branch')
                     ->searchable()
@@ -136,7 +144,11 @@ class UsersTable
                         ->modalContent(fn ($record) => view('filament.resources.users.partials.profile-picture', [
                             'record' => $record,
                         ])),
-                    EditAction::make(),
+                    EditAction::make()
+                        ->url(fn (User $record, ?object $livewire = null): string => UserResource::getUrl('edit', [
+                            'record' => $record,
+                            'returnUrl' => static::tableReturnUrl($livewire, UserResource::getUrl()),
+                        ])),
                     Action::make('toggleAccountStatus')
                         ->label(fn (User $record): string => $record->is_disabled ? 'Enable Account' : 'Disable Account')
                         ->icon(fn (User $record): Heroicon => $record->is_disabled ? Heroicon::CheckCircle : Heroicon::NoSymbol)
@@ -187,11 +199,29 @@ class UsersTable
             ])
 
             ->toolbarActions([
-                // BulkActionGroup::make([
-                //     DeleteBulkAction::make(),
-                //     ForceDeleteBulkAction::make(),
-                //     RestoreBulkAction::make(),
-                // ]),
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    RestoreBulkAction::make(),
+                    ForceDeleteBulkAction::make(),
+                ]),
             ]);
+    }
+
+    protected static function tableReturnUrl(?object $livewire, string $baseUrl): string
+    {
+        $query = request()->query();
+        unset($query['returnUrl']);
+
+        if ($livewire && method_exists($livewire, 'getTablePaginationPageName') && method_exists($livewire, 'getTablePage')) {
+            $query[$livewire->getTablePaginationPageName()] = $livewire->getTablePage();
+        }
+
+        foreach (['tableRecordsPerPage', 'tableSearch', 'tableFilters', 'tableSort'] as $property) {
+            if ($livewire && property_exists($livewire, $property) && filled($livewire->{$property})) {
+                $query[$property] = $livewire->{$property};
+            }
+        }
+
+        return $baseUrl.(blank($query) ? '' : '?'.Arr::query($query));
     }
 }

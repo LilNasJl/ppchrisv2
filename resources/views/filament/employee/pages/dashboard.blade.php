@@ -14,12 +14,12 @@
     <style>
         .employee-dashboard {
             --ed-page: #f8fafc;
-            --ed-surface: #ffffff;
-            --ed-surface-soft: #f1f5f9;
+            --ed-surface: transparent;
+            --ed-surface-soft: transparent;
             --ed-text: #0f172a;
             --ed-muted: #64748b;
-            --ed-border: rgba(15, 23, 42, .1);
-            --ed-shadow: 0 16px 38px rgba(15, 23, 42, .08);
+            --ed-border: rgba(15, 23, 42, .14);
+            --ed-shadow: none;
             --ed-blue: #2563eb;
             --ed-blue-soft: #dbeafe;
             --ed-green: #059669;
@@ -34,12 +34,12 @@
 
         .dark .employee-dashboard {
             --ed-page: #020617;
-            --ed-surface: rgba(15, 23, 42, .86);
-            --ed-surface-soft: rgba(30, 41, 59, .72);
+            --ed-surface: transparent;
+            --ed-surface-soft: transparent;
             --ed-text: #f8fafc;
             --ed-muted: #cbd5e1;
-            --ed-border: rgba(148, 163, 184, .24);
-            --ed-shadow: 0 18px 44px rgba(0, 0, 0, .32);
+            --ed-border: rgba(148, 163, 184, .28);
+            --ed-shadow: none;
             --ed-blue: #93c5fd;
             --ed-blue-soft: rgba(37, 99, 235, .18);
             --ed-green: #6ee7b7;
@@ -55,9 +55,7 @@
         .employee-dashboard-hero {
             border: 1px solid var(--ed-border);
             border-radius: 8px;
-            background:
-                linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(239, 246, 255, .9) 50%, rgba(236, 253, 245, .86)),
-                var(--ed-surface);
+            background: var(--ed-surface);
             box-shadow: var(--ed-shadow);
             display: grid;
             gap: 18px;
@@ -67,9 +65,7 @@
         }
 
         .dark .employee-dashboard-hero {
-            background:
-                linear-gradient(135deg, rgba(15, 23, 42, .96), rgba(30, 41, 59, .94) 55%, rgba(20, 83, 45, .46)),
-                var(--ed-surface);
+            background: var(--ed-surface);
         }
 
         .employee-dashboard-eyebrow {
@@ -108,7 +104,7 @@
         .employee-dashboard-summary-item {
             border: 1px solid var(--ed-border);
             border-radius: 8px;
-            background: rgba(255, 255, 255, .62);
+            background: transparent;
             display: grid;
             gap: 5px;
             min-height: 92px;
@@ -116,7 +112,7 @@
         }
 
         .dark .employee-dashboard-summary-item {
-            background: rgba(15, 23, 42, .42);
+            background: transparent;
         }
 
         .employee-dashboard-summary-item strong {
@@ -135,9 +131,7 @@
 
         .employee-dashboard-birthday {
             align-items: center;
-            background:
-                linear-gradient(135deg, rgba(254, 243, 199, .95), rgba(219, 234, 254, .88)),
-                var(--ed-surface);
+            background: var(--ed-surface);
             border: 1px solid var(--ed-border);
             border-radius: 8px;
             box-shadow: var(--ed-shadow);
@@ -149,9 +143,7 @@
         }
 
         .dark .employee-dashboard-birthday {
-            background:
-                linear-gradient(135deg, rgba(120, 53, 15, .38), rgba(30, 64, 175, .28)),
-                var(--ed-surface);
+            background: var(--ed-surface);
         }
 
         .employee-dashboard-birthday h3 {
@@ -173,12 +165,7 @@
         .employee-dashboard-main {
             display: grid;
             gap: 18px;
-            grid-template-columns: minmax(0, 1.24fr) minmax(300px, .76fr);
-        }
-
-        .employee-dashboard-side {
-            display: grid;
-            gap: 18px;
+            grid-template-columns: 1fr;
         }
 
         .employee-dashboard-panel {
@@ -215,17 +202,17 @@
         }
 
         .employee-dashboard-icon-blue {
-            background: var(--ed-blue-soft);
+            background: transparent;
             color: var(--ed-blue);
         }
 
         .employee-dashboard-icon-green {
-            background: var(--ed-green-soft);
+            background: transparent;
             color: var(--ed-green);
         }
 
         .employee-dashboard-icon-amber {
-            background: var(--ed-amber-soft);
+            background: transparent;
             color: var(--ed-amber);
         }
 
@@ -248,6 +235,10 @@
         .employee-dashboard-list {
             display: grid;
             gap: 10px;
+        }
+
+        .employee-dashboard-list-grid {
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         }
 
         .employee-dashboard-item {
@@ -306,8 +297,7 @@
         }
 
         @media (max-width: 1100px) {
-            .employee-dashboard-hero,
-            .employee-dashboard-main {
+            .employee-dashboard-hero {
                 grid-template-columns: 1fr;
             }
 
@@ -411,59 +401,57 @@
                 </div>
             </section>
 
-            <div class="employee-dashboard-side">
-                <section class="employee-dashboard-panel">
-                    <header class="employee-dashboard-panel-header">
-                        <span class="employee-dashboard-icon employee-dashboard-icon-green">
-                            <x-filament::icon icon="heroicon-o-calendar-days" />
-                        </span>
-                        <div>
-                            <h3>Upcoming Holidays</h3>
-                            <p>Scheduled holidays ahead</p>
-                        </div>
-                    </header>
-
-                    <div class="employee-dashboard-list">
-                        @forelse ($upcomingHolidays as $holiday)
-                            <article class="employee-dashboard-item">
-                                <h4>{{ $holiday->title }}</h4>
-                                <div class="employee-dashboard-meta">
-                                    <x-filament::icon icon="heroicon-o-clock" />
-                                    <span>{{ $holiday->date->format('M d, Y') }} - {{ $holiday->type?->type }}</span>
-                                </div>
-                            </article>
-                        @empty
-                            <div class="employee-dashboard-empty">No upcoming holidays.</div>
-                        @endforelse
+            <section class="employee-dashboard-panel">
+                <header class="employee-dashboard-panel-header">
+                    <span class="employee-dashboard-icon employee-dashboard-icon-green">
+                        <x-filament::icon icon="heroicon-o-calendar-days" />
+                    </span>
+                    <div>
+                        <h3>Upcoming Holidays</h3>
+                        <p>Scheduled holidays ahead</p>
                     </div>
-                </section>
+                </header>
 
-                <section class="employee-dashboard-panel">
-                    <header class="employee-dashboard-panel-header">
-                        <span class="employee-dashboard-icon employee-dashboard-icon-amber">
-                            <x-filament::icon icon="heroicon-o-clipboard-document-list" />
-                        </span>
-                        <div>
-                            <h3>Upcoming Activities</h3>
-                            <p>Company events and activities</p>
-                        </div>
-                    </header>
+                <div class="employee-dashboard-list employee-dashboard-list-grid">
+                    @forelse ($upcomingHolidays as $holiday)
+                        <article class="employee-dashboard-item">
+                            <h4>{{ $holiday->title }}</h4>
+                            <div class="employee-dashboard-meta">
+                                <x-filament::icon icon="heroicon-o-clock" />
+                                <span>{{ $holiday->date->format('M d, Y') }} - {{ $holiday->type?->type }}</span>
+                            </div>
+                        </article>
+                    @empty
+                        <div class="employee-dashboard-empty">No upcoming holidays.</div>
+                    @endforelse
+                </div>
+            </section>
 
-                    <div class="employee-dashboard-list">
-                        @forelse ($upcomingActivities as $activity)
-                            <article class="employee-dashboard-item">
-                                <h4>{{ $activity->title }}</h4>
-                                <div class="employee-dashboard-meta">
-                                    <x-filament::icon icon="heroicon-o-calendar" />
-                                    <span>{{ $activity->date_from->format('M d, Y') }} - {{ $activity->date_to->format('M d, Y') }}</span>
-                                </div>
-                            </article>
-                        @empty
-                            <div class="employee-dashboard-empty">No upcoming activities.</div>
-                        @endforelse
+            <section class="employee-dashboard-panel">
+                <header class="employee-dashboard-panel-header">
+                    <span class="employee-dashboard-icon employee-dashboard-icon-amber">
+                        <x-filament::icon icon="heroicon-o-clipboard-document-list" />
+                    </span>
+                    <div>
+                        <h3>Upcoming Activities</h3>
+                        <p>Company events and activities</p>
                     </div>
-                </section>
-            </div>
+                </header>
+
+                <div class="employee-dashboard-list employee-dashboard-list-grid">
+                    @forelse ($upcomingActivities as $activity)
+                        <article class="employee-dashboard-item">
+                            <h4>{{ $activity->title }}</h4>
+                            <div class="employee-dashboard-meta">
+                                <x-filament::icon icon="heroicon-o-calendar" />
+                                <span>{{ $activity->date_from->format('M d, Y') }} - {{ $activity->date_to->format('M d, Y') }}</span>
+                            </div>
+                        </article>
+                    @empty
+                        <div class="employee-dashboard-empty">No upcoming activities.</div>
+                    @endforelse
+                </div>
+            </section>
         </div>
     </div>
 </x-filament-panels::page>
