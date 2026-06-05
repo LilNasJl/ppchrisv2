@@ -537,13 +537,17 @@ trait ManagesEmployeeDetailsForm
                                 ->schema([
                                     TextInput::make('leave_credits')
                                         ->label('Leave Count')
-                                        ->disabled()
-                                        ->dehydrated(false),
+                                        ->numeric()
+                                        ->minValue(0)
+                                        ->disabled($isReadOnly)
+                                        ->dehydrated(! $isReadOnly),
 
                                     TextInput::make('birthday_leave_credits')
                                         ->label('Birthday Leave Count')
-                                        ->disabled()
-                                        ->dehydrated(false),
+                                        ->numeric()
+                                        ->minValue(0)
+                                        ->disabled($isReadOnly)
+                                        ->dehydrated(! $isReadOnly),
 
                                     TextInput::make('leave_credits_year')
                                         ->label('Leave Year')
