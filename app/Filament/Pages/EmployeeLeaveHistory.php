@@ -9,7 +9,6 @@ use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -80,7 +79,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => Leave::withTrashed()
+            ->query(fn (): Builder => Leave::query()
                 ->where('employee_id', $this->employeeId)
                 ->whereIn('status', ['Approved', 'Rejected'])
                 ->latest('created_at'))
@@ -122,12 +121,6 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
                     })
                     ->sortable(),
 
-                TextColumn::make('record_state')
-                    ->label('Record')
-                    ->badge()
-                    ->getStateUsing(fn (Leave $record): string => $record->trashed() ? 'Deleted' : 'Active')
-                    ->color(fn (string $state): string => $state === 'Deleted' ? 'gray' : 'success'),
-
                 TextColumn::make('reviewedBy.name')
                     ->label('Approved/Rejected By')
                     ->placeholder('-')
@@ -157,12 +150,16 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
                         ->fillForm(fn (Leave $record): array => $this->leaveHistoryFormData($record))
                         ->modalHeading('Edit Leave History')
                         ->modalSubmitActionLabel('Update Leave')
-                        ->visible(fn (Leave $record): bool => ! $record->trashed())
                         ->action(fn (Leave $record, array $data): mixed => $this->updateHistoryLeave($record, $data)),
 
-                    DeleteAction::make()
+                    Action::make('deleteLeaveHistory')
+                        ->label('Delete')
+                        ->icon(Heroicon::Trash)
+                        ->color('danger')
                         ->requiresConfirmation()
-                        ->visible(fn (Leave $record): bool => ! $record->trashed()),
+                        ->modalHeading('Delete leave history')
+                        ->modalDescription('This will return any deducted leave credits before permanently deleting the leave history record.')
+                        ->action(fn (Leave $record): mixed => $this->deleteHistoryLeave($record)),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal)
                     ->tooltip('Actions'),
@@ -301,6 +298,39 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
         } catch (\Throwable $exception) {
             Notification::make()
                 ->title('Unable to update leave history')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    protected function deleteHistoryLeave(Leave $leave): void
+    {
+        try {
+            DB::transaction(function () use ($leave): void {
+                $leave = Leave::query()->lockForUpdate()->findOrFail($leave->id);
+
+                $employee = Employee::query()->lockForUpdate()->findOrFail($leave->employee_id);
+                $employee->resetLeaveCreditsIfNeeded();
+                $employee->refresh();
+
+                $this->restorePreviousLeaveCredits($employee, $leave);
+                $employee->save();
+
+                $leave->forceDelete();
+
+                if ((int) $employee->id === (int) $this->employeeId) {
+                    $this->employee = $employee->refresh();
+                }
+            });
+
+            Notification::make()
+                ->title('Leave history permanently deleted and credits returned')
+                ->success()
+                ->send();
+        } catch (\Throwable $exception) {
+            Notification::make()
+                ->title('Unable to delete leave history')
                 ->body($exception->getMessage())
                 ->danger()
                 ->send();
