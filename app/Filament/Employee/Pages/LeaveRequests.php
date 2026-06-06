@@ -59,8 +59,13 @@ class LeaveRequests extends Page implements HasForms, HasTable
     {
         return $table
             ->query(fn (): Builder => $this->modifyQueryWithActiveTab(
-                Leave::query()
+                Leave::withTrashed()
                     ->where('employee_id', $this->employee()->id)
+                    ->where(function (Builder $query): void {
+                        $query
+                            ->whereNull('deleted_at')
+                            ->orWhereIn('status', ['Approved', 'Rejected']);
+                    })
                     ->latest('created_at')
             ))
             ->columns([

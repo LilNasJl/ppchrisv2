@@ -2,6 +2,7 @@
 
 namespace App\Filament\Concerns;
 
+use App\Filament\Pages\EmployeeLeaveHistory;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
@@ -256,6 +257,22 @@ trait ManagesEmployeeDetailsForm
             .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Amount</th>'
             .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Terms</th>'
             .'</tr></thead><tbody>'.$rows.'</tbody></table></div>'
+        );
+    }
+
+    protected function leaveHistoryButton(?ModelsEmployee $record): HtmlString
+    {
+        if (! $record?->exists) {
+            return new HtmlString('<div style="color:#64748b;">Save the employee first to view leave history.</div>');
+        }
+
+        $url = EmployeeLeaveHistory::getUrl([
+            'employeeId' => $record->publicKey(),
+            'returnUrl' => request()->fullUrl(),
+        ]);
+
+        return new HtmlString(
+            '<a href="'.e($url).'" style="display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;padding:10px 14px;text-decoration:none;">Leave History</a>'
         );
     }
 
@@ -539,15 +556,15 @@ trait ManagesEmployeeDetailsForm
                                         ->label('Leave Count')
                                         ->numeric()
                                         ->minValue(0)
-                                        ->disabled($isReadOnly)
-                                        ->dehydrated(! $isReadOnly),
+                                        ->disabled()
+                                        ->dehydrated(false),
 
                                     TextInput::make('birthday_leave_credits')
                                         ->label('Birthday Leave Count')
                                         ->numeric()
                                         ->minValue(0)
-                                        ->disabled($isReadOnly)
-                                        ->dehydrated(! $isReadOnly),
+                                        ->disabled()
+                                        ->dehydrated(false),
 
                                     TextInput::make('leave_credits_year')
                                         ->label('Leave Year')
@@ -558,6 +575,11 @@ trait ManagesEmployeeDetailsForm
                                     'default' => 1,
                                     'md' => 3,
                                 ]),
+
+                            Placeholder::make('leave_history_button')
+                                ->hiddenLabel()
+                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->leaveHistoryButton($record ?? ($this->employeeRecord ?? null)))
+                                ->columnSpanFull(),
                         ]),
 
                     Tabs\Tab::make('Salary')

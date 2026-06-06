@@ -53,6 +53,7 @@ Route::get('/leave-attachments/{leave}', function (Leave $leave) {
 
     return Storage::disk('local')->response($leave->attachment_path, $leave->attachment_name);
 })
+    ->withTrashed()
     ->middleware('auth')
     ->name('leave.attachments.show');
 
