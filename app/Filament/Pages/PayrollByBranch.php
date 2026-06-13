@@ -48,7 +48,7 @@ class PayrollByBranch extends Page implements HasForms
     public function mount(): void
     {
         $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
-        $this->branch_id = Branch::resolvePublicId(request()->query('branchId')) ?: Branch::query()->orderBy('branch_name')->value('id');
+        $this->branch_id = $this->resolveBranchId();
         $this->period_display = PayrollPeriod::query()->find($this->period_id)?->title ?? 'No payroll period selected';
 
         $this->form->fill([
@@ -70,7 +70,7 @@ class PayrollByBranch extends Page implements HasForms
 
                 Select::make('branch_id')
                     ->label('Branch')
-                    ->options(fn (): array => Branch::query()->orderBy('branch_name')->pluck('branch_name', 'id')->all())
+                    ->options(fn (): array => app(PayrollCalculator::class)->branchOptionsForPeriod($this->selectedPeriod))
                     ->searchable()
                     ->reactive(),
             ])
@@ -95,6 +95,21 @@ class PayrollByBranch extends Page implements HasForms
         }
 
         return app(PayrollCalculator::class)->rows($this->selectedPeriod, (int) $this->branch_id);
+    }
+
+    protected function resolveBranchId(): ?string
+    {
+        $selectedPeriod = filled($this->period_id) ? PayrollPeriod::query()->find($this->period_id) : null;
+        $branchOptions = app(PayrollCalculator::class)->branchOptionsForPeriod($selectedPeriod);
+        $requestedBranchId = Branch::resolvePublicId(request()->query('branchId'));
+
+        if ($requestedBranchId && array_key_exists($requestedBranchId, $branchOptions)) {
+            return (string) $requestedBranchId;
+        }
+
+        $firstBranchId = array_key_first($branchOptions);
+
+        return filled($firstBranchId) ? (string) $firstBranchId : null;
     }
 
     public function getAtmRowsProperty(): Collection

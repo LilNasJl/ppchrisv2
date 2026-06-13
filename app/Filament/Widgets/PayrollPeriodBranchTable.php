@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Filament\Pages\BranchPayrollEmployees;
 use App\Models\Branch;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodBranchExclusion;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -27,7 +28,13 @@ class PayrollPeriodBranchTable extends TableWidget
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => Branch::query()->orderBy('branch_name'))
+            ->query(fn (): Builder => Branch::query()
+                ->when(filled($this->periodId), function (Builder $query): void {
+                    $query->whereNotIn('id', PayrollPeriodBranchExclusion::query()
+                        ->select('branch_id')
+                        ->where('payroll_period_id', $this->periodId));
+                })
+                ->orderBy('branch_name'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')

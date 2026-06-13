@@ -62,7 +62,16 @@ class EmployeePayroll extends Page
             return null;
         }
 
-        return app(PayrollCalculator::class)->row($this->employee, $this->selectedPeriod);
+        $calculator = app(PayrollCalculator::class);
+
+        if (
+            $calculator->isBranchExcluded($this->selectedPeriod, $this->employee->branch_id)
+            || $calculator->isEmployeeExcluded($this->selectedPeriod, $this->employee->id)
+        ) {
+            return null;
+        }
+
+        return $calculator->row($this->employee, $this->selectedPeriod);
     }
 
     #[Override]

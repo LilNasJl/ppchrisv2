@@ -17,6 +17,7 @@ use App\Models\Leave;
 use App\Models\Memo;
 use App\Models\MemoType;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodBranchExclusion;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSignatory;
 use App\Models\SystemAccount;
@@ -114,6 +115,7 @@ class AppServiceProvider extends ServiceProvider
             Memo::class,
             MemoType::class,
             PayrollPeriod::class,
+            PayrollPeriodBranchExclusion::class,
             PayrollPeriodEmployeeExclusion::class,
             PayrollSignatory::class,
             Role::class,

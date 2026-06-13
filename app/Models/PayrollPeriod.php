@@ -79,6 +79,11 @@ class PayrollPeriod extends Model
         return $this->hasMany(PayrollPeriodEmployeeExclusion::class);
     }
 
+    public function branchExclusions(): HasMany
+    {
+        return $this->hasMany(PayrollPeriodBranchExclusion::class);
+    }
+
     public function calculationSetting(): HasOne
     {
         return $this->hasOne(PayrollCalculationSetting::class);

@@ -41,6 +41,12 @@ class PayrollPeriodsTable
                     ->date()
                     ->sortable(),
 
+                TextColumn::make('auto_lock_on')
+                    ->label('Auto Lock On')
+                    ->getStateUsing(fn (PayrollPeriod $record): ?string => $record->date_payout?->copy()->addDay()->toDateString())
+                    ->date()
+                    ->tooltip('Automatic lock runs after the payout date.'),
+
                 ToggleColumn::make('is_locked')
                     ->label('Locked')
                     ->onColor('danger')

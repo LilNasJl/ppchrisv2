@@ -2,9 +2,9 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Employee;
+use App\Models\Branch;
 use App\Models\PayrollPeriod;
-use App\Models\PayrollPeriodEmployeeExclusion;
+use App\Models\PayrollPeriodBranchExclusion;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -17,13 +17,13 @@ use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
-class PayrollRosterTable extends TableWidget
+class PayrollRosterBranchTable extends TableWidget
 {
     use HasWidgetShield;
 
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $heading = 'Employee Payroll Roster Exemptions';
+    protected static ?string $heading = 'Branch Payroll Roster Exemptions';
 
     public ?int $periodId = null;
 
@@ -31,7 +31,7 @@ class PayrollRosterTable extends TableWidget
     {
         return $table
             ->query(fn (): Builder => PayrollPeriod::query()
-                ->withCount('employeeExclusions')
+                ->withCount('branchExclusions')
                 ->when(
                     filled($this->periodId),
                     fn (Builder $query) => $query->whereKey($this->periodId),
@@ -64,71 +64,65 @@ class PayrollRosterTable extends TableWidget
                     ->label('Locked')
                     ->boolean(),
 
-                TextColumn::make('employee_exclusions_count')
-                    ->label('Exempted Employees')
+                TextColumn::make('branch_exclusions_count')
+                    ->label('Exempted Branches')
                     ->badge(),
             ])
             ->recordActions([
                 Action::make('manageExemptions')
                     ->label('Manage Exempted')
-                    ->icon(Heroicon::UserMinus)
+                    ->icon(Heroicon::BuildingOffice2)
                     ->schema([
-                        Select::make('employee_ids')
-                            ->label('Employees not included in this payroll period')
+                        Select::make('branch_ids')
+                            ->label('Branches not included in this payroll period')
                             ->multiple()
                             ->searchable()
                             ->preload()
-                            ->options(fn (): array => $this->employeeOptions())
+                            ->options(fn (): array => $this->branchOptions())
                             ->columnSpanFull(),
                     ])
                     ->fillForm(fn (PayrollPeriod $record): array => [
-                        'employee_ids' => $record->employeeExclusions()
-                            ->pluck('employee_id')
+                        'branch_ids' => $record->branchExclusions()
+                            ->pluck('branch_id')
                             ->map(fn (int $id): string => (string) $id)
                             ->all(),
                     ])
                     ->disabled(fn (PayrollPeriod $record): bool => (bool) $record->is_locked)
                     ->tooltip(fn (PayrollPeriod $record): ?string => $record->is_locked ? 'Locked payroll periods cannot be changed.' : null)
-                    ->modalHeading('Payroll roster exemptions')
+                    ->modalHeading('Branch payroll roster exemptions')
                     ->modalSubmitActionLabel('Save')
                     ->action(function (PayrollPeriod $record, array $data): void {
-                        $employeeIds = collect($data['employee_ids'] ?? [])
+                        $branchIds = collect($data['branch_ids'] ?? [])
                             ->map(fn ($id): int => (int) $id)
                             ->filter()
                             ->unique()
                             ->values();
 
-                        DB::transaction(function () use ($record, $employeeIds): void {
-                            PayrollPeriodEmployeeExclusion::query()
+                        DB::transaction(function () use ($record, $branchIds): void {
+                            PayrollPeriodBranchExclusion::query()
                                 ->where('payroll_period_id', $record->id)
-                                ->whereNotIn('employee_id', $employeeIds)
+                                ->whereNotIn('branch_id', $branchIds)
                                 ->delete();
 
-                            $employeeIds->each(fn (int $employeeId) => PayrollPeriodEmployeeExclusion::firstOrCreate([
+                            $branchIds->each(fn (int $branchId) => PayrollPeriodBranchExclusion::firstOrCreate([
                                 'payroll_period_id' => $record->id,
-                                'employee_id' => $employeeId,
+                                'branch_id' => $branchId,
                             ]));
                         });
 
                         Notification::make()
-                            ->title('Payroll roster updated')
+                            ->title('Branch payroll roster updated')
                             ->success()
                             ->send();
                     }),
             ]);
     }
 
-    protected function employeeOptions(): array
+    protected function branchOptions(): array
     {
-        return Employee::query()
-            ->with('branch')
-            ->activeEmployment()
-            ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
-            ->orderBy('uid')
-            ->get()
-            ->mapWithKeys(fn (Employee $employee): array => [
-                $employee->id => ($employee->company_id ?? 'N/A').' - '.$employee->full_name.' ('.($employee->branch?->branch_name ?: 'No branch').')',
-            ])
+        return Branch::query()
+            ->orderBy('branch_name')
+            ->pluck('branch_name', 'id')
             ->all();
     }
 }

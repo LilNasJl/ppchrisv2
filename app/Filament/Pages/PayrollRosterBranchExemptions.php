@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\PayrollRosterBranchTable;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollCalculator;
 use BackedEnum;
@@ -11,17 +12,19 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Override;
 
-class PayrollRoster extends Page
+class PayrollRosterBranchExemptions extends Page
 {
     use HasPageShield;
 
-    protected string $view = 'filament.pages.payroll-roster';
+    protected string $view = 'filament.pages.payroll-roster-table';
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Payroll Roster';
+    protected static ?string $title = 'Branch Payroll Roster Exemptions';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::ClipboardDocumentList;
+    protected static ?string $slug = 'payroll-roster/branch-exemptions';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
 
     public ?int $periodId = null;
 
@@ -36,8 +39,8 @@ class PayrollRoster extends Page
     public function getTitle(): string
     {
         return $this->period?->title
-            ? 'Payroll Roster - '.$this->period->title
-            : 'Payroll Roster';
+            ? 'Branch Exemptions - '.$this->period->title
+            : 'Branch Payroll Roster Exemptions';
     }
 
     public function getWidgetData(): array
@@ -47,16 +50,6 @@ class PayrollRoster extends Page
         ];
     }
 
-    public function branchExemptionUrl(): string
-    {
-        return PayrollRosterBranchExemptions::getUrl(['periodId' => $this->period?->publicKey()]);
-    }
-
-    public function employeeExemptionUrl(): string
-    {
-        return PayrollRosterEmployeeExemptions::getUrl(['periodId' => $this->period?->publicKey()]);
-    }
-
     #[Override]
     protected function getHeaderActions(): array
     {
@@ -64,9 +57,15 @@ class PayrollRoster extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => filled($this->periodId)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period?->publicKey()])
-                    : Payroll::getUrl()),
+                ->url(fn (): string => PayrollRoster::getUrl(['periodId' => $this->period?->publicKey()])),
+        ];
+    }
+
+    #[Override]
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            PayrollRosterBranchTable::class,
         ];
     }
 }

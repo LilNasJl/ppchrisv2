@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodBranchExclusion;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
 use Carbon\Carbon;
@@ -106,8 +108,54 @@ class PayrollCalculator
             ->pluck('employee_id')
             ->all();
 
+        $excludedBranchIds = $this->excludedBranchIds($period);
+
         return $this->employeesQuery($branchId)
-            ->when($excludedEmployeeIds !== [], fn (Builder $query) => $query->whereNotIn('employees.id', $excludedEmployeeIds));
+            ->when($excludedEmployeeIds !== [], fn (Builder $query) => $query->whereNotIn('employees.id', $excludedEmployeeIds))
+            ->when($excludedBranchIds !== [], fn (Builder $query) => $query->whereNotIn('employees.branch_id', $excludedBranchIds));
+    }
+
+    public function excludedBranchIds(PayrollPeriod $period): array
+    {
+        return PayrollPeriodBranchExclusion::query()
+            ->where('payroll_period_id', $period->id)
+            ->pluck('branch_id')
+            ->all();
+    }
+
+    public function branchOptionsForPeriod(?PayrollPeriod $period): array
+    {
+        $excludedBranchIds = $period ? $this->excludedBranchIds($period) : [];
+
+        return Branch::query()
+            ->when($excludedBranchIds !== [], fn (Builder $query) => $query->whereNotIn('id', $excludedBranchIds))
+            ->orderBy('branch_name')
+            ->pluck('branch_name', 'id')
+            ->all();
+    }
+
+    public function isBranchExcluded(PayrollPeriod $period, ?int $branchId): bool
+    {
+        if (blank($branchId)) {
+            return false;
+        }
+
+        return PayrollPeriodBranchExclusion::query()
+            ->where('payroll_period_id', $period->id)
+            ->where('branch_id', $branchId)
+            ->exists();
+    }
+
+    public function isEmployeeExcluded(PayrollPeriod $period, ?int $employeeId): bool
+    {
+        if (blank($employeeId)) {
+            return false;
+        }
+
+        return PayrollPeriodEmployeeExclusion::query()
+            ->where('payroll_period_id', $period->id)
+            ->where('employee_id', $employeeId)
+            ->exists();
     }
 
     protected function hasSnapshots(PayrollPeriod $period, ?int $branchId = null): bool

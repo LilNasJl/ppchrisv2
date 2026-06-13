@@ -6,6 +6,8 @@ use App\Filament\Pages\EmployeePayroll;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodBranchExclusion;
+use App\Models\PayrollPeriodEmployeeExclusion;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -35,6 +37,15 @@ class BranchPayrollEmployeeTable extends TableWidget
                 ->with(['user', 'designation', 'branch'])
                 ->activeEmployment()
                 ->where('branch_id', $this->branchId)
+                ->when(
+                    $this->isBranchExcluded(),
+                    fn (Builder $query) => $query->whereRaw('1 = 0')
+                )
+                ->when(filled($this->periodId), function (Builder $query): void {
+                    $query->whereNotIn('employees.id', PayrollPeriodEmployeeExclusion::query()
+                        ->select('employee_id')
+                        ->where('payroll_period_id', $this->periodId));
+                })
                 ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
                 ->orderBy('uid'))
             ->columns([
@@ -79,5 +90,17 @@ class BranchPayrollEmployeeTable extends TableWidget
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
             ]);
+    }
+
+    protected function isBranchExcluded(): bool
+    {
+        if (blank($this->periodId) || blank($this->branchId)) {
+            return false;
+        }
+
+        return PayrollPeriodBranchExclusion::query()
+            ->where('payroll_period_id', $this->periodId)
+            ->where('branch_id', $this->branchId)
+            ->exists();
     }
 }
