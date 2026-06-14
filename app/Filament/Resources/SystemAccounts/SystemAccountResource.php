@@ -25,6 +25,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
+use STS\FilamentImpersonate\Actions\Impersonate;
 use UnitEnum;
 
 class SystemAccountResource extends Resource
@@ -172,6 +173,10 @@ class SystemAccountResource extends Resource
                 ActionGroup::make([
                     ViewAction::make(),
                     EditAction::make(),
+                    Impersonate::make()
+                        ->label('Impersonate')
+                        ->redirectTo(url('/hr'))
+                        ->withoutSpa(),
                     DeleteAction::make(),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

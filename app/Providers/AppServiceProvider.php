@@ -24,11 +24,15 @@ use App\Models\SystemAccount;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Observers\HrActionNotificationObserver;
+use App\Services\AccountLogService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -56,7 +60,19 @@ class AppServiceProvider extends ServiceProvider
             $model::observe(HrActionNotificationObserver::class);
         }
 
+        $this->registerAccountLogEvents();
         $this->ensureCurrentPayrollPeriodForWebRequests();
+    }
+
+    protected function registerAccountLogEvents(): void
+    {
+        Event::listen(Login::class, function (Login $event): void {
+            app(AccountLogService::class)->record('login', $event->user);
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            app(AccountLogService::class)->record('logout', $event->user);
+        });
     }
 
     protected function ensureCurrentPayrollPeriodForWebRequests(): void
