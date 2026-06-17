@@ -16,7 +16,7 @@ class DtrImportController extends Controller
         $data = $request->validate([
             'import_name' => ['required', 'string', 'max:191'],
             'batch_id' => ['nullable', 'string', 'max:191'],
-            'rows' => ['required', 'array', 'min:1', 'max:500'],
+            'rows' => ['required', 'array', 'min:1', 'max:10000'],
             'rows.*' => ['array'],
         ]);
 

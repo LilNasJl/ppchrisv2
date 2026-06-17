@@ -47,7 +47,6 @@
 const params=new URLSearchParams(location.search);
 const endpoint=params.get('endpoint')||'/hr-tools/import/dtr';
 const csrf=params.get('csrf')||'';
-const chunkSize=100;
 let rows=[];
 let fallbackBatch=genBatchId();
 const el=id=>document.getElementById(id);
@@ -101,19 +100,21 @@ async function runImport(){
   el('errors').innerHTML='';
   el('success').textContent='0';
   el('failed').textContent='0';
-  let ok=0,bad=0;
-  for(let i=0;i<rows.length;i+=chunkSize){
-    const chunk=rows.slice(i,i+chunkSize);
-    setStatus('Importing rows '+(i+1)+'-'+Math.min(i+chunkSize,rows.length)+' of '+rows.length+' ...');
-    const json=await postRows(chunk,importName);
-    ok+=json.successful||0;
-    bad+=json.failed||0;
+  try{
+    setStatus('Validating '+rows.length+' row(s) before saving ...');
+    const json=await postRows(rows,importName);
+    const ok=json.successful||0;
+    const bad=json.failed||0;
     el('success').textContent=ok;
     el('failed').textContent=bad;
     if(json.batch_id)el('batch').textContent=json.batch_id;
-    renderErrors(json.errors||[],i);
+    renderErrors(json.errors||[],0);
+    setStatus(json.message||('Import complete: '+ok+' imported, '+bad+' failed.'), bad>0);
+  }catch(err){
+    setStatus(err.message||'Import request failed.',true);
+  }finally{
+    el('import').disabled=!(rows.length&&el('importName').value.trim());
   }
-  setStatus('Import complete: '+ok+' imported, '+bad+' failed.', bad>0);
 }
 
 async function postRows(chunk,importName){

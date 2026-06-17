@@ -17,7 +17,7 @@ class DtrImportService
 {
     /**
      * @param  array<int, array<string, mixed>>  $rows
-     * @return array{total:int, successful:int, failed:int, batch_id:string, errors:array<int, array<string, mixed>>}
+     * @return array{total:int, successful:int, failed:int, batch_id:string, message:string, errors:array<int, array<string, mixed>>}
      */
     public function importRows(array $rows, string $importName, ?string $fallbackBatchId = null): array
     {
@@ -28,30 +28,64 @@ class DtrImportService
             'successful' => 0,
             'failed' => 0,
             'batch_id' => $fallbackBatchId,
+            'message' => 'No rows were imported.',
             'errors' => [],
         ];
+
+        $validatedRows = [];
 
         foreach ($rows as $index => $row) {
             $rowNumber = $index + 1;
 
             try {
-                $this->importRow(is_array($row) ? $row : [], $importName, $fallbackBatchId);
-                $result['successful']++;
+                $validatedRows[] = $this->validateRow(is_array($row) ? $row : [], $fallbackBatchId);
             } catch (ValidationException $exception) {
+                $rowErrors = collect($exception->errors())->flatten()->all();
+
                 $result['failed']++;
-                $result['errors'][] = [
-                    'row' => $rowNumber,
-                    'message' => collect($exception->errors())->flatten()->implode(' '),
-                ];
+
+                foreach ($rowErrors ?: ['Unable to validate D.T.R row.'] as $message) {
+                    $result['errors'][] = [
+                        'row' => $rowNumber,
+                        'message' => $message,
+                    ];
+                }
             } catch (\Throwable $exception) {
                 report($exception);
 
                 $result['failed']++;
                 $result['errors'][] = [
                     'row' => $rowNumber,
-                    'message' => $exception->getMessage() ?: 'Unable to import D.T.R row.',
+                    'message' => $exception->getMessage() ?: 'Unable to validate D.T.R row.',
                 ];
             }
+        }
+
+        if ($result['errors'] !== []) {
+            $result['message'] = 'Import cancelled. No D.T.R records were saved. Fix the listed rows and import again.';
+
+            return $result;
+        }
+
+        try {
+            DB::transaction(function () use ($validatedRows, $importName, &$result): void {
+                foreach ($validatedRows as $data) {
+                    $this->saveValidatedRow($data, $importName);
+                    $result['successful']++;
+                }
+            });
+
+            $result['message'] = 'D.T.R import completed successfully.';
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $result['successful'] = 0;
+            $result['failed'] = count($rows);
+            $result['message'] = 'Import failed. No D.T.R records were saved.';
+            $result['errors'][] = [
+                'row' => 0,
+                'message' => $exception->getMessage() ?: 'Unable to save D.T.R import.',
+            ];
         }
 
         return $result;
@@ -63,7 +97,25 @@ class DtrImportService
      */
     public function importRow(array $row, string $importName, string $fallbackBatchId): array
     {
+        $data = $this->validateRow($row, $fallbackBatchId);
+
+        return DB::transaction(fn (): array => $this->saveValidatedRow($data, $importName));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    protected function validateRow(array $row, string $fallbackBatchId): array
+    {
+        $requiredColumnErrors = $this->getRequiredColumnErrors($row);
         $data = $this->normalizeRow($row, $fallbackBatchId);
+
+        if ($requiredColumnErrors !== []) {
+            throw ValidationException::withMessages([
+                'required_columns' => $requiredColumnErrors,
+            ]);
+        }
 
         $validator = Validator::make($data, [
             'batch_id' => ['required', 'string', 'max:191'],
@@ -72,40 +124,114 @@ class DtrImportService
             'fingerprint_id' => ['required', 'integer'],
             'date_in' => ['required', 'date'],
             'time_in' => ['required', 'date_format:H:i:s'],
-            'date_out' => ['nullable', 'date'],
-            'time_out' => ['nullable', 'date_format:H:i:s'],
+            'date_out' => ['required', 'date'],
+            'time_out' => ['required', 'date_format:H:i:s'],
             'schedule_type' => ['required', 'string', 'max:191'],
-            'schedule_start' => ['nullable', 'date_format:H:i:s'],
-            'schedule_end' => ['nullable', 'date_format:H:i:s'],
+            'schedule_start' => ['required', 'date_format:H:i:s'],
+            'schedule_end' => ['required', 'date_format:H:i:s'],
+        ], [
+            'batch_id.required' => 'Batch ID is required.',
+            'payroll_period_id.required' => 'Period ID is required.',
+            'branch_id.required' => 'Branch ID is required.',
+            'branch_id.exists' => 'Branch ID does not exist in the system.',
+            'fingerprint_id.required' => 'Fingerprint ID is required.',
+            'date_in.required' => 'Date In is required or has an invalid date format.',
+            'date_out.required' => 'Date Out is required or has an invalid date format.',
+            'time_in.required' => 'Time In is required or has an invalid time format.',
+            'time_out.required' => 'Time Out is required or has an invalid time format.',
+            'schedule_type.required' => 'Schedule Type is required.',
+            'schedule_start.required' => 'Schedule Start is required or has an invalid time format.',
+            'schedule_end.required' => 'Schedule End is required or has an invalid time format.',
         ]);
 
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->errors()->toArray());
         }
 
-        return DB::transaction(function () use ($data, $importName): array {
-            $record = new Dtr;
+        return $data;
+    }
 
-            $record->forceFill([
-                'batch_id' => $data['batch_id'],
-                'payroll_period_id' => $data['payroll_period_id'],
-                'branch_id' => $data['branch_id'],
-                'fingerprint_id' => $data['fingerprint_id'],
-                'date_in' => $data['date_in'],
-                'time_in' => $data['time_in'],
-                'date_out' => $data['date_out'],
-                'time_out' => $data['time_out'],
-                'schedule_type' => $data['schedule_type'],
-                'schedule_start' => $data['schedule_start'],
-                'schedule_end' => $data['schedule_end'],
-                ...$this->getImportMetadata($data, $importName),
-            ])->save();
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{id:int, batch_id:?string}
+     */
+    protected function saveValidatedRow(array $data, string $importName): array
+    {
+        $record = new Dtr;
 
-            return [
-                'id' => $record->id,
-                'batch_id' => $record->batch_id,
-            ];
-        });
+        $record->forceFill([
+            'batch_id' => $data['batch_id'],
+            'payroll_period_id' => $data['payroll_period_id'],
+            'branch_id' => $data['branch_id'],
+            'fingerprint_id' => $data['fingerprint_id'],
+            'date_in' => $data['date_in'],
+            'time_in' => $data['time_in'],
+            'date_out' => $data['date_out'],
+            'time_out' => $data['time_out'],
+            'schedule_type' => $data['schedule_type'],
+            'schedule_start' => $data['schedule_start'],
+            'schedule_end' => $data['schedule_end'],
+            ...$this->getImportMetadata($data, $importName),
+        ])->save();
+
+        return [
+            'id' => $record->id,
+            'batch_id' => $record->batch_id,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<int, string>
+     */
+    protected function getRequiredColumnErrors(array $row): array
+    {
+        $requiredColumns = [
+            'Batch ID' => ['batch_id', 'batch id', 'batch'],
+            'Period ID' => ['payroll_period_id', 'period id', 'period_id', 'payroll period id'],
+            'Branch ID' => ['branch_id', 'branch id'],
+            'Fingerprint ID' => ['fingerprint_id', 'fingerprint id', 'uid', 'employee_id', 'employee_uid', 'user id'],
+            'Date In' => ['date_in', 'date in'],
+            'Time In' => ['time_in', 'time in'],
+            'Date Out' => ['date_out', 'date out'],
+            'Time Out' => ['time_out', 'time out'],
+            'Schedule Type' => ['schedule_type', 'schedule type', 'sched', 'schedule'],
+            'Schedule Start' => ['schedule_start', 'schedule start', 'sched_start'],
+            'Schedule End' => ['schedule_end', 'schedule end', 'sched_end'],
+        ];
+
+        $errors = [];
+        $emptyKeys = [];
+
+        foreach ($row as $key => $value) {
+            $normalizedKey = $this->normalizeKey((string) $key);
+
+            if ($normalizedKey === '') {
+                continue;
+            }
+
+            if (blank($this->cleanSpreadsheetValue($value))) {
+                $emptyKeys[$normalizedKey] = trim((string) $key);
+            }
+        }
+
+        foreach ($emptyKeys as $label) {
+            $errors[] = "{$label} is required.";
+        }
+
+        foreach ($requiredColumns as $label => $aliases) {
+            foreach ($aliases as $alias) {
+                if (array_key_exists($this->normalizeKey($alias), $emptyKeys)) {
+                    continue 2;
+                }
+            }
+
+            if (blank($this->cleanSpreadsheetValue($this->pick($row, $aliases)))) {
+                $errors[] = "{$label} is required.";
+            }
+        }
+
+        return $errors;
     }
 
     /**
@@ -432,6 +558,31 @@ class DtrImportService
             return Carbon::create(1899, 12, 30)
                 ->addDays((int) $state)
                 ->format('Y-m-d');
+        }
+
+        $state = trim((string) $state);
+
+        foreach ([
+            'Y-m-d',
+            'Y/m/d',
+            'd/m/Y',
+            'j/n/Y',
+            'd-m-Y',
+            'j-n-Y',
+            'm/d/Y',
+            'n/j/Y',
+            'm-d-Y',
+            'n-j-Y',
+        ] as $format) {
+            try {
+                $date = Carbon::createFromFormat('!'.$format, $state);
+
+                if ($date && $date->format($format) === $state) {
+                    return $date->format('Y-m-d');
+                }
+            } catch (\Throwable) {
+                //
+            }
         }
 
         try {
