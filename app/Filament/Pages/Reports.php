@@ -121,6 +121,7 @@ class Reports extends Page implements HasForms
     {
         return match ($this->report_type) {
             'employee_all' => ['Employee ID', 'Fullname', 'Designation', 'Department', 'Branch', 'Employment Status'],
+            'employee_age_oldest' => ['#', 'Employee ID', 'Fullname', 'Birthdate', 'Age', 'Designation', 'Department', 'Branch'],
 
             'employee_headcount_branch',
             'employee_headcount_designation',
@@ -148,6 +149,7 @@ class Reports extends Page implements HasForms
     {
         return match ($this->report_type) {
             'employee_all' => $this->allEmployeeRows(),
+            'employee_age_oldest' => $this->employeeAgeRows(),
             'employee_headcount_branch' => $this->headcountBy('branch.branch_name', 'No Branch'),
             'employee_headcount_designation' => $this->headcountBy('designation.title', 'No Designation'),
             'employee_headcount_department' => $this->headcountBy('department.name', 'No Department'),
@@ -253,6 +255,26 @@ class Reports extends Page implements HasForms
                 $employee->department?->name ?: 'No Department',
                 $employee->branch?->branch_name ?: 'No Branch',
                 $employee->employment_type ?: 'Active',
+            ]);
+    }
+
+    protected function employeeAgeRows(): Collection
+    {
+        return $this->activeEmployeeQuery()
+            ->orderByRaw('birthdate IS NULL')
+            ->orderBy('birthdate')
+            ->orderBy('lastname')
+            ->get()
+            ->values()
+            ->map(fn (Employee $employee, int $index): array => [
+                $index + 1,
+                $employee->company_id ?: 'No Employee ID',
+                $employee->full_name,
+                $employee->birthdate ? Carbon::parse($employee->birthdate)->format('Y-m-d') : 'Not Set',
+                $employee->birthdate ? Carbon::parse($employee->birthdate)->age : 'Not Set',
+                $employee->designation?->title ?: 'No Designation',
+                $employee->department?->name ?: 'No Department',
+                $employee->branch?->branch_name ?: 'No Branch',
             ]);
     }
 
@@ -499,6 +521,7 @@ class Reports extends Page implements HasForms
                 'subtitle' => 'Headcount, demographics, and employment status',
                 'options' => [
                     'employee_all' => 'All Employees',
+                    'employee_age_oldest' => 'Active Employees by Age',
                     'employee_headcount_branch' => 'Headcount by Branch',
                     'employee_headcount_designation' => 'Headcount by Designation',
                     'employee_headcount_department' => 'Headcount by Department',

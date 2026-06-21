@@ -154,17 +154,6 @@ class DtrManageTable extends BaseWidget
                     }),
             ])
             ->headerActions([
-                Action::make('viewComments')
-                    ->label('View Comments')
-                    ->icon('heroicon-m-chat-bubble-left-right')
-                    ->modalHeading('D.T.R Comments')
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Close')
-                    ->modalWidth('4xl')
-                    ->modalContent(fn () => view('filament.widgets.dtr-comments-modal', [
-                        'comments' => $this->getDtrComments(),
-                    ])),
-
                 Action::make('exportDtr')
                     ->label('Export D.T.R')
                     ->icon('heroicon-m-arrow-down-tray')
@@ -177,6 +166,28 @@ class DtrManageTable extends BaseWidget
                     ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
 
                 ActionGroup::make([
+                    Action::make('dtrOverview')
+                        ->label('D.T.R Overview')
+                        ->icon('heroicon-m-chart-bar')
+                        ->modalHeading('D.T.R Overview')
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Close')
+                        ->modalWidth('3xl')
+                        ->modalContent(fn () => view('filament.widgets.dtr-overview-modal', [
+                            'overview' => $this->getDtrOverview(),
+                        ])),
+
+                    Action::make('viewComments')
+                        ->label('View Comments')
+                        ->icon('heroicon-m-chat-bubble-left-right')
+                        ->modalHeading('D.T.R Comments')
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Close')
+                        ->modalWidth('4xl')
+                        ->modalContent(fn () => view('filament.widgets.dtr-comments-modal', [
+                            'comments' => $this->getDtrComments(),
+                        ])),
+
                     Action::make('addDtr')
                         ->label('Add D.T.R')
                         ->icon('heroicon-m-plus-circle')
@@ -620,6 +631,41 @@ class DtrManageTable extends BaseWidget
             ->orderBy('date_in')
             ->orderBy('time_in')
             ->get();
+    }
+
+    protected function getDtrOverview(): array
+    {
+        if (blank($this->getSelectedPayrollPeriodId()) || blank($this->getBranchId()) || blank($this->getFingerprintId())) {
+            return [
+                'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
+                'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
+                'total_days_work' => 0,
+                'late' => 0,
+                'undertime' => 0,
+                'credited_overtime' => 0,
+                'credited_work_hrs' => 0,
+            ];
+        }
+
+        $records = $this->getScopedDtrQuery()->get();
+        $workDates = $records
+            ->filter(fn (ModelsDtr $record): bool => ! (bool) $record->is_absent
+                && blank($record->leave_id)
+                && ! in_array($record->schedule_type, ['Absent', 'Leave', 'Overtime'], true)
+                && filled($record->date_in))
+            ->map(fn (ModelsDtr $record): string => Carbon::parse($record->date_in)->toDateString())
+            ->unique()
+            ->values();
+
+        return [
+            'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
+            'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
+            'total_days_work' => $workDates->count(),
+            'late' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
+            'undertime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
+            'credited_overtime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
+            'credited_work_hrs' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_work_hrs ?? 0)),
+        ];
     }
 
     protected function getEditFormData(ModelsDtr $record): array

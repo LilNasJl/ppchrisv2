@@ -20,6 +20,7 @@ class DesignationsTable
         return $table
             ->columns([
                 TextColumn::make('index')
+                    ->label('#')
                     ->sortable()
                     ->searchable()
                     ->rowIndex(),

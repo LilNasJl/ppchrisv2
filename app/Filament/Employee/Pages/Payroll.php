@@ -11,6 +11,7 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Builder;
 
 class Payroll extends Page implements HasForms
 {
@@ -40,8 +41,9 @@ class Payroll extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->period_id = (string) PayrollPeriod::query()
-            ->where('is_locked', true)
+        $employee = $this->employee;
+
+        $this->period_id = (string) $this->availablePayrollPeriodsQuery($employee)
             ->newestFirst()
             ->value('id');
 
@@ -55,8 +57,7 @@ class Payroll extends Page implements HasForms
         return [
             Select::make('period_id')
                 ->label('Payroll Period')
-                ->options(fn (): array => PayrollPeriod::query()
-                    ->where('is_locked', true)
+                ->options(fn (): array => $this->availablePayrollPeriodsQuery()
                     ->newestFirst()
                     ->pluck('title', 'id')
                     ->all())
@@ -77,7 +78,7 @@ class Payroll extends Page implements HasForms
     public function getSelectedPeriodProperty(): ?PayrollPeriod
     {
         return filled($this->period_id)
-            ? PayrollPeriod::query()->where('is_locked', true)->find($this->period_id)
+            ? $this->availablePayrollPeriodsQuery()->find($this->period_id)
             : null;
     }
 
@@ -87,6 +88,28 @@ class Payroll extends Page implements HasForms
             return null;
         }
 
-        return app(PayrollCalculator::class)->row($this->employee, $this->selectedPeriod);
+        $calculator = app(PayrollCalculator::class);
+
+        if ($calculator->isEmployeePayrollExcluded($this->selectedPeriod, $this->employee)) {
+            return null;
+        }
+
+        return $calculator->row($this->employee, $this->selectedPeriod);
+    }
+
+    protected function availablePayrollPeriodsQuery(?Employee $employee = null): Builder
+    {
+        $employee ??= $this->employee;
+
+        $query = PayrollPeriod::query()
+            ->where('is_locked', true);
+
+        if (! $employee) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query
+            ->whereDoesntHave('branchExclusions', fn (Builder $query) => $query->where('branch_id', $employee->branch_id))
+            ->whereDoesntHave('employeeExclusions', fn (Builder $query) => $query->where('employee_id', $employee->id));
     }
 }

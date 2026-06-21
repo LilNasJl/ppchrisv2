@@ -64,10 +64,7 @@ class EmployeePayroll extends Page
 
         $calculator = app(PayrollCalculator::class);
 
-        if (
-            $calculator->isBranchExcluded($this->selectedPeriod, $this->employee->branch_id)
-            || $calculator->isEmployeeExcluded($this->selectedPeriod, $this->employee->id)
-        ) {
+        if ($calculator->isEmployeePayrollExcluded($this->selectedPeriod, $this->employee)) {
             return null;
         }
 

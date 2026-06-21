@@ -14,7 +14,7 @@
 
     .payroll-table {
         width: 100%;
-        min-width: 2200px;
+        min-width: 2140px;
         border-collapse: collapse;
         font-size: 12px;
     }
@@ -134,7 +134,6 @@
                 <th rowspan="2">Rate Per Day</th>
                 <th rowspan="2">Rate Per Hour</th>
                 <th rowspan="2">Days Work</th>
-                <th rowspan="2">Total Pay</th>
                 <th rowspan="2">Salary Adjustment</th>
                 <th rowspan="2">Allowance</th>
                 <th colspan="2">Overtime</th>
@@ -179,7 +178,6 @@
                     <td class="text-right">{{ $money($row['rate_per_day']) }}</td>
                     <td class="text-right">{{ $money($row['rate_per_hour']) }}</td>
                     <td class="text-right">{{ $plainNumber($row['days_worked']) }}</td>
-                    <td class="text-right">{{ $money($row['total_pay']) }}</td>
                     <td class="text-right">{{ $money($row['salary_adjustment']) }}</td>
                     <td class="text-right">{{ $money($row['allowance']) }}</td>
                     <td class="text-right">{{ $plainNumber($row['overtime_hours']) }}</td>
@@ -206,7 +204,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="35" class="text-center">No payroll data available.</td>
+                    <td colspan="34" class="text-center">No payroll data available.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -216,7 +214,6 @@
                 <tr>
                     <td colspan="10">TOTAL</td>
                     <td class="text-right">{{ $plainNumber($rows->sum('days_worked')) }}</td>
-                    <td class="text-right">{{ $sum('total_pay') }}</td>
                     <td class="text-right">{{ $sum('salary_adjustment') }}</td>
                     <td class="text-right">{{ $sum('allowance') }}</td>
                     <td class="text-right">{{ $plainNumber($rows->sum('overtime_hours')) }}</td>

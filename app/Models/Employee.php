@@ -15,12 +15,14 @@ class Employee extends Model
 
     public const REGULAR_WORK_DAYS_PER_MONTH = 26;
 
-    public const STATION_SIX_LEAVE_DESIGNATIONS = [
+    public const STATION_FIVE_LEAVE_DESIGNATIONS = [
         'FORECOURT ATTENDANT',
         'CASHIER/FORECOURT ATTENDANT',
         'CASHIER / FORECOURT ATTENDANT',
         'CASHIER/FOROCOURT ATTENDANT',
     ];
+
+    public const STATION_SIX_LEAVE_DESIGNATIONS = self::STATION_FIVE_LEAVE_DESIGNATIONS;
 
     public const ENDED_EMPLOYMENT_TYPES = [
         'Resigned',
@@ -282,8 +284,8 @@ class Employee extends Model
 
         $designationTitle = strtoupper(trim((string) $designationTitle));
 
-        return in_array($designationTitle, self::STATION_SIX_LEAVE_DESIGNATIONS, true)
-            ? 6
+        return in_array($designationTitle, self::STATION_FIVE_LEAVE_DESIGNATIONS, true)
+            ? 5
             : 10;
     }
 }

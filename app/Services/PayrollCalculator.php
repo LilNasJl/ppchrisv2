@@ -158,6 +158,12 @@ class PayrollCalculator
             ->exists();
     }
 
+    public function isEmployeePayrollExcluded(PayrollPeriod $period, Employee $employee): bool
+    {
+        return $this->isBranchExcluded($period, $employee->branch_id)
+            || $this->isEmployeeExcluded($period, $employee->id);
+    }
+
     protected function hasSnapshots(PayrollPeriod $period, ?int $branchId = null): bool
     {
         return PayrollSnapshot::query()
@@ -343,7 +349,7 @@ class PayrollCalculator
             'rate_per_day' => 'RATE PER DAY',
             'rate_per_hour' => 'RATE PER HOUR',
             'days_worked' => 'DAYS WORK',
-            'total_pay' => 'TOTAL PAY',
+            'total_pay' => 'TOTAL PAY (DAILY RATE ONLY)',
             'salary_adjustment' => 'SALARY ADJUSTMENT',
             'allowance' => 'ALLOWANCE',
             'overtime_hours' => 'OVERTIME HRS',

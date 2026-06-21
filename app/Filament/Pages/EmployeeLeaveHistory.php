@@ -525,7 +525,10 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
 
     protected function getReturnUrl(): string
     {
-        return $this->returnUrl ?: EmployeeDetails::getUrl();
+        return $this->returnUrl ?: ViewEmployeeDetails::getUrl([
+            'employeeId' => $this->employee?->publicKey(),
+            'returnUrl' => EmployeeDetails::getUrl(),
+        ]);
     }
 
     protected function normalizeReturnUrl(mixed $url): ?string
@@ -535,6 +538,11 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
         }
 
         $appUrl = url('/');
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (is_string($path) && preg_match('#^/livewire(?:-[A-Za-z0-9]+)?/update$#', $path)) {
+            return null;
+        }
 
         if (str_starts_with($url, $appUrl) || str_starts_with($url, '/')) {
             return $url;

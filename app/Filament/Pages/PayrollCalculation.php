@@ -26,6 +26,8 @@ class PayrollCalculation extends Page implements HasForms
 
     protected string $view = 'filament.pages.payroll-calculation';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;
 
     protected static string|UnitEnum|null $navigationGroup = 'Payroll Management';
