@@ -31,7 +31,7 @@ class ManageDeductions extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(ComplianceBenefits::getUrl()),
+                ->url(DeductionsManagement::getUrl()),
         ];
     }
 

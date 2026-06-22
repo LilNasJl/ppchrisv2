@@ -6,6 +6,7 @@ use App\Models\Deduction;
 use App\Models\Employee;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -18,6 +19,8 @@ use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class MyProfile extends Page implements HasForms
 {
@@ -27,13 +30,15 @@ class MyProfile extends Page implements HasForms
 
     protected static ?string $slug = 'my-profile';
 
-    protected static ?string $title = 'My Info';
+    protected static ?string $title = 'My Profile';
 
-    protected static ?string $navigationLabel = 'My Info';
+    protected static ?string $navigationLabel = 'My Profile';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::UserCircle;
 
-    protected static ?int $navigationSort = 5;
+    protected static string|\UnitEnum|null $navigationGroup = 'My Profile';
+
+    protected static ?int $navigationSort = 1;
 
     protected const DEDUCTION_GROUPS = [
         'Deductions' => [
@@ -53,6 +58,7 @@ class MyProfile extends Page implements HasForms
 
     public function mount(): void
     {
+        $user = auth()->user();
         $employee = $this->employee();
 
         $this->form->fill([
@@ -63,6 +69,11 @@ class MyProfile extends Page implements HasForms
                 'school_name', 'school_level', 'year_grad', 'rate_type', 'payment_type',
                 'daily_rate', 'monthly_rate', 'allowance',
             ]),
+            'account_employee_id' => Employee::companyIdFromUid($employee->uid),
+            'account_fingerprint_id' => $employee->fingerprint_id,
+            'account_full_name' => $employee->full_name ?? $user?->name,
+            'email' => $user?->email,
+            'profile_photo_path' => $user?->profile_photo_path,
             'designation' => $employee->designation?->title,
             'department' => $employee->department?->name,
             'branch' => $employee->branch?->branch_name,
@@ -81,6 +92,69 @@ class MyProfile extends Page implements HasForms
         return [
             Tabs::make('Profile Details')
                 ->tabs([
+                    Tabs\Tab::make('My Account')
+                        ->schema([
+                            Section::make('Account Overview')
+                                ->description('Review your account identity and update your sign-in details.')
+                                ->schema([
+                                    FileUpload::make('profile_photo_path')
+                                        ->label('Profile Picture')
+                                        ->image()
+                                        ->avatar()
+                                        ->previewable()
+                                        ->acceptedFileTypes(['image/png', 'image/jpeg'])
+                                        ->maxSize(3072)
+                                        ->disk('public')
+                                        ->directory('profile-photos')
+                                        ->visibility('public')
+                                        ->fetchFileInformation(false)
+                                        ->columnSpanFull(),
+
+                                    TextInput::make('account_employee_id')
+                                        ->label('Employee ID')
+                                        ->disabled()
+                                        ->dehydrated(false),
+
+                                    TextInput::make('account_fingerprint_id')
+                                        ->label('Fingerprint ID')
+                                        ->disabled()
+                                        ->dehydrated(false),
+
+                                    TextInput::make('account_full_name')
+                                        ->label('Full Name')
+                                        ->disabled()
+                                        ->dehydrated(false),
+
+                                    TextInput::make('email')
+                                        ->label('Email')
+                                        ->email()
+                                        ->required()
+                                        ->rules(fn () => [
+                                            Rule::unique('users', 'email')->ignore(auth()->id()),
+                                        ]),
+                                ])
+                                ->columns(2),
+
+                            Section::make('Security')
+                                ->schema([
+                                    TextInput::make('password')
+                                        ->label('New Password')
+                                        ->password()
+                                        ->revealable()
+                                        ->confirmed()
+                                        ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? Hash::make($state) : null)
+                                        ->dehydrated(fn (?string $state): bool => filled($state))
+                                        ->minLength(8),
+
+                                    TextInput::make('password_confirmation')
+                                        ->label('Confirm New Password')
+                                        ->password()
+                                        ->revealable()
+                                        ->dehydrated(false),
+                                ])
+                                ->columns(2),
+                        ]),
+
                     Tabs\Tab::make('Basic Info')
                         ->schema([
                             Section::make()
@@ -88,8 +162,7 @@ class MyProfile extends Page implements HasForms
                                     TextInput::make('lastname')->disabled()->dehydrated(false),
                                     TextInput::make('middlename')->disabled()->dehydrated(false),
                                     TextInput::make('firstname')->disabled()->dehydrated(false),
-                                    DatePicker::make('birthdate')
-                                        ->required(),
+                                    DatePicker::make('birthdate')->required(),
                                     Select::make('status')
                                         ->label('Civil Status')
                                         ->options([
@@ -102,7 +175,7 @@ class MyProfile extends Page implements HasForms
                                         ])
                                         ->required(),
                                     TextInput::make('gender')->disabled()->dehydrated(false),
-                                    TextInput::make('mobile')->label('Mobile Number')->required(),
+                                    TextInput::make('mobile')->label('Mobile Number'),
                                     TextInput::make('kids')->label('No. of Kids')->numeric(),
                                     Textarea::make('address')->label('Permanent Address')->required()->columnSpanFull(),
                                 ])
@@ -193,6 +266,7 @@ class MyProfile extends Page implements HasForms
                                 ->columns(2),
                         ]),
                 ])
+                ->persistTabInQueryString()
                 ->columnSpanFull(),
         ];
     }
@@ -200,6 +274,12 @@ class MyProfile extends Page implements HasForms
     public function save(): void
     {
         $data = $this->form->getState();
+
+        auth()->user()->update(collect($data)
+            ->only(['email', 'password', 'profile_photo_path'])
+            ->filter(fn (mixed $value): bool => filled($value))
+            ->all());
+
         $payload = collect($data)->only([
             'birthdate', 'status', 'mobile', 'kids', 'address', 'gsis', 'philhealth', 'pagibig', 'tin', 'sss',
             'school_name', 'school_level', 'year_grad',

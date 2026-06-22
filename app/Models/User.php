@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -107,7 +108,38 @@ class User extends Authenticatable implements FilamentUser
             return null;
         }
 
-        return '/storage/'.ltrim($this->profile_photo_path, '/');
+        $path = Str::of((string) $this->profile_photo_path)
+            ->replace('\\', '/')
+            ->trim()
+            ->ltrim('/')
+            ->toString();
+
+        if (Str::startsWith($path, ['http://', 'https://', 'data:'])) {
+            return $path;
+        }
+
+        if (Str::startsWith($path, 'storage/')) {
+            $path = Str::after($path, 'storage/');
+        }
+
+        if (Str::startsWith($path, 'public/')) {
+            $path = Str::after($path, 'public/');
+        }
+
+        if (! Storage::disk('public')->exists($path)) {
+            return null;
+        }
+
+        if (Str::startsWith($path, 'profile-photos/')) {
+            $profilePhotoPath = '/profile-photos/'.rawurlencode(basename($path));
+            $rootUrl = app()->runningInConsole()
+                ? rtrim((string) config('app.url'), '/')
+                : request()->getSchemeAndHttpHost();
+
+            return $rootUrl.$profilePhotoPath;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     public function designation()

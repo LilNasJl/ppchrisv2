@@ -213,6 +213,11 @@ class Employee extends Model
         return $this->hasMany(EmployeeDeduction::class, 'employee_id');
     }
 
+    public function loans()
+    {
+        return $this->hasMany(EmployeeLoan::class, 'employee_id');
+    }
+
     public function leaves()
     {
         return $this->hasMany(Leave::class, 'employee_id');

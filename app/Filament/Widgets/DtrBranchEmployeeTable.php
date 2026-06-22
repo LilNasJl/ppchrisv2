@@ -3,9 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\DtrManage;
-use App\Models\Branch;
 use App\Models\Employee;
-use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -42,9 +40,10 @@ class DtrBranchEmployeeTable extends TableWidget
                     ->label('#')
                     ->rowIndex(),
 
-                ImageColumn::make('user.profile_photo_path')
+                ImageColumn::make('profile_photo')
                     ->label('Profile')
-                    ->disk('public')
+                    ->getStateUsing(fn (Employee $record): ?string => $record->user?->profile_photo_url)
+                    ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
                     ->circular(),
 
                 TextColumn::make('uid')
@@ -72,9 +71,9 @@ class DtrBranchEmployeeTable extends TableWidget
                         ->label('Manage D.T.R')
                         ->icon(Heroicon::Cog6Tooth)
                         ->url(fn (Employee $record): string => DtrManage::getUrl([
-                            'periodId' => PayrollPeriod::query()->find($this->periodId)?->publicKey(),
-                            'branchId' => Branch::query()->find($record->branch_id)?->publicKey(),
-                            'employeeId' => $record->publicKey(),
+                            'periodId' => $this->periodId,
+                            'branchId' => $record->branch_id,
+                            'employeeId' => $record->id,
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

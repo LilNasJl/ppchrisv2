@@ -58,8 +58,13 @@ class DtrCalculator
             ? (int) $scheduleEndAt->diffInMinutes($actualOut)
             : 0;
 
-        $workMinutes = max(0, $scheduledMinutes - $late - $undertime + $earlyClockIn + $overtime);
-        $creditedWorkMinutes = max(0, $scheduledMinutes - $late - $undertime);
+        $baseWorkMinutes = max(0, $scheduledMinutes - $late - $undertime);
+        $isSaturdaySchedule = str($scheduleType ?? '')->lower()->contains('saturday');
+
+        $workMinutes = $isSaturdaySchedule
+            ? $baseWorkMinutes
+            : max(0, $baseWorkMinutes + $earlyClockIn + $overtime);
+        $creditedWorkMinutes = $baseWorkMinutes;
         $hasPendingOvertime = $overtime >= 30;
 
         return [

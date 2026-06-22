@@ -2,7 +2,7 @@
     <style>
         .birthday-page {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 340px;
+            grid-template-columns: minmax(0, 1fr);
             gap: 24px;
         }
 
@@ -82,24 +82,6 @@
             font-size: 12px;
             line-height: 1.25;
             overflow: hidden;
-        }
-
-        .birthday-list {
-            display: grid;
-            gap: 10px;
-        }
-
-        .birthday-list-item {
-            border: 1px solid rgba(148, 163, 184, .22);
-            border-radius: 8px;
-            padding: 10px;
-        }
-
-        .birthday-list-date {
-            color: #94a3b8;
-            font-size: 12px;
-            font-weight: 700;
-            margin-top: 2px;
         }
 
         @media (max-width: 1100px) {
@@ -229,23 +211,5 @@
                 </tbody>
             </table>
         </section>
-
-        <aside class="birthday-card">
-            <h3 style="font-size: 17px; font-weight: 800; margin-bottom: 12px;">Birthdays This Month</h3>
-
-            <div class="birthday-list">
-                @forelse ($this->monthBirthdays as $employee)
-                    <div class="birthday-list-item">
-                        <div style="font-weight: 800;">{{ $employee->full_name }}</div>
-                        <div class="birthday-list-date">{{ $employee->birthday_display }}</div>
-                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                            {{ $employee->branch?->branch_name ?: 'No branch' }}
-                        </div>
-                    </div>
-                @empty
-                    <div style="color: #94a3b8;">No active employee birthdays this month.</div>
-                @endforelse
-            </div>
-        </aside>
     </div>
 </x-filament-panels::page>

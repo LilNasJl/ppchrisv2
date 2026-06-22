@@ -122,7 +122,7 @@ class EmployeeComplianceBenefits extends Page implements HasForms
 
     protected function getReturnUrl(): string
     {
-        return $this->returnUrl ?: ComplianceBenefits::getUrl();
+        return $this->returnUrl ?: DeductionsManagement::getUrl();
     }
 
     protected function normalizeReturnUrl(mixed $url): ?string

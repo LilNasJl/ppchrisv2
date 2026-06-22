@@ -48,9 +48,10 @@ class PayrollVisibility extends Page implements HasTable
                     ->label('#')
                     ->rowIndex(),
 
-                ImageColumn::make('profile_photo_path')
+                ImageColumn::make('profile_photo')
                     ->label('Profile')
-                    ->disk('public')
+                    ->getStateUsing(fn ($record): ?string => $record->profile_photo_url)
+                    ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
                     ->circular(),
 
                 TextColumn::make('employee.uid')

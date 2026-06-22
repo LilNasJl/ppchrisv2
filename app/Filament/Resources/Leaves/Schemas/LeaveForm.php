@@ -4,6 +4,9 @@ namespace App\Filament\Resources\Leaves\Schemas;
 
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Services\DtrDayPartService;
+use App\Services\LeaveScheduleOptionService;
+use Carbon\Carbon;
 use Closure;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -27,6 +30,8 @@ class LeaveForm
                         ComponentsGroup::make([
                             Select::make('employee_id')
                                 ->label('Employee Name')
+                                ->live()
+                                ->afterStateUpdated(fn (Set $set): mixed => $set('half_day_schedule', null))
                                 ->searchable()
                                 ->getSearchResultsUsing(fn (string $search) => Employee::query()
                                     ->activeEmployment()
@@ -66,7 +71,18 @@ class LeaveForm
 
                             DatePicker::make('leave_from')
                                 ->label('Leave From')
-                                ->required(),
+                                ->required()
+                                ->rules([
+                                    fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                                        if (! (bool) $get('is_half_day') || blank($value)) {
+                                            return;
+                                        }
+
+                                        if (Carbon::parse($value)->isSaturday()) {
+                                            $fail('Saturday does not allow half-day leave. Use whole-day leave.');
+                                        }
+                                    },
+                                ]),
 
                             DatePicker::make('leave_to')
                                 ->label('Leave To')
@@ -89,13 +105,34 @@ class LeaveForm
                                 ->afterStateUpdated(function (Set $set, bool $state): void {
                                     if ($state) {
                                         $set('leave_type', Leave::HALF_DAY_LEAVE);
+                                        $set('half_day_period', DtrDayPartService::MORNING);
 
                                         return;
                                     }
 
                                     $set('leave_type', null);
+                                    $set('half_day_period', null);
                                 })
                                 ->default(false),
+
+                            Select::make('half_day_period')
+                                ->label('Half Day Period')
+                                ->options(app(DtrDayPartService::class)->dayPartOptions())
+                                ->visible(fn (Get $get): bool => (bool) $get('is_half_day'))
+                                ->required(fn (Get $get): bool => (bool) $get('is_half_day'))
+                                ->dehydrated(true),
+
+                            Select::make('half_day_schedule')
+                                ->label('Daily Rate Schedule')
+                                ->options(fn (Get $get): array => app(LeaveScheduleOptionService::class)
+                                    ->optionsForEmployee(Employee::query()->with('branch')->find($get('employee_id'))))
+                                ->visible(fn (Get $get): bool => (bool) $get('is_half_day')
+                                    && app(LeaveScheduleOptionService::class)->isDailyRateEmployee(Employee::query()->find($get('employee_id'))))
+                                ->required(fn (Get $get): bool => (bool) $get('is_half_day')
+                                    && app(LeaveScheduleOptionService::class)->isDailyRateEmployee(Employee::query()->find($get('employee_id'))))
+                                ->searchable()
+                                ->preload()
+                                ->dehydrated(true),
 
                             Textarea::make('reason')
                                 ->label('Reason')

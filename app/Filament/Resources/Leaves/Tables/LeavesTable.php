@@ -51,6 +51,19 @@ class LeavesTable
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('half_day_period')
+                    ->label('Period')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => filled($state) ? str($state)->title()->replace('_', ' ')->toString() : '-')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('half_day_schedule')
+                    ->label('Schedule')
+                    ->formatStateUsing(fn (?string $state): string => filled($state) ? str($state)->title()->replace('_', ' ')->toString() : '-')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('requested_days')
                     ->label('Days')
                     ->getStateUsing(fn (ModelsLeave $record): string => (string) $record->getRequestedLeaveDays()),

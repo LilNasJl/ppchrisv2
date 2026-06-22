@@ -7,6 +7,7 @@ use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
+use App\Services\DtrDayPartService;
 use App\Services\HolidayEntitlementService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -20,7 +21,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TimePicker;
-use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
@@ -101,6 +101,15 @@ class DtrManageTable extends BaseWidget
                         'Leave' => 'info',
                         'Overtime' => 'warning',
                         'Forgot to Punch', 'Absent' => 'danger',
+                        default => 'gray',
+                    }),
+
+                TextColumn::make('day_part')
+                    ->label('DAY PART')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
+                    ->color(fn (?string $state): string => match (app(DtrDayPartService::class)->normalize($state)) {
+                        DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 'info',
                         default => 'gray',
                     }),
 
@@ -204,7 +213,22 @@ class DtrManageTable extends BaseWidget
                         ->schema([
                             DatePicker::make('absence_date')
                                 ->label('Absence Date')
+                                ->live()
                                 ->required(),
+
+                            Select::make('absence_type')
+                                ->label('Absence Type')
+                                ->options(fn (): array => $this->getAbsenceTypeOptions())
+                                ->default('whole_day')
+                                ->live()
+                                ->required(),
+
+                            Select::make('day_part')
+                                ->label('Half Day Period')
+                                ->options(app(DtrDayPartService::class)->dayPartOptions())
+                                ->visible(fn (Get $get): bool => $get('absence_type') === 'half_day')
+                                ->required(fn (Get $get): bool => $get('absence_type') === 'half_day')
+                                ->dehydrated(true),
 
                             Textarea::make('comment')
                                 ->label('Comment')
@@ -286,10 +310,19 @@ class DtrManageTable extends BaseWidget
         return [
             Group::make()
                 ->schema([
-                    Toggle::make('overtime_only')
-                        ->label('Overtime Only')
+                    Select::make('dtr_type')
+                        ->label('D.T.R Type')
+                        ->options(fn (Get $get): array => $this->getDtrTypeOptions($get('date_in')))
+                        ->default('regular')
                         ->live()
-                        ->columnSpanFull(),
+                        ->required(),
+
+                    Select::make('day_part')
+                        ->label('Half Day Period')
+                        ->options(app(DtrDayPartService::class)->dayPartOptions())
+                        ->visible(fn (Get $get): bool => $get('dtr_type') === 'half_day')
+                        ->required(fn (Get $get): bool => $get('dtr_type') === 'half_day')
+                        ->dehydrated(true),
 
                     DatePicker::make('date_in')
                         ->label('Date In')
@@ -297,8 +330,15 @@ class DtrManageTable extends BaseWidget
                         ->live()
                         ->afterStateUpdated(function (Set $set, $state): void {
                             if ($this->usesSaturdaySchedule($state)) {
+                                $set('dtr_type', 'regular');
+                                $set('day_part', null);
                                 $set('saturday_schedule_start', '08:00:00');
                                 $set('saturday_schedule_end', '11:00:00');
+                            }
+
+                            if (! $this->usesSaturdaySchedule($state) && $this->isMonthlyRateEmployee() && ($suggestedDayPart = $this->suggestOpenDayPart($state))) {
+                                $set('dtr_type', 'half_day');
+                                $set('day_part', $suggestedDayPart);
                             }
                         }),
 
@@ -318,15 +358,15 @@ class DtrManageTable extends BaseWidget
                         ->label('Schedule Start')
                         ->options(fn (): array => $this->getScheduleStartOptions())
                         ->searchable()
-                        ->disabled(fn (Get $get): bool => (bool) $get('overtime_only') || $this->usesSaturdaySchedule($get('date_in')))
-                        ->required(fn (Get $get): bool => ! (bool) $get('overtime_only') && ! $this->usesSaturdaySchedule($get('date_in'))),
+                        ->disabled(fn (Get $get): bool => $get('dtr_type') === 'overtime' || $this->usesSaturdaySchedule($get('date_in')))
+                        ->required(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && ! $this->usesSaturdaySchedule($get('date_in'))),
 
                     Select::make('schedule_end')
                         ->label('Schedule End')
                         ->options(fn (): array => $this->getScheduleEndOptions())
                         ->searchable()
-                        ->disabled(fn (Get $get): bool => (bool) $get('overtime_only') || $this->usesSaturdaySchedule($get('date_in')))
-                        ->required(fn (Get $get): bool => ! (bool) $get('overtime_only') && ! $this->usesSaturdaySchedule($get('date_in'))),
+                        ->disabled(fn (Get $get): bool => $get('dtr_type') === 'overtime' || $this->usesSaturdaySchedule($get('date_in')))
+                        ->required(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && ! $this->usesSaturdaySchedule($get('date_in'))),
 
                     Select::make('saturday_schedule_start')
                         ->label('Saturday Schedule Start')
@@ -334,7 +374,7 @@ class DtrManageTable extends BaseWidget
                         ->default('08:00:00')
                         ->disabled()
                         ->dehydrated(true)
-                        ->visible(fn (Get $get): bool => ! (bool) $get('overtime_only') && $this->usesSaturdaySchedule($get('date_in'))),
+                        ->visible(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && $this->usesSaturdaySchedule($get('date_in'))),
 
                     Select::make('saturday_schedule_end')
                         ->label('Saturday Schedule End')
@@ -342,7 +382,7 @@ class DtrManageTable extends BaseWidget
                         ->default('11:00:00')
                         ->disabled()
                         ->dehydrated(true)
-                        ->visible(fn (Get $get): bool => ! (bool) $get('overtime_only') && $this->usesSaturdaySchedule($get('date_in'))),
+                        ->visible(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && $this->usesSaturdaySchedule($get('date_in'))),
 
                     Textarea::make('comment')
                         ->label('Comment')
@@ -364,10 +404,16 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
-        if ($this->hasAbsenceOnDate($data['date_in']) || $this->hasAbsenceOnDate($data['date_out'])) {
+        if (! $this->validateDtrTypeForDate($data, 'Unable to add D.T.R record')) {
+            return;
+        }
+
+        $dtrData = $this->buildDtrData($data);
+
+        if ($this->hasConflictingDtrOnDate($dtrData['date_in'], $dtrData['day_part'])) {
             Notification::make()
                 ->title('Unable to add D.T.R record')
-                ->body('The selected date in or date out is already marked as absent.')
+                ->body('A conflicting D.T.R, leave, or absence entry already exists for this date and day part.')
                 ->danger()
                 ->send();
 
@@ -375,7 +421,7 @@ class DtrManageTable extends BaseWidget
         }
 
         ModelsDtr::create([
-            ...$this->buildDtrData($data),
+            ...$dtrData,
             ...$this->getDtrScopeData(),
             'is_imported' => 0,
             'is_locked' => 0,
@@ -402,17 +448,23 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
-        if ($this->hasAbsenceOnDate($data['date_in'], $record->id) || $this->hasAbsenceOnDate($data['date_out'], $record->id)) {
+        if (! $this->validateDtrTypeForDate($data, 'Unable to update D.T.R record')) {
+            return;
+        }
+
+        $dtrData = $this->buildDtrData($data);
+
+        if ($this->hasConflictingDtrOnDate($dtrData['date_in'], $dtrData['day_part'], $record->id)) {
             Notification::make()
                 ->title('Unable to update D.T.R record')
-                ->body('The selected date in or date out is already marked as absent.')
+                ->body('A conflicting D.T.R, leave, or absence entry already exists for this date and day part.')
                 ->danger()
                 ->send();
 
             return;
         }
 
-        $record->update($this->buildDtrData($data));
+        $record->update($dtrData);
 
         $this->flushCachedTableRecords();
 
@@ -429,19 +481,70 @@ class DtrManageTable extends BaseWidget
         }
 
         $absenceDate = Carbon::parse($data['absence_date'])->toDateString();
+        $absenceType = $data['absence_type'] ?? 'whole_day';
+        $dayPart = $absenceType === 'half_day'
+            ? app(DtrDayPartService::class)->normalize($data['day_part'] ?? null)
+            : DtrDayPartService::WHOLE_DAY;
 
         if (! $this->ensureDatesWithinSelectedPayrollPeriod([$absenceDate], 'Unable to add absence')) {
             return;
         }
 
-        if ($this->getScopedDtrQuery()->whereDate('date_in', $absenceDate)->exists()) {
+        if (Carbon::parse($absenceDate)->isSunday()) {
             Notification::make()
                 ->title('Unable to add absence')
-                ->body('A D.T.R or absence record already exists for this date.')
+                ->body('Sunday absence is not allowed.')
                 ->danger()
                 ->send();
 
             return;
+        }
+
+        if ($dayPart !== DtrDayPartService::WHOLE_DAY && ! $this->isMonthlyRateEmployee()) {
+            Notification::make()
+                ->title('Unable to add absence')
+                ->body('Half-day absence is only available for monthly-rate employees.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if (Carbon::parse($absenceDate)->isSaturday() && $dayPart !== DtrDayPartService::WHOLE_DAY) {
+            Notification::make()
+                ->title('Unable to add absence')
+                ->body('Saturday only allows whole-day absence with a 3-hour deduction.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($this->hasConflictingDtrOnDate($absenceDate, $dayPart)) {
+            Notification::make()
+                ->title('Unable to add absence')
+                ->body('A conflicting D.T.R, leave, or absence entry already exists for this date and day part.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $scheduleStart = null;
+        $scheduleEnd = null;
+
+        if ($branch = $this->getBranch()) {
+            $scheduleStart = Carbon::parse($absenceDate)->isSaturday()
+                ? '08:00:00'
+                : (filled($branch->reg_sched_start) ? $this->normalizeTime($branch->reg_sched_start) : null);
+            $scheduleEnd = Carbon::parse($absenceDate)->isSaturday()
+                ? '11:00:00'
+                : (filled($branch->reg_sched_end) ? $this->normalizeTime($branch->reg_sched_end) : null);
+
+            if ($dayPart !== DtrDayPartService::WHOLE_DAY) {
+                [$scheduleStart, $scheduleEnd] = app(DtrDayPartService::class)
+                    ->scheduleWindow($absenceDate, $scheduleStart, $scheduleEnd, $dayPart);
+            }
         }
 
         ModelsDtr::create([
@@ -452,8 +555,10 @@ class DtrManageTable extends BaseWidget
             'time_in' => null,
             'time_out' => null,
             'schedule_type' => 'Absent',
-            'schedule_start' => null,
-            'schedule_end' => null,
+            'day_part' => $dayPart,
+            'entry_source' => DtrDayPartService::SOURCE_ABSENCE,
+            'schedule_start' => $scheduleStart,
+            'schedule_end' => $scheduleEnd,
             'late' => 0,
             'undertime' => 0,
             'overtime' => 0,
@@ -467,6 +572,7 @@ class DtrManageTable extends BaseWidget
             'daily_rate' => $this->getDailyRate(),
             'comment' => $this->normalizeComment($data['comment'] ?? null),
             'is_absent' => true,
+            'absence_minutes' => app(DtrDayPartService::class)->absenceMinutes($absenceDate, $dayPart),
             'is_imported' => 0,
             'is_locked' => 0,
         ]);
@@ -656,11 +762,16 @@ class DtrManageTable extends BaseWidget
             ->map(fn (ModelsDtr $record): string => Carbon::parse($record->date_in)->toDateString())
             ->unique()
             ->values();
+        $leaveDayCount = $records
+            ->filter(fn (ModelsDtr $record): bool => filled($record->leave_id)
+                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+                || $record->schedule_type === 'Leave')
+            ->sum(fn (ModelsDtr $record): float => $this->leaveDayCountForOverview($record));
 
         return [
             'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
             'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
-            'total_days_work' => $workDates->count(),
+            'total_days_work' => $workDates->count() + $leaveDayCount,
             'late' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
             'undertime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
             'credited_overtime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
@@ -673,6 +784,10 @@ class DtrManageTable extends BaseWidget
         $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true);
 
         return [
+            'dtr_type' => $record->schedule_type === 'Overtime'
+                ? 'overtime'
+                : (app(DtrDayPartService::class)->normalize($record->day_part) === DtrDayPartService::WHOLE_DAY ? 'regular' : 'half_day'),
+            'day_part' => app(DtrDayPartService::class)->normalize($record->day_part),
             'date_in' => $record->date_in,
             'time_in' => $record->time_in,
             'date_out' => $record->date_out,
@@ -681,7 +796,6 @@ class DtrManageTable extends BaseWidget
             'schedule_end' => $usesSaturdaySchedule ? null : $this->getScheduleColumnByTime($record->schedule_end, $this->getScheduleEndColumns()),
             'saturday_schedule_start' => '08:00:00',
             'saturday_schedule_end' => '11:00:00',
-            'overtime_only' => $record->schedule_type === 'Overtime',
             'comment' => $record->comment,
         ];
     }
@@ -710,8 +824,16 @@ class DtrManageTable extends BaseWidget
     {
         $dateIn = Carbon::parse($data['date_in'])->toDateString();
         $dateOut = Carbon::parse($data['date_out'])->toDateString();
-        $overtimeOnly = (bool) ($data['overtime_only'] ?? false);
+        $dtrType = $data['dtr_type'] ?? ((bool) ($data['overtime_only'] ?? false) ? 'overtime' : 'regular');
+        $overtimeOnly = $dtrType === 'overtime';
         $usesSaturdaySchedule = ! $overtimeOnly && $this->usesSaturdaySchedule($dateIn);
+        $dayPart = $overtimeOnly
+            ? DtrDayPartService::WHOLE_DAY
+            : ($dtrType === 'half_day'
+                ? app(DtrDayPartService::class)->normalize($data['day_part'] ?? null)
+                : ($this->isMonthlyRateEmployee()
+                    ? ($this->suggestOpenDayPart($dateIn) ?: DtrDayPartService::WHOLE_DAY)
+                    : DtrDayPartService::WHOLE_DAY));
 
         if ($overtimeOnly) {
             $scheduleStart = '00:00:00';
@@ -727,6 +849,11 @@ class DtrManageTable extends BaseWidget
             $scheduleStartColumn = $data['schedule_start'] ?? null;
         }
 
+        if (! $overtimeOnly && $dayPart !== DtrDayPartService::WHOLE_DAY) {
+            [$scheduleStart, $scheduleEnd] = app(DtrDayPartService::class)
+                ->scheduleWindow($dateIn, $scheduleStart, $scheduleEnd, $dayPart);
+        }
+
         $calculationData = [
             ...$data,
             'date_in' => $dateIn,
@@ -737,6 +864,7 @@ class DtrManageTable extends BaseWidget
             'schedule_end' => $scheduleEnd,
             'schedule_start_column' => $scheduleStartColumn,
             'overtime_only' => $overtimeOnly,
+            'day_part' => $dayPart,
         ];
 
         return [
@@ -745,8 +873,11 @@ class DtrManageTable extends BaseWidget
             'date_out' => $dateOut,
             'time_out' => $calculationData['time_out'],
             'schedule_type' => $this->getScheduleTypeLabel($scheduleStartColumn, $overtimeOnly, $usesSaturdaySchedule),
+            'day_part' => $dayPart,
+            'entry_source' => DtrDayPartService::SOURCE_MANUAL,
             'schedule_start' => $scheduleStart,
             'schedule_end' => $scheduleEnd,
+            'absence_minutes' => 0,
             'daily_rate' => $this->getDailyRate(),
             'comment' => $this->normalizeComment($data['comment'] ?? null),
             ...$this->getHolidayData($dateIn),
@@ -827,6 +958,80 @@ class DtrManageTable extends BaseWidget
     protected function getScheduleStartOptions(): array
     {
         return $this->getScheduleOptions($this->getScheduleStartColumns());
+    }
+
+    protected function getDtrTypeOptions(mixed $date = null): array
+    {
+        $options = [
+            'regular' => 'Regular D.T.R',
+        ];
+
+        if ($this->isMonthlyRateEmployee() && ! $this->usesSaturdaySchedule($date)) {
+            $options['half_day'] = 'Half Day D.T.R';
+        }
+
+        $options['overtime'] = 'Overtime Only';
+
+        return $options;
+    }
+
+    protected function leaveDayCountForOverview(ModelsDtr $record): float
+    {
+        $dayPart = app(DtrDayPartService::class)->normalize($record->day_part);
+
+        if ($dayPart === DtrDayPartService::WHOLE_DAY) {
+            return 1.0;
+        }
+
+        $creditedMinutes = (int) ($record->credited_work_hrs ?? 0);
+
+        if ($creditedMinutes > 0) {
+            return round($creditedMinutes / 480, 3);
+        }
+
+        return $dayPart === DtrDayPartService::AFTERNOON ? 300 / 480 : 240 / 480;
+    }
+
+    protected function getAbsenceTypeOptions(): array
+    {
+        $options = [
+            'whole_day' => 'Whole Day',
+        ];
+
+        if ($this->isMonthlyRateEmployee()) {
+            $options['half_day'] = 'Half Day';
+        }
+
+        return $options;
+    }
+
+    protected function validateDtrTypeForDate(array $data, string $title): bool
+    {
+        if (($data['dtr_type'] ?? 'regular') !== 'half_day') {
+            return true;
+        }
+
+        if (! $this->isMonthlyRateEmployee()) {
+            Notification::make()
+                ->title($title)
+                ->body('Half-day D.T.R is only available for monthly-rate employees.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        if (filled($data['date_in'] ?? null) && Carbon::parse($data['date_in'])->isSaturday()) {
+            Notification::make()
+                ->title($title)
+                ->body('Saturday does not allow half-day D.T.R. Use the whole Saturday schedule.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        return true;
     }
 
     protected function getScheduleEndOptions(): array
@@ -935,7 +1140,7 @@ class DtrManageTable extends BaseWidget
 
     protected function usesSaturdaySchedule(mixed $date): bool
     {
-        if (blank($date) || ! $this->canUseRegularFill()) {
+        if (blank($date)) {
             return false;
         }
 
@@ -957,6 +1162,11 @@ class DtrManageTable extends BaseWidget
     protected function isRegularScheduleEmployee(): bool
     {
         return ($this->getEmployee()?->schedule_type ?: 'regular') === 'regular';
+    }
+
+    protected function isMonthlyRateEmployee(): bool
+    {
+        return str($this->getEmployee()?->rate_type ?: 'monthly')->lower()->contains('month');
     }
 
     protected function normalizeTime(mixed $time): string
@@ -1087,17 +1297,33 @@ class DtrManageTable extends BaseWidget
             ->send();
     }
 
-    protected function hasAbsenceOnDate(mixed $date, ?int $exceptRecordId = null): bool
+    protected function suggestOpenDayPart(mixed $date, ?int $exceptRecordId = null): ?string
+    {
+        if (blank($date)) {
+            return null;
+        }
+
+        $records = $this->getDayPartRecords($date, $exceptRecordId);
+
+        return app(DtrDayPartService::class)->openHalfDayPart($records);
+    }
+
+    protected function hasConflictingDtrOnDate(mixed $date, ?string $dayPart, ?int $exceptRecordId = null): bool
     {
         if (blank($date)) {
             return false;
         }
 
+        return app(DtrDayPartService::class)
+            ->conflictsWith($this->getDayPartRecords($date, $exceptRecordId), $dayPart);
+    }
+
+    protected function getDayPartRecords(mixed $date, ?int $exceptRecordId = null)
+    {
         return $this->getScopedDtrQuery()
-            ->where('is_absent', true)
             ->whereDate('date_in', Carbon::parse($date)->toDateString())
             ->when($exceptRecordId, fn (Builder $query) => $query->whereKeyNot($exceptRecordId))
-            ->exists();
+            ->get();
     }
 
     protected function getScopedDtrQuery(): Builder

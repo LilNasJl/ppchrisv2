@@ -25,7 +25,9 @@ class Payroll extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static ?int $navigationSort = 2;
+    protected static string|\UnitEnum|null $navigationGroup = 'My Workspace';
+
+    protected static ?int $navigationSort = 1;
 
     public ?string $period_id = null;
 

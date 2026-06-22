@@ -52,9 +52,11 @@ class ActivityCalendar extends Page
 
     public function mount(): void
     {
-        $this->calendarMonth = now()->startOfMonth()->format('Y-m-d');
-        $this->dateFrom = now()->toDateString();
-        $this->dateTo = now()->toDateString();
+        $today = now('Asia/Manila');
+
+        $this->calendarMonth = $today->copy()->startOfMonth()->format('Y-m-d');
+        $this->dateFrom = $today->toDateString();
+        $this->dateTo = $today->toDateString();
     }
 
     public function previousMonth(): void
@@ -100,8 +102,9 @@ class ActivityCalendar extends Page
         $this->editingActivityId = null;
         $this->activityTitle = null;
         $this->activityDescription = null;
-        $this->dateFrom = now()->toDateString();
-        $this->dateTo = now()->toDateString();
+        $today = now('Asia/Manila')->toDateString();
+        $this->dateFrom = $today;
+        $this->dateTo = $today;
     }
 
     public function saveActivity(): void
@@ -153,9 +156,10 @@ class ActivityCalendar extends Page
 
     public function getCalendarDaysProperty(): array
     {
-        $month = Carbon::parse($this->calendarMonth)->startOfMonth();
-        $start = $month->copy()->startOfWeek();
-        $end = $month->copy()->endOfMonth()->endOfWeek();
+        $month = Carbon::parse($this->calendarMonth, 'Asia/Manila')->startOfMonth();
+        $start = $month->copy()->startOfWeek(Carbon::SUNDAY);
+        $end = $month->copy()->endOfMonth()->endOfWeek(Carbon::SATURDAY);
+        $today = now('Asia/Manila')->toDateString();
 
         $activities = Activity::query()
             ->whereDate('date_from', '<=', $end->toDateString())
@@ -177,7 +181,7 @@ class ActivityCalendar extends Page
                 'date' => $dateString,
                 'day' => $date->day,
                 'isCurrentMonth' => $date->isSameMonth($month),
-                'isToday' => $date->isToday(),
+                'isToday' => $dateString === $today,
                 'activities' => $dayActivities,
             ];
         }
@@ -188,7 +192,7 @@ class ActivityCalendar extends Page
     public function getUpcomingActivitiesProperty()
     {
         return Activity::query()
-            ->whereDate('date_to', '>=', now()->toDateString())
+            ->whereDate('date_to', '>=', now('Asia/Manila')->toDateString())
             ->orderBy('date_from')
             ->limit(20)
             ->get();

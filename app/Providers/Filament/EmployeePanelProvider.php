@@ -7,6 +7,7 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -30,6 +31,11 @@ class EmployeePanelProvider extends PanelProvider
             ->globalSearch(false)
             ->favicon(url('ppclogo.png'))
             ->login(Login::class)
+            ->navigationGroups([
+                NavigationGroup::make('My Workspace'),
+                NavigationGroup::make('My Profile'),
+                NavigationGroup::make('Reports & Updates'),
+            ])
             ->colors([
                 'primary' => Color::Blue,
             ])

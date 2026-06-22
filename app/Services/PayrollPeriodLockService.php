@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Deduction;
 use App\Models\EmployeeDeduction;
+use App\Models\EmployeeLoan;
+use App\Models\EmployeeLoanPayment;
 use App\Models\PayrollPeriod;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -18,9 +20,7 @@ class PayrollPeriodLockService
             return;
         }
 
-        $period->forceFill([
-            'is_locked' => false,
-        ])->save();
+        $this->unlock($period);
     }
 
     public function lock(PayrollPeriod $period): void
@@ -44,6 +44,28 @@ class PayrollPeriodLockService
                     'deductions_processed_at' => now(),
                 ])->save();
             }
+
+            if (blank($period->loan_payments_processed_at)) {
+                $this->processLoanPayments($period);
+
+                $period->forceFill([
+                    'loan_payments_processed_at' => now(),
+                ])->save();
+            }
+        });
+    }
+
+    public function unlock(PayrollPeriod $period): void
+    {
+        DB::transaction(function () use ($period): void {
+            $period->refresh();
+
+            $this->rollbackLoanPayments($period);
+
+            $period->forceFill([
+                'is_locked' => false,
+                'loan_payments_processed_at' => null,
+            ])->save();
         });
     }
 
@@ -87,6 +109,92 @@ class PayrollPeriodLockService
                     'remaining_terms' => $remainingTerms,
                     'active' => $remainingTerms > 0,
                     'completed_at' => $remainingTerms > 0 ? null : now(),
+                ])->save();
+            });
+    }
+
+    protected function processLoanPayments(PayrollPeriod $period): void
+    {
+        $employeeIds = app(PayrollCalculator::class)->includedEmployeeIds($period);
+
+        if ($employeeIds->isEmpty()) {
+            return;
+        }
+
+        EmployeeLoan::query()
+            ->with('amortizationStartPayrollPeriod')
+            ->whereIn('employee_id', $employeeIds)
+            ->where('status', EmployeeLoan::STATUS_ACTIVE)
+            ->where('payment_amount', '>', 0)
+            ->get()
+            ->filter(fn (EmployeeLoan $loan): bool => $loan->isScheduledForPeriod($period))
+            ->filter(fn (EmployeeLoan $loan): bool => $loan->hasRemainingTerms())
+            ->each(function (EmployeeLoan $loan) use ($period): void {
+                $existingPayment = EmployeeLoanPayment::query()
+                    ->where('employee_loan_id', $loan->id)
+                    ->where('payroll_period_id', $period->id)
+                    ->first();
+
+                if ($existingPayment?->status === EmployeeLoanPayment::STATUS_POSTED) {
+                    return;
+                }
+
+                $balance = $loan->balance_amount;
+
+                if ($balance <= 0) {
+                    $loan->forceFill(['status' => EmployeeLoan::STATUS_PAID])->save();
+
+                    return;
+                }
+
+                $payment = min((float) $loan->payment_amount, $balance);
+                $balanceAfter = round(max(0, $balance - $payment), 2);
+
+                $paymentRecord = $existingPayment ?: new EmployeeLoanPayment([
+                    'employee_loan_id' => $loan->id,
+                    'payroll_period_id' => $period->id,
+                ]);
+
+                $paymentRecord->fill([
+                    'amount' => $payment,
+                    'balance_after' => $balanceAfter,
+                    'processed_at' => now(),
+                    'status' => EmployeeLoanPayment::STATUS_POSTED,
+                    'voided_at' => null,
+                    'void_reason' => null,
+                ]);
+                $paymentRecord->save();
+
+                $loan->forceFill([
+                    'paid_amount' => round((float) $loan->paid_amount + $payment, 2),
+                    'status' => $balanceAfter <= 0 ? EmployeeLoan::STATUS_PAID : EmployeeLoan::STATUS_ACTIVE,
+                ])->save();
+            });
+    }
+
+    protected function rollbackLoanPayments(PayrollPeriod $period): void
+    {
+        EmployeeLoanPayment::query()
+            ->with('loan')
+            ->where('payroll_period_id', $period->id)
+            ->where('status', EmployeeLoanPayment::STATUS_POSTED)
+            ->get()
+            ->each(function (EmployeeLoanPayment $payment): void {
+                $loan = $payment->loan;
+
+                if (! $loan) {
+                    return;
+                }
+
+                $loan->forceFill([
+                    'paid_amount' => round(max(0, (float) $loan->paid_amount - (float) $payment->amount), 2),
+                    'status' => EmployeeLoan::STATUS_ACTIVE,
+                ])->save();
+
+                $payment->forceFill([
+                    'status' => EmployeeLoanPayment::STATUS_VOIDED,
+                    'voided_at' => now(),
+                    'void_reason' => 'Payroll period unlocked',
                 ])->save();
             });
     }

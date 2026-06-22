@@ -14,7 +14,7 @@
 
     .payroll-table {
         width: 100%;
-        min-width: 2140px;
+        min-width: 2220px;
         border-collapse: collapse;
         font-size: 12px;
     }
@@ -140,7 +140,7 @@
                 <th rowspan="2">Regular Holiday</th>
                 <th rowspan="2">Special Holiday</th>
                 <th rowspan="2">Gross Pay</th>
-                <th colspan="8">Deductions</th>
+                <th colspan="9">Deductions</th>
                 <th colspan="5">Remittances</th>
                 <th rowspan="2">Total Deductions</th>
                 <th rowspan="2">Net Pay</th>
@@ -157,6 +157,7 @@
                 <th>Shortages</th>
                 <th>Uniform</th>
                 <th>Other Deductions</th>
+                <th>Loan Payment</th>
                 <th>SSS Loan</th>
                 <th>SSS EE</th>
                 <th>HDMF Loan</th>
@@ -193,6 +194,7 @@
                     <td class="text-right">{{ $money($row['shortages']) }}</td>
                     <td class="text-right">{{ $money($row['uniform']) }}</td>
                     <td class="text-right">{{ $money($row['other_deductions']) }}</td>
+                    <td class="text-right">{{ $money($row['loan_payment'] ?? 0) }}</td>
                     <td class="text-right">{{ $money($row['sss_loan']) }}</td>
                     <td class="text-right">{{ $money($row['sss_ee']) }}</td>
                     <td class="text-right">{{ $money($row['hdmf_loan']) }}</td>
@@ -204,7 +206,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="34" class="text-center">No payroll data available.</td>
+                    <td colspan="35" class="text-center">No payroll data available.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -229,6 +231,7 @@
                     <td class="text-right">{{ $sum('shortages') }}</td>
                     <td class="text-right">{{ $sum('uniform') }}</td>
                     <td class="text-right">{{ $sum('other_deductions') }}</td>
+                    <td class="text-right">{{ $sum('loan_payment') }}</td>
                     <td class="text-right">{{ $sum('sss_loan') }}</td>
                     <td class="text-right">{{ $sum('sss_ee') }}</td>
                     <td class="text-right">{{ $sum('hdmf_loan') }}</td>

@@ -4,6 +4,8 @@ namespace App\Filament\Employee\Pages;
 
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Services\DtrDayPartService;
+use App\Services\LeaveScheduleOptionService;
 use BackedEnum;
 use Carbon\Carbon;
 use Closure;
@@ -48,7 +50,9 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowLeftEndOnRectangle;
 
-    protected static ?int $navigationSort = 4;
+    protected static string|\UnitEnum|null $navigationGroup = 'My Workspace';
+
+    protected static ?int $navigationSort = 2;
 
     public function mount(): void
     {
@@ -199,11 +203,41 @@ class LeaveRequests extends Page implements HasForms, HasTable
                         ->live()
                         ->afterStateUpdated(function (Set $set, bool $state): void {
                             $set('leave_type', $state ? Leave::HALF_DAY_LEAVE : null);
+                            $set('half_day_period', $state ? DtrDayPartService::MORNING : null);
                         }),
+
+                    Select::make('half_day_period')
+                        ->label('Half Day Period')
+                        ->options(app(DtrDayPartService::class)->dayPartOptions())
+                        ->visible(fn (Get $get): bool => (bool) $get('is_half_day'))
+                        ->required(fn (Get $get): bool => (bool) $get('is_half_day'))
+                        ->dehydrated(true),
+
+                    Select::make('half_day_schedule')
+                        ->label('Daily Rate Schedule')
+                        ->options(fn (): array => app(LeaveScheduleOptionService::class)->optionsForEmployee($this->employee()->loadMissing('branch')))
+                        ->visible(fn (Get $get): bool => (bool) $get('is_half_day')
+                            && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
+                        ->required(fn (Get $get): bool => (bool) $get('is_half_day')
+                            && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
+                        ->searchable()
+                        ->preload()
+                        ->dehydrated(true),
 
                     DatePicker::make('leave_from')
                         ->label('Leave From')
-                        ->required(),
+                        ->required()
+                        ->rules([
+                            fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                                if (! (bool) $get('is_half_day') || blank($value)) {
+                                    return;
+                                }
+
+                                if (Carbon::parse($value)->isSaturday()) {
+                                    $fail('Saturday does not allow half-day leave. Use whole-day leave.');
+                                }
+                            },
+                        ]),
 
                     DatePicker::make('leave_to')
                         ->label('Leave To')
@@ -251,6 +285,10 @@ class LeaveRequests extends Page implements HasForms, HasTable
     {
         if ((bool) ($data['is_half_day'] ?? false)) {
             $data['leave_type'] = Leave::HALF_DAY_LEAVE;
+            $data['half_day_period'] = app(DtrDayPartService::class)->normalize($data['half_day_period'] ?? DtrDayPartService::MORNING);
+            $data['half_day_schedule'] = app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee())
+                ? app(LeaveScheduleOptionService::class)->normalizeScheduleKey($data['half_day_schedule'] ?? null)
+                : null;
 
             if ($data['leave_from'] !== $data['leave_to']) {
                 Notification::make()
@@ -297,6 +335,8 @@ class LeaveRequests extends Page implements HasForms, HasTable
             'leave_from' => Carbon::parse($data['leave_from'])->toDateString(),
             'leave_to' => Carbon::parse($data['leave_to'])->toDateString(),
             'is_half_day' => (bool) ($data['is_half_day'] ?? false),
+            'half_day_period' => (bool) ($data['is_half_day'] ?? false) ? $data['half_day_period'] : null,
+            'half_day_schedule' => (bool) ($data['is_half_day'] ?? false) ? ($data['half_day_schedule'] ?? null) : null,
             'reason' => $data['reason'],
             'status' => 'Pending',
             'attachment_path' => $data['attachment_path'] ?? null,
@@ -329,6 +369,8 @@ class LeaveRequests extends Page implements HasForms, HasTable
             'leave_from' => now()->toDateString(),
             'leave_to' => now()->toDateString(),
             'is_half_day' => false,
+            'half_day_period' => null,
+            'half_day_schedule' => null,
             'reason' => null,
             'attachment_path' => null,
             'attachment_original_name' => null,

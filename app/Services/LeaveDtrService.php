@@ -10,7 +10,6 @@ use App\Models\PayrollPeriod;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 class LeaveDtrService
@@ -60,6 +59,13 @@ class LeaveDtrService
             throw new RuntimeException('Half-day leave must use the same start and end date.');
         }
 
+        if ($leave->is_half_day && ! in_array(app(DtrDayPartService::class)->normalize($leave->half_day_period), [
+            DtrDayPartService::MORNING,
+            DtrDayPartService::AFTERNOON,
+        ], true)) {
+            throw new RuntimeException('Half-day leave must have a valid morning or afternoon period.');
+        }
+
         if ($leaveFrom->lt($periodStart) || $leaveTo->gt($periodEnd)) {
             throw new RuntimeException('Leave dates must be inside the selected payroll period range.');
         }
@@ -84,34 +90,47 @@ class LeaveDtrService
             ->map(fn (Carbon $date): string => $date->toDateString())
             ->all();
 
-        $existingDates = Dtr::query()
-            ->where('payroll_period_id', $payrollPeriod->id)
-            ->where('branch_id', $employee->branch_id)
-            ->where('fingerprint_id', $this->fingerprintId($employee))
-            ->whereIn('date_in', $dates)
-            ->pluck('date_in')
-            ->map(fn ($date): string => Carbon::parse($date)->toDateString())
-            ->unique()
+        $dayPart = $this->leaveDayPart($leave);
+        $conflictingDates = collect($dates)
+            ->filter(function (string $date) use ($employee, $payrollPeriod, $dayPart): bool {
+                $records = Dtr::query()
+                    ->where('payroll_period_id', $payrollPeriod->id)
+                    ->where('branch_id', $employee->branch_id)
+                    ->where('fingerprint_id', $this->fingerprintId($employee))
+                    ->whereDate('date_in', $date)
+                    ->get();
+
+                return app(DtrDayPartService::class)->conflictsWith($records, $dayPart);
+            })
             ->values();
 
-        if ($existingDates->isNotEmpty()) {
-            throw new RuntimeException('D.T.R entries already exist for these leave date(s): '.$existingDates->implode(', '));
+        if ($conflictingDates->isNotEmpty()) {
+            throw new RuntimeException('Conflicting D.T.R entries already exist for these leave date(s): '.$conflictingDates->implode(', '));
         }
     }
 
     protected function createPaidLeaveDtrRows(Leave $leave, PayrollPeriod $payrollPeriod): void
     {
         $employee = $leave->employee;
-        $schedule = $this->leaveSchedule($employee);
-        $leaveDayValue = $leave->is_half_day ? 0.5 : 1.0;
-        $creditedMinutes = (int) round($this->payableScheduleMinutes(
-            scheduleStart: $schedule['start'],
-            scheduleEnd: $schedule['end'],
-            deductNoonBreak: $schedule['deduct_noon_break'],
-        ) * $leaveDayValue);
+        $schedule = $this->leaveSchedule($leave, $employee);
+        $dayPart = $this->leaveDayPart($leave);
 
         foreach (CarbonPeriod::create($leave->leave_from, $leave->leave_to ?: $leave->leave_from) as $date) {
             $dateString = $date->toDateString();
+            $effectiveSchedule = $date->isSaturday()
+                ? [
+                    'start' => '08:00:00',
+                    'end' => '11:00:00',
+                    'deduct_noon_break' => false,
+                ]
+                : ($dayPart !== DtrDayPartService::WHOLE_DAY
+                    ? $this->standardHalfDayLeaveSchedule()
+                    : $schedule);
+
+            [$scheduleStart, $scheduleEnd] = app(DtrDayPartService::class)
+                ->scheduleWindow($dateString, $effectiveSchedule['start'], $effectiveSchedule['end'], $dayPart);
+            $creditedMinutes = app(DtrDayPartService::class)
+                ->payableMinutes($dateString, $scheduleStart, $scheduleEnd, $effectiveSchedule['deduct_noon_break']);
 
             Dtr::query()->create([
                 'leave_id' => $leave->id,
@@ -119,12 +138,14 @@ class LeaveDtrService
                 'branch_id' => $employee->branch_id,
                 'fingerprint_id' => $this->fingerprintId($employee),
                 'date_in' => $dateString,
-                'time_in' => $schedule['start'],
+                'time_in' => $scheduleStart,
                 'date_out' => $dateString,
-                'time_out' => $schedule['end'],
+                'time_out' => $scheduleEnd,
                 'schedule_type' => 'Leave',
-                'schedule_start' => $schedule['start'],
-                'schedule_end' => $schedule['end'],
+                'day_part' => $dayPart,
+                'entry_source' => DtrDayPartService::SOURCE_LEAVE,
+                'schedule_start' => $scheduleStart,
+                'schedule_end' => $scheduleEnd,
                 'late' => 0,
                 'undertime' => 0,
                 'overtime' => 0,
@@ -142,30 +163,31 @@ class LeaveDtrService
                 'daily_rate' => filled($employee->daily_rate) ? (float) $employee->daily_rate : null,
                 'comment' => 'Approved leave: '.$leave->leave_type,
                 'is_absent' => false,
+                'absence_minutes' => 0,
                 'is_imported' => false,
                 'is_locked' => false,
             ]);
         }
     }
 
-    protected function leaveSchedule(Employee $employee): array
+    protected function leaveDayPart(Leave $leave): string
     {
-        $designation = Str::lower((string) $employee->designation?->title);
+        if (! $leave->is_half_day) {
+            return DtrDayPartService::WHOLE_DAY;
+        }
 
-        if ($employee->rate_type === 'daily') {
-            if (Str::contains($designation, ['cashier/forecourt attendant', 'forecourt attendant'])) {
-                return [
-                    'start' => '04:40:00',
-                    'end' => '12:30:00',
-                    'deduct_noon_break' => false,
-                ];
-            }
+        $dayPart = app(DtrDayPartService::class)->normalize($leave->half_day_period);
 
-            return [
-                'start' => '08:00:00',
-                'end' => '18:00:00',
-                'deduct_noon_break' => false,
-            ];
+        return $dayPart === DtrDayPartService::WHOLE_DAY
+            ? DtrDayPartService::MORNING
+            : $dayPart;
+    }
+
+    protected function leaveSchedule(Leave $leave, Employee $employee): array
+    {
+        if (app(LeaveScheduleOptionService::class)->isDailyRateEmployee($employee)) {
+            return app(LeaveScheduleOptionService::class)
+                ->scheduleForLeave($employee->loadMissing('branch', 'designation'), $leave->half_day_schedule);
         }
 
         $branch = $employee->branch ?: Branch::query()->find($employee->branch_id);
@@ -173,6 +195,15 @@ class LeaveDtrService
         return [
             'start' => $this->normalizeTime($branch?->reg_sched_start) ?: '08:00:00',
             'end' => $this->normalizeTime($branch?->reg_sched_end) ?: '18:00:00',
+            'deduct_noon_break' => true,
+        ];
+    }
+
+    protected function standardHalfDayLeaveSchedule(): array
+    {
+        return [
+            'start' => '08:00:00',
+            'end' => '18:00:00',
             'deduct_noon_break' => true,
         ];
     }

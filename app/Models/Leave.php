@@ -23,6 +23,8 @@ class Leave extends Model
         'leave_from',
         'leave_to',
         'is_half_day',
+        'half_day_period',
+        'half_day_schedule',
         'reason',
         'hr_comment',
         'status',
@@ -109,6 +111,10 @@ class Leave extends Model
             'is_half_day' => $isHalfDay,
         ]);
 
+        if ($isHalfDay && Carbon::parse($leaveFrom)->isSaturday()) {
+            throw new RuntimeException('Saturday does not allow half-day leave.');
+        }
+
         $leaveDays = $probe->getRequestedLeaveDays();
 
         if ($leaveDays <= 0) {
@@ -147,6 +153,10 @@ class Leave extends Model
             $employee = Employee::query()->lockForUpdate()->findOrFail($leave->employee_id);
             $employee->resetLeaveCreditsIfNeeded();
             $employee->refresh();
+
+            if ($leave->is_half_day && Carbon::parse($leave->leave_from)->isSaturday()) {
+                throw new RuntimeException('Saturday does not allow half-day leave.');
+            }
 
             $leaveDays = $leave->getRequestedLeaveDays();
 

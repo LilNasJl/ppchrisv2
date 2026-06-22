@@ -33,7 +33,9 @@ class SendTicket extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static ?int $navigationSort = 7;
+    protected static string|\UnitEnum|null $navigationGroup = 'Reports & Updates';
+
+    protected static ?int $navigationSort = 2;
 
     public function table(Table $table): Table
     {

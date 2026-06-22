@@ -2,7 +2,7 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\ComplianceBenefits;
+use App\Filament\Pages\DeductionsManagement;
 use App\Filament\Pages\EmployeeComplianceBenefits;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -22,7 +22,7 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected static ?string $heading = 'Employee Compliance and Benefits';
+    protected static ?string $heading = 'Deductions';
 
     public function table(Table $table): Table
     {
@@ -36,9 +36,10 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                     ->label('#')
                     ->rowIndex(),
 
-                ImageColumn::make('user.profile_photo_path')
+                ImageColumn::make('profile_photo')
                     ->label('Profile')
-                    ->disk('public')
+                    ->getStateUsing(fn (Employee $record): ?string => $record->user?->profile_photo_url)
+                    ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
                     ->circular(),
 
                 TextColumn::make('uid')
@@ -79,7 +80,7 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                         ->icon(Heroicon::Eye)
                         ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl([
                             'employeeId' => $record->publicKey(),
-                            'returnUrl' => $this->tableReturnUrl(ComplianceBenefits::getUrl()),
+                            'returnUrl' => $this->tableReturnUrl(DeductionsManagement::getUrl()),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

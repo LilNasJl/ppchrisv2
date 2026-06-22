@@ -100,8 +100,10 @@ class HolidayCalendar extends Page
         $this->ensureDefaultPhilippineFixedHolidays();
         $this->loadHolidayTypeEdits();
 
-        $this->calendarMonth = now()->startOfMonth()->format('Y-m-d');
-        $this->selectedDate = now()->toDateString();
+        $today = now('Asia/Manila');
+
+        $this->calendarMonth = $today->copy()->startOfMonth()->format('Y-m-d');
+        $this->selectedDate = $today->toDateString();
         $this->holidayTypeId = $this->getDefaultHolidayTypeId();
     }
 
@@ -319,9 +321,10 @@ class HolidayCalendar extends Page
 
     public function getCalendarDaysProperty(): array
     {
-        $month = Carbon::parse($this->calendarMonth)->startOfMonth();
-        $start = $month->copy()->startOfWeek();
-        $end = $month->copy()->endOfMonth()->endOfWeek();
+        $month = Carbon::parse($this->calendarMonth, 'Asia/Manila')->startOfMonth();
+        $start = $month->copy()->startOfWeek(Carbon::SUNDAY);
+        $end = $month->copy()->endOfMonth()->endOfWeek(Carbon::SATURDAY);
+        $today = now('Asia/Manila')->toDateString();
 
         $holidays = app(HolidayResolver::class)
             ->holidaysForRange($start, $end, $this->getHolidayBranchId(), includeNational: false);
@@ -335,7 +338,7 @@ class HolidayCalendar extends Page
                 'date' => $date->toDateString(),
                 'day' => $date->day,
                 'isCurrentMonth' => $date->isSameMonth($month),
-                'isToday' => $date->isToday(),
+                'isToday' => $date->toDateString() === $today,
                 'isSelected' => $this->selectedDate === $date->toDateString(),
                 'holidayTitle' => $holiday?->title,
                 'holidayType' => $holiday?->type?->type,

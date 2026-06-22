@@ -25,6 +25,8 @@ class MyAccount extends Page implements HasForms
 
     protected static ?string $title = 'My Account';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Identification;
 
     protected static ?int $navigationSort = 6;

@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Services\DtrCalculator;
+use App\Services\DtrDayPartService;
 use App\Services\HolidayEntitlementService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -157,6 +158,14 @@ class DtrImportService
      */
     protected function saveValidatedRow(array $data, string $importName): array
     {
+        $metadata = $this->getImportMetadata($data, $importName);
+
+        if ($this->hasConflictingDtr($data, $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY)) {
+            throw ValidationException::withMessages([
+                'date_in' => 'A conflicting D.T.R, leave, or absence entry already exists for this date and day part.',
+            ]);
+        }
+
         $record = new Dtr;
 
         $record->forceFill([
@@ -171,7 +180,7 @@ class DtrImportService
             'schedule_type' => $data['schedule_type'],
             'schedule_start' => $data['schedule_start'],
             'schedule_end' => $data['schedule_end'],
-            ...$this->getImportMetadata($data, $importName),
+            ...$metadata,
         ])->save();
 
         return [
@@ -342,13 +351,16 @@ class DtrImportService
      */
     protected function getImportedCalculationData(array $data): array
     {
-        $scheduleType = $this->normalizeScheduleType($data['schedule_type'] ?? null);
+        $scheduleType = $this->resolveScheduleType($data);
 
         if ($scheduleType === 'Forgot to Punch') {
             return [
                 'schedule_type' => $scheduleType,
+                'day_part' => DtrDayPartService::WHOLE_DAY,
+                'entry_source' => DtrDayPartService::SOURCE_IMPORTED,
                 'schedule_start' => null,
                 'schedule_end' => null,
+                'absence_minutes' => 0,
                 ...$this->emptyCalculationData(isAbsent: true),
             ];
         }
@@ -378,8 +390,11 @@ class DtrImportService
         if ($scheduleType === 'Overtime') {
             return [
                 'schedule_type' => $scheduleType,
+                'day_part' => DtrDayPartService::WHOLE_DAY,
+                'entry_source' => DtrDayPartService::SOURCE_IMPORTED,
                 'schedule_start' => $data['schedule_start'] ?? '00:00:00',
                 'schedule_end' => $data['schedule_end'] ?? '00:00:00',
+                'absence_minutes' => 0,
                 ...app(DtrCalculator::class)->calculate(
                     dateIn: $data['date_in'],
                     timeIn: $data['time_in'],
@@ -400,14 +415,24 @@ class DtrImportService
         if (blank($scheduleStartValue) || blank($scheduleEndValue)) {
             return [
                 'schedule_type' => $scheduleType,
+                'day_part' => DtrDayPartService::WHOLE_DAY,
+                'entry_source' => DtrDayPartService::SOURCE_IMPORTED,
+                'absence_minutes' => 0,
                 ...$this->emptyCalculationData(),
             ];
         }
 
+        $dayPart = $this->resolveImportedDayPart($data);
+        [$scheduleStartValue, $scheduleEndValue] = app(DtrDayPartService::class)
+            ->scheduleWindow($data['date_in'], $scheduleStartValue, $scheduleEndValue, $dayPart);
+
         return [
             'schedule_type' => $scheduleType,
+            'day_part' => $dayPart,
+            'entry_source' => DtrDayPartService::SOURCE_IMPORTED,
             'schedule_start' => $scheduleStartValue,
             'schedule_end' => $scheduleEndValue,
+            'absence_minutes' => 0,
             ...app(DtrCalculator::class)->calculate(
                 dateIn: $data['date_in'],
                 timeIn: $data['time_in'],
@@ -420,6 +445,72 @@ class DtrImportService
             ),
             'is_absent' => false,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function resolveImportedDayPart(array $data): string
+    {
+        if (! $this->isMonthlyRateEmployee($data)) {
+            return DtrDayPartService::WHOLE_DAY;
+        }
+
+        $records = $this->getExistingDateRecords($data);
+        $openDayPart = app(DtrDayPartService::class)->openHalfDayPart($records);
+
+        return $openDayPart ?: DtrDayPartService::WHOLE_DAY;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function isMonthlyRateEmployee(array $data): bool
+    {
+        return str($this->getEmployee($data)?->rate_type ?: 'monthly')->lower()->contains('month');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function hasConflictingDtr(array $data, ?string $dayPart): bool
+    {
+        $scheduleType = $this->resolveScheduleType($data);
+        $records = $this->getExistingDateRecords($data);
+
+        if ($scheduleType === 'Overtime') {
+            return $records->contains(fn (Dtr $record): bool => $this->normalizeScheduleType($record->schedule_type) === 'Overtime');
+        }
+
+        $records = $records
+            ->reject(fn (Dtr $record): bool => $this->normalizeScheduleType($record->schedule_type) === 'Overtime')
+            ->values();
+
+        return app(DtrDayPartService::class)
+            ->conflictsWith($records, $dayPart);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return \Illuminate\Support\Collection<int, Dtr>
+     */
+    protected function getExistingDateRecords(array $data)
+    {
+        if (
+            blank($data['payroll_period_id'] ?? null)
+            || blank($this->getImportedBranchId($data))
+            || blank($data['fingerprint_id'] ?? null)
+            || blank($data['date_in'] ?? null)
+        ) {
+            return collect();
+        }
+
+        return Dtr::query()
+            ->where('payroll_period_id', $data['payroll_period_id'])
+            ->where('branch_id', $this->getImportedBranchId($data))
+            ->where('fingerprint_id', (string) $data['fingerprint_id'])
+            ->whereDate('date_in', Carbon::parse($data['date_in'])->toDateString())
+            ->get();
     }
 
     protected function emptyCalculationData(bool $isAbsent = false): array
@@ -469,10 +560,28 @@ class DtrImportService
     /**
      * @param  array<string, mixed>  $data
      */
+    protected function resolveScheduleType(array $data): string
+    {
+        $scheduleType = $this->normalizeScheduleType($data['schedule_type'] ?? null);
+
+        if (
+            $scheduleType === 'Regular'
+            && filled($data['date_in'] ?? null)
+            && Carbon::parse($data['date_in'])->isSaturday()
+        ) {
+            return 'Saturday';
+        }
+
+        return $scheduleType;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     protected function getScheduleStartValue(array $data, string $scheduleType): ?string
     {
         if ($scheduleType === 'Saturday') {
-            return $data['schedule_start'] ?? $this->getBranch($data)?->reg_sched_start ?? '08:00:00';
+            return '08:00:00';
         }
 
         return $data['schedule_start'] ?? null;

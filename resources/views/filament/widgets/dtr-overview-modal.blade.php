@@ -1,6 +1,8 @@
 @php
     $overview = $overview ?? [];
     $minutesToHours = fn ($minutes) => number_format(((int) $minutes) / 60, 2);
+    $daysValue = (float) ($overview['total_days_work'] ?? 0);
+    $formatDays = fn (float $days): string => rtrim(rtrim(number_format($days, 3), '0'), '.');
     $metricStyle = 'border:1px solid rgba(148,163,184,.25);border-radius:8px;padding:14px;background:rgba(15,23,42,.03);';
     $labelStyle = 'font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;';
     $valueStyle = 'font-size:24px;font-weight:800;margin-top:4px;';
@@ -16,8 +18,8 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
         <div style="{{ $metricStyle }}">
             <div style="{{ $labelStyle }}">Total Days of Work</div>
-            <div style="{{ $valueStyle }}">{{ number_format((int) ($overview['total_days_work'] ?? 0)) }}</div>
-            <div style="{{ $subStyle }}">working dates</div>
+            <div style="{{ $valueStyle }}">{{ $formatDays($daysValue) }}</div>
+            <div style="{{ $subStyle }}">work + paid leave equivalent</div>
         </div>
 
         <div style="{{ $metricStyle }}">

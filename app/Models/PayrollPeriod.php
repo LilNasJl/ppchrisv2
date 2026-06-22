@@ -22,6 +22,7 @@ class PayrollPeriod extends Model
         'is_locked',
         'locked_at',
         'deductions_processed_at',
+        'loan_payments_processed_at',
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class PayrollPeriod extends Model
         'is_locked' => 'boolean',
         'locked_at' => 'datetime',
         'deductions_processed_at' => 'datetime',
+        'loan_payments_processed_at' => 'datetime',
     ];
 
     protected static function booted(): void

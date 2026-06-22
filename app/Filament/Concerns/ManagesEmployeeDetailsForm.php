@@ -8,6 +8,7 @@ use App\Filament\Pages\ViewEmployeeDetails;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
+use App\Models\EmployeeLoan;
 use App\Services\EmployeeDeductionService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -258,6 +259,61 @@ trait ManagesEmployeeDetailsForm
             .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Description</th>'
             .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Amount</th>'
             .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Terms</th>'
+            .'</tr></thead><tbody>'.$rows.'</tbody></table></div>'
+        );
+    }
+
+    protected function loanSummary(?ModelsEmployee $record): HtmlString
+    {
+        if (! $record) {
+            return new HtmlString('<div style="color:#64748b;">No employee selected.</div>');
+        }
+
+        $loans = EmployeeLoan::query()
+            ->with('amortizationStartPayrollPeriod')
+            ->where('employee_id', $record->id)
+            ->latest('loan_date')
+            ->latest('id')
+            ->get();
+
+        if ($loans->isEmpty()) {
+            return new HtmlString('<div style="color:#64748b;">No loans recorded for this employee.</div>');
+        }
+
+        $money = fn (mixed $amount): string => number_format((float) $amount, 2);
+        $rows = $loans
+            ->map(function (EmployeeLoan $loan) use ($money): string {
+                return '<tr>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);font-weight:700;">'.e($loan->loan_type).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.$money($loan->loan_amount).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.$money($loan->loan_interest).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.$money($loan->total_amount).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.$money($loan->payment_amount).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:right;">'.$money($loan->balance_amount).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e((string) $loan->loan_terms_months).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($loan->schedule).'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e(optional($loan->loan_date)->format('M d, Y') ?: '-').'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($loan->amortizationStartPayrollPeriod?->title ?: '-').'</td>'
+                    .'<td style="padding:8px;border-bottom:1px solid rgba(148,163,184,.25);">'.e($loan->status).'</td>'
+                    .'</tr>';
+            })
+            ->implode('');
+
+        return new HtmlString(
+            '<div style="overflow:auto;">'
+            .'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            .'<thead><tr>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Loan Type</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Amount</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Interest</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Total</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Payment</th>'
+            .'<th style="padding:8px;text-align:right;border-bottom:1px solid rgba(148,163,184,.35);">Balance</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Terms</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Schedule</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Loan Date</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Amortization Start</th>'
+            .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Status</th>'
             .'</tr></thead><tbody>'.$rows.'</tbody></table></div>'
         );
     }
@@ -584,6 +640,15 @@ trait ManagesEmployeeDetailsForm
                             Placeholder::make('deduction_summary')
                                 ->hiddenLabel()
                                 ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->deductionSummary($record ?? ($this->employeeRecord ?? null)))
+                                ->columnSpanFull(),
+                        ]),
+
+                    Tabs\Tab::make('Loan Details')
+                        ->icon(Heroicon::Banknotes)
+                        ->schema([
+                            Placeholder::make('loan_summary')
+                                ->hiddenLabel()
+                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->loanSummary($record ?? ($this->employeeRecord ?? null)))
                                 ->columnSpanFull(),
                         ]),
 

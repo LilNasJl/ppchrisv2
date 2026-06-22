@@ -10,11 +10,8 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -177,8 +174,7 @@ class BranchTable extends TableWidget
                     ->getStateUsing(fn ($record) => $record->opening_hrs && $record->closed_hrs
                             ? "{$record->opening_hrs} - {$record->closed_hrs}"
                             : '—'
-                    )
-                    ->searchable(),
+                    ),
 
                 TextColumn::make('is_24hrs')
                     ->label('24 Hours')
@@ -202,8 +198,7 @@ class BranchTable extends TableWidget
                     ->getStateUsing(fn ($record) => $record->employee
                             ? "{$record->employee->lastname}, {$record->employee->middlename} {$record->employee->firstname}"
                             : '—'
-                    )
-                    ->searchable(),
+                    ),
 
                 // TextColumn::make('branch_address')
                 //     ->label('Address')
@@ -768,9 +763,7 @@ class BranchTable extends TableWidget
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
+                    //
                 ]),
             ]);
     }

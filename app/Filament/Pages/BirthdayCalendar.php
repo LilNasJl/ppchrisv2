@@ -30,7 +30,7 @@ class BirthdayCalendar extends Page
 
     public function mount(): void
     {
-        $this->calendarMonth = now()->startOfMonth()->format('Y-m-d');
+        $this->calendarMonth = now('Asia/Manila')->startOfMonth()->format('Y-m-d');
     }
 
     public function previousMonth(): void
@@ -56,9 +56,10 @@ class BirthdayCalendar extends Page
 
     public function getCalendarDaysProperty(): array
     {
-        $month = Carbon::parse($this->calendarMonth)->startOfMonth();
-        $start = $month->copy()->startOfWeek();
-        $end = $month->copy()->endOfMonth()->endOfWeek();
+        $month = Carbon::parse($this->calendarMonth, 'Asia/Manila')->startOfMonth();
+        $start = $month->copy()->startOfWeek(Carbon::SUNDAY);
+        $end = $month->copy()->endOfMonth()->endOfWeek(Carbon::SATURDAY);
+        $today = now('Asia/Manila')->toDateString();
         $birthdays = $this->birthdaysForMonth($month);
 
         $days = [];
@@ -70,7 +71,7 @@ class BirthdayCalendar extends Page
                 'date' => $date->toDateString(),
                 'day' => $date->day,
                 'isCurrentMonth' => $date->isSameMonth($month),
-                'isToday' => $date->isToday(),
+                'isToday' => $date->toDateString() === $today,
                 'birthdays' => $birthdays->get($monthDay, collect())->values(),
             ];
         }

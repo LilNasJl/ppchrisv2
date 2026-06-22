@@ -8,6 +8,7 @@ use App\Models\Memo;
 use App\Models\Ticket;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 // Route::get('/', function () {
 //     return view('welcome');
@@ -77,6 +78,25 @@ Route::get('/ticket-attachments/{ticket}/{source}', function (Ticket $ticket, st
 })
     ->middleware('auth')
     ->name('ticket.attachments.show');
+
+Route::get('/profile-photos/{filename}', function (string $filename) {
+    abort_unless(preg_match('/\A[A-Za-z0-9._-]+\z/', $filename) === 1, 404);
+
+    $path = 'profile-photos/'.$filename;
+
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    $mimeType = Storage::disk('public')->mimeType($path) ?: 'image/jpeg';
+
+    abort_unless(Str::startsWith($mimeType, 'image/'), 404);
+
+    return response(Storage::disk('public')->get($path), 200, [
+        'Cache-Control' => 'public, max-age=604800',
+        'Content-Type' => $mimeType,
+    ]);
+})
+    ->where('filename', '[A-Za-z0-9._-]+')
+    ->name('profile_photos.show');
 
 Route::middleware('auth')
     ->prefix('hr-tools')

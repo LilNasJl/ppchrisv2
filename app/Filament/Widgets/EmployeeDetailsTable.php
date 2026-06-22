@@ -574,9 +574,10 @@ class EmployeeDetailsTable extends TableWidget
                     ->label('#')
                     ->rowIndex(),
 
-                ImageColumn::make('user.profile_photo_path')
+                ImageColumn::make('profile_photo')
                     ->label('Profile')
-                    ->disk('public')
+                    ->getStateUsing(fn (ModelsEmployee $record): ?string => $record->user?->profile_photo_url)
+                    ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
                     ->circular(),
 
                 TextColumn::make('uid')

@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
-use App\Models\Leave;
+use App\Models\EmployeeLoan;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodBranchExclusion;
@@ -203,12 +203,13 @@ class PayrollCalculator
         $halfMonthPay = $isDaily ? null : $this->money(($monthlyRate ?? 0) / 2);
         $ratePerHour = $this->money($ratePerDay / $workHoursPerDay);
 
-        $absenceDays = $this->absenceDays($dtrs);
-        $halfDayCount = $this->approvedHalfDayCount($employee, $period);
+        $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay);
+        $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue);
+        $absenceDayValue = ($wholeAbsenceMinutes + $halfDayAbsenceMinutes) / ($workHoursPerDay * 60);
         $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) : $this->workedDtrDays($dtrs);
         $daysWorked = $isDaily
-            ? max(0, $dtrWorkDays - ($halfDayCount * $halfDayValue))
-            : max(0, $halfMonthDays - $absenceDays - ($halfDayCount * $halfDayValue));
+            ? max(0, $dtrWorkDays)
+            : max(0, $halfMonthDays - $absenceDayValue);
 
         $basePay = $isDaily
             ? $this->money($ratePerDay * $daysWorked)
@@ -230,9 +231,10 @@ class PayrollCalculator
 
         $undertimeAmount = $this->money(($undertimeMinutes / 60) * $ratePerHour);
         $lateAmount = $this->money(($lateMinutes / 60) * $ratePerHour);
-        $halfDayAmount = $this->money($halfDayCount * ($ratePerDay * $halfDayValue));
-        $absentAmount = $isDaily ? 0.0 : $this->money($absenceDays * $ratePerDay);
+        $halfDayAmount = $isDaily ? 0.0 : $this->money(($halfDayAbsenceMinutes / 60) * $ratePerHour);
+        $absentAmount = $isDaily ? 0.0 : $this->money(($wholeAbsenceMinutes / 60) * $ratePerHour);
         $deductions = $this->deductions($employee);
+        $loanPayment = $this->loanPaymentDeduction($employee, $period);
 
         $grossPay = $this->money(
             $basePay
@@ -256,6 +258,7 @@ class PayrollCalculator
             + $deductions['hdmf_loan']
             + $deductions['hdmf_ee']
             + $deductions['phic_ee']
+            + $loanPayment
         );
 
         return [
@@ -296,6 +299,7 @@ class PayrollCalculator
             'hdmf_loan' => $deductions['hdmf_loan'],
             'hdmf_ee' => $deductions['hdmf_ee'],
             'phic_ee' => $deductions['phic_ee'],
+            'loan_payment' => $loanPayment,
             'total_deductions' => $totalDeductions,
             'net_pay' => $this->money($grossPay - $totalDeductions),
             'signature' => '',
@@ -365,6 +369,7 @@ class PayrollCalculator
             'shortages' => 'SHORTAGES',
             'uniform' => 'UNIFORM',
             'other_deductions' => 'OTHER DEDUCTIONS',
+            'loan_payment' => 'LOAN PAYMENT',
             'sss_loan' => 'SSS LOAN',
             'sss_ee' => 'SSS EE',
             'hdmf_loan' => 'HDMF LOAN',
@@ -494,36 +499,29 @@ class PayrollCalculator
             ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime');
     }
 
-    protected function absenceDays(Collection $dtrs): float
+    protected function wholeAbsenceMinutes(Collection $dtrs, float $workHoursPerDay): float
     {
-        return (float) $dtrs
-            ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
-            ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in))
-            ->unique(fn (Dtr $dtr): string => (string) $dtr->date_in)
-            ->count();
+        return $this->absenceMinutesFor($dtrs, $workHoursPerDay, DtrDayPartService::WHOLE_DAY);
     }
 
-    protected function approvedHalfDayCount(Employee $employee, PayrollPeriod $period): float
+    protected function halfDayAbsenceMinutes(Collection $dtrs, float $workHoursPerDay, float $halfDayValue): float
     {
-        if (blank($period->date_start) || blank($period->date_end)) {
-            return 0.0;
-        }
+        $fallbackMinutes = $workHoursPerDay * 60 * $halfDayValue;
 
-        return (float) Leave::query()
-            ->where('employee_id', $employee->id)
-            ->where('status', 'Approved')
-            ->where('is_half_day', true)
-            ->whereDate('leave_from', '<=', $period->date_end)
-            ->where(function (Builder $query) use ($period): void {
-                $query
-                    ->whereDate('leave_to', '>=', $period->date_start)
-                    ->orWhere(function (Builder $query) use ($period): void {
-                        $query
-                            ->whereNull('leave_to')
-                            ->whereDate('leave_from', '>=', $period->date_start);
-                    });
-            })
-            ->count();
+        return $dtrs
+            ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->reject(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === DtrDayPartService::WHOLE_DAY)
+            ->sum(fn (Dtr $dtr): float => (float) ($dtr->absence_minutes ?: $fallbackMinutes));
+    }
+
+    protected function absenceMinutesFor(Collection $dtrs, float $workHoursPerDay, string $dayPart): float
+    {
+        $fallbackMinutes = $workHoursPerDay * 60;
+
+        return $dtrs
+            ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->filter(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === $dayPart)
+            ->sum(fn (Dtr $dtr): float => (float) ($dtr->absence_minutes ?: $fallbackMinutes));
     }
 
     protected function sumMinutes(Collection $dtrs, string $column): float
@@ -671,6 +669,18 @@ class PayrollCalculator
         return collect($deductions)
             ->map(fn (float $value): float => $this->money($value))
             ->all();
+    }
+
+    protected function loanPaymentDeduction(Employee $employee, PayrollPeriod $period): float
+    {
+        return $this->money(
+            EmployeeLoan::query()
+                ->with(['amortizationStartPayrollPeriod'])
+                ->where('employee_id', $employee->id)
+                ->whereIn('status', [EmployeeLoan::STATUS_ACTIVE, EmployeeLoan::STATUS_PAID])
+                ->get()
+                ->sum(fn (EmployeeLoan $loan): float => $loan->paymentAmountForPeriod($period))
+        );
     }
 
     protected function employeeName(Employee $employee): string
