@@ -47,6 +47,30 @@
         color: #e5e7eb;
     }
 
+    .payroll-table tbody tr:nth-child(odd) td {
+        background: rgba(255, 255, 255, .96);
+    }
+
+    .payroll-table tbody tr:nth-child(even) td {
+        background: rgba(248, 250, 252, .96);
+    }
+
+    .dark .payroll-table tbody tr:nth-child(odd) td {
+        background: rgba(17, 24, 39, .36);
+    }
+
+    .dark .payroll-table tbody tr:nth-child(even) td {
+        background: rgba(30, 41, 59, .58);
+    }
+
+    .payroll-table tbody tr:hover td {
+        background: rgba(59, 130, 246, .08);
+    }
+
+    .dark .payroll-table tbody tr:hover td {
+        background: rgba(96, 165, 250, .16);
+    }
+
     .payroll-table .text-right {
         text-align: right;
     }

@@ -24,7 +24,7 @@ class DtrImport extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Dtr::getUrl()),
+                ->url(DtrViewer::getUrl()),
         ];
     }
 

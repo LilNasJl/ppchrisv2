@@ -10,6 +10,7 @@ use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Livewire\Attributes\On;
 use Override;
 
 class EmployeePayroll extends Page
@@ -69,6 +70,12 @@ class EmployeePayroll extends Page
         }
 
         return $calculator->row($this->employee, $this->selectedPeriod);
+    }
+
+    #[On('payroll-adjustment-updated')]
+    public function refreshPayrollRows(): void
+    {
+        //
     }
 
     #[Override]

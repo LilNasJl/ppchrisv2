@@ -19,6 +19,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Group;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Override;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -124,6 +125,12 @@ class PayrollByBranch extends Page implements HasForms
         return $this->rows
             ->reject(fn (array $row): bool => str((string) ($row['payment_type'] ?? ''))->lower()->contains('atm'))
             ->values();
+    }
+
+    #[On('payroll-adjustment-updated')]
+    public function refreshPayrollRows(): void
+    {
+        //
     }
 
     public function exportExcel(): StreamedResponse

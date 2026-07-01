@@ -22,6 +22,26 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .payroll-print-table {
+            display: none;
+        }
+
+        .payroll-screen-table {
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+        }
+
+        @media print {
+            .payroll-screen-table {
+                display: none !important;
+            }
+
+            .payroll-print-table {
+                display: block !important;
+            }
+        }
     </style>
 
     <div style="display: grid; gap: 16px;">
@@ -55,8 +75,20 @@
             </div>
         @endif
 
-        @include('filament.pages.partials.payroll-detail-table', [
-            'rows' => $this->payrollRow ? collect([$this->payrollRow]) : collect(),
-        ])
+        <div class="payroll-screen-table">
+            <livewire:payroll-detail-table
+                :period-id="(int) $this->period_id"
+                :branch-id="$this->branchId"
+                :employee-id="$this->employeeId"
+                :use-pagination="false"
+                :key="'employee-payroll-'.$this->period_id.'-'.$this->branchId.'-'.$this->employeeId"
+            />
+        </div>
+
+        <div class="payroll-print-table">
+            @include('filament.pages.partials.payroll-detail-table', [
+                'rows' => $this->payrollRow ? collect([$this->payrollRow]) : collect(),
+            ])
+        </div>
     </div>
 </x-filament-panels::page>

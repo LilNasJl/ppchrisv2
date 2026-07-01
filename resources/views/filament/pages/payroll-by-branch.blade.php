@@ -18,6 +18,16 @@
             color: #f8fafc;
         }
 
+        .payroll-print-table {
+            display: none;
+        }
+
+        .payroll-screen-table {
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+        }
+
         @media print {
             @page {
                 margin: 0;
@@ -55,6 +65,14 @@
             .payroll-section-title {
                 color: #000 !important;
             }
+
+            .payroll-screen-table {
+                display: none !important;
+            }
+
+            .payroll-print-table {
+                display: block !important;
+            }
         }
     </style>
 
@@ -76,14 +94,34 @@
             </div>
 
             <h3 class="payroll-section-title" style="font-size: 16px;">ATM Payroll</h3>
-            @include('filament.pages.partials.payroll-detail-table', [
-                'rows' => $this->atmRows,
-            ])
+            <div class="payroll-screen-table">
+                <livewire:payroll-detail-table
+                    :period-id="(int) $this->period_id"
+                    :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
+                    payment-type="atm"
+                    :key="'atm-payroll-'.$this->period_id.'-'.$this->branch_id"
+                />
+            </div>
+            <div class="payroll-print-table">
+                @include('filament.pages.partials.payroll-detail-table', [
+                    'rows' => $this->atmRows,
+                ])
+            </div>
 
             <h3 class="payroll-section-title" style="font-size: 16px;">Cash Payroll</h3>
-            @include('filament.pages.partials.payroll-detail-table', [
-                'rows' => $this->cashRows,
-            ])
+            <div class="payroll-screen-table">
+                <livewire:payroll-detail-table
+                    :period-id="(int) $this->period_id"
+                    :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
+                    payment-type="cash"
+                    :key="'cash-payroll-'.$this->period_id.'-'.$this->branch_id"
+                />
+            </div>
+            <div class="payroll-print-table">
+                @include('filament.pages.partials.payroll-detail-table', [
+                    'rows' => $this->cashRows,
+                ])
+            </div>
 
             @include('filament.pages.partials.payroll-signatories', [
                 'preparedBy' => $this->prepared_by,

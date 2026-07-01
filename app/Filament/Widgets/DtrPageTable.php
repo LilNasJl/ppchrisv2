@@ -2,7 +2,6 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\DtrImport;
 use App\Filament\Pages\DtrPeriodBranches;
 use App\Filament\Pages\DtrViewer;
 use App\Models\PayrollPeriod;
@@ -50,15 +49,9 @@ class DtrPageTable extends TableWidget
             ])
             ->headerActions([
                 Action::make('dtrviewer')
-                    ->label('D.T.R Viewer')
+                    ->label('Manage DTR')
                     ->icon(Heroicon::QueueList)
                     ->url(DtrViewer::getUrl()),
-
-                Action::make('importdtr')
-                    ->label('D.T.R Importer')
-                    ->icon(Heroicon::ArrowDownTray)
-                    ->url(DtrImport::getUrl()),
-
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -66,7 +59,7 @@ class DtrPageTable extends TableWidget
                         ->label('View')
                         ->icon(Heroicon::Eye)
                         ->url(fn (PayrollPeriod $record): string => DtrPeriodBranches::getUrl([
-                            'periodId' => $record->publicKey(),
+                            'periodId' => $record->id,
                         ])),
                 ]),
             ])

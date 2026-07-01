@@ -382,7 +382,6 @@ trait ManagesEmployeeDetailsForm
         $data['birthday_leave_credits'] = $record->birthday_leave_credits;
         $data['leave_credits_year'] = $record->leave_credits_year;
         $data['allowance'] = $record->allowance ?? 0;
-        $data['salary_adjustment'] = $record->salary_adjustment ?? 0;
         $data['kids'] = $record->kids ?? 0;
         $data['tenure'] = $record->tenure;
         $data['profile_photo_path'] = $record->user?->profile_photo_path;
@@ -744,12 +743,6 @@ trait ManagesEmployeeDetailsForm
                                         ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->default(0),
 
-                                    TextInput::make('salary_adjustment')
-                                        ->label('Salary Adjustment')
-                                        ->numeric()
-                                        ->prefix('₱')
-                                        ->dehydrateStateUsing(fn ($state) => $state ?? 0)
-                                        ->default(0),
                                 ])
                                 ->columns([
                                     'default' => 1,

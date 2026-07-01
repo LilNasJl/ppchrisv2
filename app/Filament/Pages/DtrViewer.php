@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -23,7 +24,7 @@ class DtrViewer extends Page implements HasForms
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'D.T.R Viewer';
+    protected static ?string $title = 'Manage D.T.R';
 
     public ?string $period_id = null;
 
@@ -78,6 +79,15 @@ class DtrViewer extends Page implements HasForms
                 ->icon(Heroicon::ArrowLeft)
                 ->url(Dtr::getUrl()),
 
+            ActionGroup::make([
+                Action::make('importdtr')
+                    ->label('D.T.R Importer')
+                    ->icon(Heroicon::ArrowDownTray)
+                    ->url(DtrImport::getUrl()),
+            ])
+                ->label('DTR Tools')
+                ->icon(Heroicon::ChevronDown)
+                ->button(),
         ];
     }
 }

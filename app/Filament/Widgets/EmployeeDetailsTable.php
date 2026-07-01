@@ -545,12 +545,6 @@ class EmployeeDetailsTable extends TableWidget
                                         ->dehydrateStateUsing(fn ($state) => $state ?? 0)
                                         ->default(0),
 
-                                    TextInput::make('salary_adjustment')
-                                        ->label('Salary Adjustment')
-                                        ->numeric()
-                                        ->prefix('₱')
-                                        ->dehydrateStateUsing(fn ($state) => $state ?? 0)
-                                        ->default(0),
                                 ])
                                 ->columns(2),
                         ]),

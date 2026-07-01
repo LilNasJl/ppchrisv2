@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollPeriodBranchExclusion;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
@@ -227,7 +228,9 @@ class PayrollCalculator
         );
         $specialHolidayAmount = $this->holidayAmount($employee, $dtrs, $ratePerDay, 'special', $settings);
         $allowance = $this->money($employee->allowance ?? 0);
-        $salaryAdjustment = $this->money($employee->salary_adjustment ?? 0);
+        $payrollAdjustment = $this->payrollAdjustment($employee, $period);
+        $salaryAdjustment = $this->money($payrollAdjustment?->salary_adjustment ?? 0);
+        $shortages = $this->money($payrollAdjustment?->shortages ?? 0);
 
         $undertimeAmount = $this->money(($undertimeMinutes / 60) * $ratePerHour);
         $lateAmount = $this->money(($lateMinutes / 60) * $ratePerHour);
@@ -250,7 +253,7 @@ class PayrollCalculator
             + $halfDayAmount
             + $absentAmount
             + $lateAmount
-            + $deductions['shortages']
+            + $shortages
             + $deductions['uniform']
             + $deductions['other_deductions']
             + $deductions['sss_loan']
@@ -291,7 +294,7 @@ class PayrollCalculator
             'halfday' => $halfDayAmount,
             'absent' => $absentAmount,
             'late' => $lateAmount,
-            'shortages' => $deductions['shortages'],
+            'shortages' => $shortages,
             'uniform' => $deductions['uniform'],
             'other_deductions' => $deductions['other_deductions'],
             'sss_loan' => $deductions['sss_loan'],
@@ -646,6 +649,9 @@ class PayrollCalculator
     {
         $deductions = array_fill_keys(array_keys(self::DEFAULT_DEDUCTION_TITLES), 0.0);
         $deductions['other_deductions'] = 0.0;
+        $periodSpecificTitles = [
+            $this->normalizeTitle(self::DEFAULT_DEDUCTION_TITLES['shortages']),
+        ];
         $titleToKey = collect(self::DEFAULT_DEDUCTION_TITLES)
             ->mapWithKeys(fn (string $title, string $key): array => [$this->normalizeTitle($title) => $key])
             ->all();
@@ -653,6 +659,11 @@ class PayrollCalculator
         foreach (app(EmployeeDeductionService::class)->activeEmployeeDeductions($employee) as $employeeDeduction) {
             $title = $this->normalizeTitle((string) $employeeDeduction->deduction?->title);
             $amount = $this->money($employeeDeduction->amount ?? 0);
+
+            if (in_array($title, $periodSpecificTitles, true)) {
+                continue;
+            }
+
             $key = $titleToKey[$title] ?? null;
 
             if ($key !== null) {
@@ -669,6 +680,14 @@ class PayrollCalculator
         return collect($deductions)
             ->map(fn (float $value): float => $this->money($value))
             ->all();
+    }
+
+    protected function payrollAdjustment(Employee $employee, PayrollPeriod $period): ?PayrollPeriodEmployeeAdjustment
+    {
+        return PayrollPeriodEmployeeAdjustment::query()
+            ->where('payroll_period_id', $period->id)
+            ->where('employee_id', $employee->id)
+            ->first();
     }
 
     protected function loanPaymentDeduction(Employee $employee, PayrollPeriod $period): float
