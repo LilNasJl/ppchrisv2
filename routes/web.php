@@ -119,4 +119,4 @@ Route::middleware('auth')
         Route::get('/export/dtr.csv', DtrExportController::class)->name('export.dtr');
     });
 
-Route::redirect('/', '/hr');
+Route::view('/', 'landing')->name('landing');

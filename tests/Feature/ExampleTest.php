@@ -1,7 +1,11 @@
 <?php
 
-test('the application redirects to the HR panel', function () {
+test('the application displays the landing page', function () {
     $response = $this->get('/');
 
-    $response->assertRedirect('/hr');
+    $response
+        ->assertOk()
+        ->assertSee('Human Resource Information System')
+        ->assertSee('HR Portal')
+        ->assertSee('Employee Self-Service');
 });
