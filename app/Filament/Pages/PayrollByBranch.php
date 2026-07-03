@@ -178,10 +178,11 @@ class PayrollByBranch extends Page implements HasForms
                 Action::make('print')
                     ->label('Print / PDF')
                     ->icon(Heroicon::Printer)
-                    ->url('#')
-                    ->extraAttributes([
-                        'x-on:click.prevent' => CompanyExportHeader::printScript(),
-                    ]),
+                    ->url(fn (): string => route('hr_tools.payroll_by_branch.print', [
+                        'period_id' => $this->period_id,
+                        'branch_id' => $this->branch_id,
+                    ]))
+                    ->openUrlInNewTab(),
             ])
                 ->label('Export')
                 ->icon(Heroicon::ChevronDown)

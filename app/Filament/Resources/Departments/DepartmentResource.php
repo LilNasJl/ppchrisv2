@@ -28,6 +28,7 @@ class DepartmentResource extends Resource
     protected static ?string $recordTitleAttribute = 'Departments';
 
     protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
+    protected static ?string $navigationLabel = 'Deparment / Office';
 
     public static function form(Schema $schema): Schema
     {

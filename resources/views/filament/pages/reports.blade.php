@@ -314,11 +314,19 @@
 
         @media print {
             @page {
-                margin: 0;
+                margin: 10mm;
+                size: auto;
             }
 
+            html,
             body {
+                background: #fff !important;
+                color: #000 !important;
+                height: auto !important;
+                margin: 0 !important;
+                overflow: visible !important;
                 print-color-adjust: exact;
+                width: 100% !important;
                 -webkit-print-color-adjust: exact;
             }
 
@@ -333,11 +341,17 @@
 
             .report-print-area {
                 background: #fff !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                box-sizing: border-box !important;
                 color: #000 !important;
                 position: absolute;
-                inset: 0 auto auto 0;
-                padding: 10mm;
-                width: 100%;
+                inset: 0;
+                margin: 0 !important;
+                min-height: 100vh;
+                overflow: visible !important;
+                padding: 0 !important;
+                width: auto !important;
             }
 
             .report-print-area * {
@@ -353,9 +367,17 @@
             }
 
             .report-table-scroll {
-                overflow: visible;
-                max-height: none;
-                border: 0;
+                border: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+                width: 100% !important;
+            }
+
+            .report-table {
+                font-size: 9pt !important;
+                min-width: 0 !important;
+                table-layout: auto;
+                width: 100% !important;
             }
 
             .report-table th,
@@ -363,6 +385,9 @@
                 background: #fff !important;
                 border-color: #000 !important;
                 color: #000 !important;
+                overflow-wrap: anywhere;
+                padding: 4px 5px !important;
+                position: static !important;
             }
 
             .report-table th {
@@ -372,6 +397,15 @@
 
             .export-report-title {
                 color: #000 !important;
+            }
+
+            .report-table thead {
+                display: table-header-group;
+            }
+
+            .report-table tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
             }
         }
     </style>

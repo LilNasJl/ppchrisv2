@@ -54,6 +54,26 @@
             padding: 8px;
         }
 
+        .birthday-day-button {
+            background: transparent;
+            border: 0;
+            color: inherit;
+            cursor: pointer;
+            display: block;
+            text-align: left;
+            transition: background-color .15s ease;
+            width: 100%;
+        }
+
+        .birthday-day-button:hover {
+            background: rgba(234, 179, 8, .08);
+        }
+
+        .birthday-day-button:focus-visible {
+            box-shadow: inset 0 0 0 2px #eab308;
+            outline: none;
+        }
+
         .birthday-muted {
             opacity: .42;
         }
@@ -74,6 +94,7 @@
         }
 
         .birthday-badge {
+            display: block;
             margin-top: 8px;
             border-radius: 7px;
             background: rgba(234, 179, 8, .18);
@@ -82,6 +103,44 @@
             font-size: 12px;
             line-height: 1.25;
             overflow: hidden;
+        }
+
+        .birthday-modal-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .birthday-modal-person {
+            align-items: center;
+            border-bottom: 1px solid rgba(148, 163, 184, .24);
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+
+        .birthday-modal-person:last-child {
+            border-bottom: 0;
+        }
+
+        .birthday-modal-name {
+            color: rgb(15, 23, 42);
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .dark .birthday-modal-name {
+            color: #f8fafc;
+        }
+
+        .birthday-modal-meta {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 3px;
+        }
+
+        .dark .birthday-modal-meta {
+            color: #94a3b8;
         }
 
         @media (max-width: 1100px) {
@@ -193,17 +252,30 @@
                         <tr>
                             @foreach ($week as $day)
                                 <td>
-                                    <div class="birthday-day {{ $day['isCurrentMonth'] ? '' : 'birthday-muted' }}">
-                                        <span class="birthday-number {{ $day['isToday'] ? 'birthday-today' : '' }}">
-                                            {{ $day['day'] }}
-                                        </span>
+                                    @if ($day['birthdays']->isNotEmpty())
+                                        <button
+                                            type="button"
+                                            wire:click="showBirthdays('{{ $day['date'] }}')"
+                                            class="birthday-day birthday-day-button {{ $day['isCurrentMonth'] ? '' : 'birthday-muted' }}"
+                                            aria-label="View {{ $day['birthdays']->count() }} birthday{{ $day['birthdays']->count() === 1 ? '' : 's' }} on {{ \Carbon\Carbon::parse($day['date'])->format('F d') }}"
+                                        >
+                                            <span class="birthday-number {{ $day['isToday'] ? 'birthday-today' : '' }}">
+                                                {{ $day['day'] }}
+                                            </span>
 
-                                        @foreach ($day['birthdays']->take(2) as $employee)
-                                            <div class="birthday-badge">
-                                                {{ $employee->full_name }}
-                                            </div>
-                                        @endforeach
-                                    </div>
+                                            @foreach ($day['birthdays']->take(2) as $employee)
+                                                <span class="birthday-badge">
+                                                    {{ $employee->full_name }}
+                                                </span>
+                                            @endforeach
+                                        </button>
+                                    @else
+                                        <div class="birthday-day {{ $day['isCurrentMonth'] ? '' : 'birthday-muted' }}">
+                                            <span class="birthday-number {{ $day['isToday'] ? 'birthday-today' : '' }}">
+                                                {{ $day['day'] }}
+                                            </span>
+                                        </div>
+                                    @endif
                                 </td>
                             @endforeach
                         </tr>
@@ -212,4 +284,29 @@
             </table>
         </section>
     </div>
+
+    <x-filament::modal id="birthday-list-modal" width="lg">
+        <x-slot name="heading">
+            Birthdays on {{ $this->selectedBirthdayLabel }}
+        </x-slot>
+
+        <x-slot name="description">
+            {{ count($selectedBirthdays) }} employee{{ count($selectedBirthdays) === 1 ? '' : 's' }}
+        </x-slot>
+
+        <div class="birthday-modal-list">
+            @foreach ($selectedBirthdays as $birthday)
+                <div class="birthday-modal-person">
+                    <div>
+                        <div class="birthday-modal-name">{{ $birthday['name'] }}</div>
+                        <div class="birthday-modal-meta">
+                            {{ $birthday['designation'] }} | {{ $birthday['branch'] }}
+                        </div>
+                    </div>
+
+                    <x-filament::icon icon="heroicon-m-cake" class="h-5 w-5 text-warning-500" />
+                </div>
+            @endforeach
+        </div>
+    </x-filament::modal>
 </x-filament-panels::page>

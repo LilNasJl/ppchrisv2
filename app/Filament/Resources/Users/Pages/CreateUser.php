@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Users\Pages;
 
 use App\Filament\Resources\Users\UserResource;
 use App\Models\User;
-use App\Notifications\RecordUpdatedNotification;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateUser extends CreateRecord
@@ -28,15 +27,6 @@ class CreateUser extends CreateRecord
                 'username' => $username,
                 'name' => $username,
             ])->saveQuietly();
-        }
-
-        $users = User::all();
-
-        foreach ($users as $user) {
-            $user->notify(new RecordUpdatedNotification(
-                'User created',
-                'A new user record has been created.'
-            ));
         }
     }
 }

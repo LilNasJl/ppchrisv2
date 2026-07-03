@@ -42,7 +42,10 @@ class PayrollSummary extends Page implements HasForms
 
     public function mount(): void
     {
-        $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'))
+            ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+
+        $this->period_id = filled($periodId) ? (string) $periodId : null;
 
         $this->form->fill([
             'period_id' => $this->period_id,
@@ -94,7 +97,7 @@ class PayrollSummary extends Page implements HasForms
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->period_id)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->selectedPeriod?->publicKey()])
+                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period_id])
                     : Payroll::getUrl()),
 
             Action::make('signatories')
@@ -126,10 +129,10 @@ class PayrollSummary extends Page implements HasForms
                 Action::make('print')
                     ->label('Print / PDF')
                     ->icon(Heroicon::Printer)
-                    ->url('#')
-                    ->extraAttributes([
-                        'x-on:click.prevent' => CompanyExportHeader::printScript(),
-                    ]),
+                    ->url(fn (): string => route('hr_tools.payroll_summary.print', [
+                        'period_id' => $this->period_id,
+                    ]))
+                    ->openUrlInNewTab(),
             ])
                 ->label('Export')
                 ->icon(Heroicon::ChevronDown)

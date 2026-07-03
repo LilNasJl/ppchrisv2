@@ -112,6 +112,11 @@ class EmployeeLoan extends Model
         return $this->hasMany(EmployeeLoanPayment::class);
     }
 
+    public function request()
+    {
+        return $this->hasOne(EmployeeLoanRequest::class, 'approved_employee_loan_id');
+    }
+
     public function postedPayments(): HasMany
     {
         return $this->payments()

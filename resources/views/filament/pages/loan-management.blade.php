@@ -46,15 +46,26 @@
         <button
             type="button"
             class="loan-tab"
+            aria-selected="{{ $activeLoanTab === 'requests' ? 'true' : 'false' }}"
+            wire:click="showLoanTab('requests')"
+        >
+            Loan Requests
+        </button>
+
+        <button
+            type="button"
+            class="loan-tab"
             aria-selected="{{ $activeLoanTab === 'information' ? 'true' : 'false' }}"
             wire:click="showLoanTab('information')"
         >
-            Loan Information
+            Add Loan
         </button>
     </div>
 
     @if ($activeLoanTab === 'list')
         {{ $this->table }}
+    @elseif ($activeLoanTab === 'requests')
+        <livewire:loan-request-management-table />
     @else
         <form wire:submit.prevent="createLoan">
             {{ $this->form }}

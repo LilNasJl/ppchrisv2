@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Users\Pages;
 
 use App\Filament\Resources\Users\UserResource;
 use App\Models\User;
-use App\Notifications\RecordUpdatedNotification;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -44,15 +43,6 @@ class EditUser extends EditRecord
                 'username' => $username,
                 'name' => $username,
             ])->saveQuietly();
-        }
-
-        $users = User::all();
-
-        foreach ($users as $user) {
-            $user->notify(new RecordUpdatedNotification(
-                'User updated',
-                'A user record has been updated.'
-            ));
         }
     }
 

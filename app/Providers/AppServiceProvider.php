@@ -11,6 +11,7 @@ use App\Models\Designation;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeDeduction;
+use App\Models\EmployeeLoanRequest;
 use App\Models\Holiday;
 use App\Models\HolidayType;
 use App\Models\Leave;
@@ -125,6 +126,7 @@ class AppServiceProvider extends ServiceProvider
             Dtr::class,
             Employee::class,
             EmployeeDeduction::class,
+            EmployeeLoanRequest::class,
             Holiday::class,
             HolidayType::class,
             Leave::class,

@@ -28,6 +28,10 @@ class BirthdayCalendar extends Page
 
     public string $calendarMonth;
 
+    public ?string $selectedBirthdayDate = null;
+
+    public array $selectedBirthdays = [];
+
     public function mount(): void
     {
         $this->calendarMonth = now('Asia/Manila')->startOfMonth()->format('Y-m-d');
@@ -52,6 +56,41 @@ class BirthdayCalendar extends Page
     public function getMonthLabelProperty(): string
     {
         return Carbon::parse($this->calendarMonth)->format('F Y');
+    }
+
+    public function showBirthdays(string $date): void
+    {
+        $selectedDate = Carbon::createFromFormat('Y-m-d', $date, 'Asia/Manila');
+
+        if (! $selectedDate || $selectedDate->format('Y-m-d') !== $date) {
+            return;
+        }
+
+        $birthdays = $this->birthdaysForMonth($selectedDate->copy()->startOfMonth())
+            ->get($selectedDate->format('m-d'), collect())
+            ->values();
+
+        if ($birthdays->isEmpty()) {
+            return;
+        }
+
+        $this->selectedBirthdayDate = $selectedDate->format('Y-m-d');
+        $this->selectedBirthdays = $birthdays
+            ->map(fn (Employee $employee): array => [
+                'name' => $employee->full_name,
+                'designation' => $employee->designation?->title ?: 'No designation',
+                'branch' => $employee->branch?->branch_name ?: 'No branch',
+            ])
+            ->all();
+
+        $this->dispatch('open-modal', id: 'birthday-list-modal');
+    }
+
+    public function getSelectedBirthdayLabelProperty(): string
+    {
+        return filled($this->selectedBirthdayDate)
+            ? Carbon::parse($this->selectedBirthdayDate, 'Asia/Manila')->format('F d')
+            : 'Selected Date';
     }
 
     public function getCalendarDaysProperty(): array
@@ -94,7 +133,7 @@ class BirthdayCalendar extends Page
     protected function birthdaysForMonth(Carbon $month): Collection
     {
         return Employee::query()
-            ->with(['user', 'branch'])
+            ->with(['user', 'branch', 'designation'])
             ->whereNotNull('birthdate')
             ->activeEmployment()
             ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))

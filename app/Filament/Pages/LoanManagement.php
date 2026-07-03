@@ -194,7 +194,7 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     public function showLoanTab(string $tab): void
     {
-        if (! in_array($tab, ['list', 'information'], true)) {
+        if (! in_array($tab, ['list', 'requests', 'information'], true)) {
             return;
         }
 

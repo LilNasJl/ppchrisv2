@@ -32,6 +32,7 @@ class Branch extends Page
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
 
     protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
+    protected static ?string $navigationLabel = 'Branch / Group';
 
     protected function getHeaderActions(): array
     {

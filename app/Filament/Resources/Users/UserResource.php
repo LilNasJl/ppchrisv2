@@ -10,7 +10,6 @@ use App\Filament\Resources\Users\Pages\ListUsers;
 use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
-use App\Notifications\RecordUpdatedNotification;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -74,23 +73,5 @@ class UserResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
-    }
-
-    protected function afterCreate(): void
-    {
-        $users = User::all(); // or target specific users
-
-        foreach ($users as $user) {
-            $user->notify(new RecordUpdatedNotification);
-        }
-    }
-
-    protected function afterSave(): void
-    {
-        $users = User::all();
-
-        foreach ($users as $user) {
-            $user->notify(new RecordUpdatedNotification);
-        }
     }
 }

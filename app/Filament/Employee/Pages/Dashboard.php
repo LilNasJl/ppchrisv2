@@ -32,12 +32,7 @@ class Dashboard extends Page
             ->get();
     }
 
-    public function getUpcomingHolidaysProperty(): Collection
-    {
-        return app(HolidayResolver::class)->upcomingNationalHolidays(5);
-    }
-
-    public function getUpcomingActivitiesProperty(): Collection
+     public function getUpcomingActivitiesProperty(): Collection
     {
         return Activity::query()
             ->whereDate('date_to', '>=', now()->toDateString())
@@ -45,4 +40,11 @@ class Dashboard extends Page
             ->limit(5)
             ->get();
     }
+
+    public function getUpcomingHolidaysProperty(): Collection
+    {
+        return app(HolidayResolver::class)->upcomingNationalHolidays(5);
+    }
+
+   
 }

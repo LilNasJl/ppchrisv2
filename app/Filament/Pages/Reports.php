@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Activity;
+use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Holiday;
@@ -21,6 +22,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -48,6 +50,8 @@ class Reports extends Page implements HasForms
 
     public ?string $payroll_period_id = null;
 
+    public ?string $branch_id = 'all';
+
     public ?string $month = null;
 
     public function mount(): void
@@ -59,6 +63,7 @@ class Reports extends Page implements HasForms
         $this->form->fill([
             'report_type' => $this->report_type,
             'payroll_period_id' => $this->payroll_period_id,
+            'branch_id' => $this->branch_id,
             'month' => $this->month,
         ]);
     }
@@ -66,25 +71,44 @@ class Reports extends Page implements HasForms
     protected function getFormSchema(): array
     {
         return [
-            Select::make('report_type')
-                ->label('Report Type')
-                ->options(fn (): array => $this->reportOptionsForCategory())
-                ->searchable()
-                ->reactive()
-                ->required(),
+            Group::make([
+                Select::make('report_type')
+                    ->label('Report Type')
+                    ->options(fn (): array => $this->reportOptionsForCategory())
+                    ->searchable()
+                    ->reactive()
+                    ->required()
+                    ->columnSpanFull(),
 
-            Select::make('payroll_period_id')
-                ->label('Payroll Period')
-                ->options(fn (): array => PayrollPeriod::query()->newestFirst()->pluck('title', 'id')->all())
-                ->searchable()
-                ->reactive()
-                ->visible(fn (Get $get): bool => $this->reportNeedsPeriod((string) $get('report_type'))),
+                Select::make('payroll_period_id')
+                    ->label('Payroll Period')
+                    ->options(fn (): array => PayrollPeriod::query()->newestFirst()->pluck('title', 'id')->all())
+                    ->searchable()
+                    ->reactive()
+                    ->visible(fn (Get $get): bool => $this->reportNeedsPeriod((string) $get('report_type'))),
 
-            TextInput::make('month')
-                ->label('Calendar Month')
-                ->type('month')
-                ->reactive()
-                ->visible(fn (Get $get): bool => $this->reportNeedsMonth((string) $get('report_type'))),
+                Select::make('branch_id')
+                    ->label('Branch')
+                    ->options(fn (): array => [
+                        'all' => 'All Branches',
+                        ...Branch::query()
+                            ->orderBy('branch_name')
+                            ->pluck('branch_name', 'id')
+                            ->all(),
+                    ])
+                    ->default('all')
+                    ->searchable()
+                    ->reactive()
+                    ->visible(fn (Get $get): bool => $this->reportNeedsBranch((string) $get('report_type'))),
+
+                TextInput::make('month')
+                    ->label('Calendar Month')
+                    ->type('month')
+                    ->reactive()
+                    ->visible(fn (Get $get): bool => $this->reportNeedsMonth((string) $get('report_type'))),
+            ])
+                ->columns(2)
+                ->columnSpanFull(),
         ];
     }
 
@@ -101,10 +125,13 @@ class Reports extends Page implements HasForms
                 Action::make('print')
                     ->label('Print / PDF')
                     ->icon(Heroicon::Printer)
-                    ->url('#')
-                    ->extraAttributes([
-                        'x-on:click.prevent' => CompanyExportHeader::printScript(),
-                    ]),
+                    ->url(fn (): string => route('hr_tools.reports.print', [
+                        'report_type' => $this->report_type,
+                        'payroll_period_id' => $this->payroll_period_id,
+                        'branch_id' => $this->branch_id,
+                        'month' => $this->month,
+                    ]))
+                    ->openUrlInNewTab(),
             ])
                 ->label('Export')
                 ->icon(Heroicon::ChevronDown)
@@ -169,6 +196,34 @@ class Reports extends Page implements HasForms
         };
     }
 
+    public function supportsReportType(string $reportType): bool
+    {
+        return array_key_exists($reportType, $this->reportOptions());
+    }
+
+    public function getReportFilterLabelsProperty(): array
+    {
+        $labels = [];
+
+        if ($this->reportNeedsPeriod($this->report_type)) {
+            $labels['Payroll Period'] = $this->selectedPeriod()?->title ?? 'Not selected';
+        }
+
+        if ($this->reportNeedsBranch($this->report_type)) {
+            $labels['Branch'] = $this->branch_id === 'all' || blank($this->branch_id)
+                ? 'All Branches'
+                : (Branch::query()->find($this->branch_id)?->branch_name ?? 'Unknown Branch');
+        }
+
+        if ($this->reportNeedsMonth($this->report_type)) {
+            $labels['Month'] = filled($this->month)
+                ? Carbon::parse($this->month.'-01')->format('F Y')
+                : now()->format('F Y');
+        }
+
+        return $labels;
+    }
+
     public function selectReportCategory(string $category): void
     {
         if (! array_key_exists($category, $this->reportCategories())) {
@@ -181,6 +236,7 @@ class Reports extends Page implements HasForms
         $this->form->fill([
             'report_type' => $this->report_type,
             'payroll_period_id' => $this->payroll_period_id,
+            'branch_id' => $this->branch_id,
             'month' => $this->month,
         ]);
     }
@@ -372,6 +428,10 @@ class Reports extends Page implements HasForms
 
         return Dtr::query()
             ->where('payroll_period_id', $period->id)
+            ->when(
+                filled($this->branch_id) && $this->branch_id !== 'all',
+                fn (Builder $query): Builder => $query->where('branch_id', $this->branch_id),
+            )
             ->get()
             ->groupBy(fn (Dtr $dtr): string => "{$dtr->branch_id}-{$dtr->fingerprint_id}")
             ->map(function (Collection $dtrs) use ($metric): array {
@@ -601,6 +661,16 @@ class Reports extends Page implements HasForms
             'calendar_holidays_month',
             'activities_month',
             'memo_month',
+        ], true);
+    }
+
+    protected function reportNeedsBranch(?string $reportType): bool
+    {
+        return in_array($reportType, [
+            'dtr_late',
+            'dtr_credited_overtime',
+            'dtr_early_clock_in',
+            'dtr_undertime',
         ], true);
     }
 

@@ -29,6 +29,7 @@ class EmployeePanelProvider extends PanelProvider
             // ->brandLogoHeight('48px')
             ->brandName('HRMS: SELF SERVICE')
             ->globalSearch(false)
+            ->databaseNotifications()
             ->favicon(url('ppclogo.png'))
             ->login(Login::class)
             ->navigationGroups([

@@ -3,6 +3,9 @@
 use App\Http\Controllers\Hr\DtrExportController;
 use App\Http\Controllers\Hr\DtrImportController;
 use App\Http\Controllers\Hr\EmployeeImportController;
+use App\Http\Controllers\Hr\PayrollByBranchPrintController;
+use App\Http\Controllers\Hr\PayrollSummaryPrintController;
+use App\Http\Controllers\Hr\ReportPrintController;
 use App\Models\Leave;
 use App\Models\Memo;
 use App\Models\Ticket;
@@ -97,6 +100,15 @@ Route::get('/profile-photos/{filename}', function (string $filename) {
 })
     ->where('filename', '[A-Za-z0-9._-]+')
     ->name('profile_photos.show');
+
+Route::get('/hr-tools/reports/print', ReportPrintController::class)
+    ->name('hr_tools.reports.print');
+
+Route::get('/hr-tools/payroll-summary/print', PayrollSummaryPrintController::class)
+    ->name('hr_tools.payroll_summary.print');
+
+Route::get('/hr-tools/payroll-by-branch/print', PayrollByBranchPrintController::class)
+    ->name('hr_tools.payroll_by_branch.print');
 
 Route::middleware('auth')
     ->prefix('hr-tools')
