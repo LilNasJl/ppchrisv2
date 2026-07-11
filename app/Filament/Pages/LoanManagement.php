@@ -27,6 +27,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Override;
+use UnitEnum;
 
 class LoanManagement extends Page implements HasForms, HasTable
 {
@@ -36,11 +37,15 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected string $view = 'filament.pages.loan-management';
 
-    protected static bool $shouldRegisterNavigation = false;
-
     protected static ?string $title = 'Loan Management';
 
+    protected static ?string $navigationLabel = 'Loans';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+
+    protected static ?int $navigationSort = 4;
 
     public string $activeLoanTab = 'list';
 

@@ -2,7 +2,7 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Auth\Login;
+use App\Filament\Auth\EmployeeLogin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -31,7 +31,7 @@ class EmployeePanelProvider extends PanelProvider
             ->globalSearch(false)
             ->databaseNotifications()
             ->favicon(url('ppclogo.png'))
-            ->login(Login::class)
+            ->login(EmployeeLogin::class)
             ->navigationGroups([
                 NavigationGroup::make('My Workspace'),
                 NavigationGroup::make('My Profile'),

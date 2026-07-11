@@ -3,11 +3,14 @@
 namespace App\Filament\Auth;
 
 use App\Models\User;
+use Filament\Actions\Action;
 use Filament\Auth\Http\Responses\Contracts\LoginResponse;
 use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +23,20 @@ class Login extends BaseLogin
     protected string $view = 'filament.auth.login';
 
     protected static string $layout = 'filament.auth.layout';
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            $this->getEmailFormComponent(),
+            $this->getPasswordFormComponent(),
+        ]);
+    }
+
+    protected function getAuthenticateFormAction(): Action
+    {
+        return parent::getAuthenticateFormAction()
+            ->icon(Heroicon::ArrowRightOnRectangle);
+    }
 
     public function authenticate(): ?LoginResponse
     {

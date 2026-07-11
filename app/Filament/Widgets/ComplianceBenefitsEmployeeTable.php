@@ -2,7 +2,7 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\DeductionsManagement;
+use App\Filament\Pages\ComplianceBenefits;
 use App\Filament\Pages\EmployeeComplianceBenefits;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -80,7 +80,7 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
                         ->icon(Heroicon::Eye)
                         ->url(fn (Employee $record): string => EmployeeComplianceBenefits::getUrl([
                             'employeeId' => $record->publicKey(),
-                            'returnUrl' => $this->tableReturnUrl(DeductionsManagement::getUrl()),
+                            'returnUrl' => $this->tableReturnUrl(ComplianceBenefits::getUrl()),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),

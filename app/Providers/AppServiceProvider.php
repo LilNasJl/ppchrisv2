@@ -37,6 +37,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Spatie\Permission\Models\Role;
 use Throwable;
 
@@ -47,7 +48,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(LogoutResponseContract::class, \App\Filament\Auth\LogoutResponse::class);
     }
 
     /**

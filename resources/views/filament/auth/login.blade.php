@@ -16,11 +16,26 @@
 <div class="hris-auth-page">
     <style>
         .hris-auth-page {
+            position: relative;
+            isolation: isolate;
             min-height: 100svh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 32px;
+            overflow: hidden;
+            background-color: #061b49;
+            background-image: url("{{ asset('image/hris-landing-background.png') }}");
+            background-position: center;
+            background-size: cover;
+        }
+
+        .hris-auth-page::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            background: rgba(3, 18, 54, .68);
         }
 
         .hris-auth-card {
@@ -31,8 +46,10 @@
             overflow: hidden;
             border: 0;
             border-radius: 24px;
-            background: #ffffff;
-            box-shadow: 0 28px 74px rgba(15, 23, 42, .22);
+            background: rgba(8, 23, 58, .72);
+            box-shadow: 0 28px 74px rgba(1, 12, 38, .42);
+            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(18px);
         }
 
         .hris-auth-form,
@@ -46,7 +63,7 @@
             align-items: center;
             justify-content: center;
             padding: clamp(36px, 5vw, 60px);
-            background: #ffffff;
+            background: rgba(8, 23, 58, .42);
         }
 
         .hris-auth-heading,
@@ -57,7 +74,7 @@
         .hris-auth-heading {
             margin: 0 0 28px;
             text-align: center;
-            color: #0f172a !important;
+            color: #ffffff !important;
             font-size: 30px;
             font-weight: 900;
             line-height: 1.1;
@@ -75,9 +92,7 @@
             justify-content: center;
             padding: clamp(38px, 5vw, 56px);
             text-align: center;
-            background:
-                radial-gradient(circle at 50% 28%, rgba(255, 255, 255, .18), transparent 34%),
-                linear-gradient(145deg, #1d4ed8 0%, #2563eb 48%, #60a5fa 100%);
+            background: rgba(29, 78, 216, .58);
         }
 
         .hris-auth-logo-wrap {
@@ -128,7 +143,7 @@
         .hris-auth-form .fi-fo-field-wrp-hint,
         .hris-auth-form .fi-checkbox-label,
         .hris-auth-form .fi-fo-checkbox-list-option-label {
-            color: #0f172a !important;
+            color: #f8fafc !important;
             opacity: 1 !important;
             visibility: visible !important;
         }
@@ -265,6 +280,48 @@
             border: 0 !important;
         }
 
+        .dark .hris-auth-heading {
+            color: #f8fafc !important;
+        }
+
+        .hris-auth-home-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            margin: 18px auto 0;
+            color: #dbeafe !important;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+            transition: color .2s ease, transform .2s ease;
+        }
+
+        .hris-auth-home-link:hover {
+            color: #ffffff !important;
+            transform: translateX(-2px);
+        }
+
+        .hris-auth-home-link svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .dark .hris-auth-form label,
+        .dark .hris-auth-form label span,
+        .dark .hris-auth-form .fi-label,
+        .dark .hris-auth-form .fi-label span,
+        .dark .hris-auth-form .fi-fo-field-wrp-label,
+        .dark .hris-auth-form .fi-fo-field-wrp-label span,
+        .dark .hris-auth-form .fi-fo-field-wrp-label label,
+        .dark .hris-auth-form .fi-fo-field-wrp-helper-text,
+        .dark .hris-auth-form .fi-fo-field-wrp-hint,
+        .dark .hris-auth-form .fi-checkbox-label,
+        .dark .hris-auth-form .fi-fo-checkbox-list-option-label {
+            color: #f8fafc !important;
+            -webkit-text-fill-color: #f8fafc !important;
+        }
+
         @media (max-width: 768px) {
             .hris-auth-page {
                 align-items: center;
@@ -280,9 +337,7 @@
             .hris-auth-form {
                 min-height: auto;
                 padding: 38px 26px;
-                background:
-                    radial-gradient(circle at top left, rgba(255, 255, 255, .22), transparent 38%),
-                    linear-gradient(135deg, #1d4ed8 0%, #2563eb 54%, #60a5fa 100%) !important;
+                background: rgba(17, 61, 145, .68) !important;
             }
 
             .hris-auth-heading {
@@ -357,6 +412,11 @@
 
             <div class="hris-auth-content">
                 {{ $this->content }}
+
+                <a href="{{ route('landing') }}" class="hris-auth-home-link">
+                    <x-filament::icon icon="heroicon-m-arrow-left" />
+                    <span>Return to main page</span>
+                </a>
             </div>
         </section>
 
