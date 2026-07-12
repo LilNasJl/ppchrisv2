@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Users\Pages;
 
+use App\Filament\Pages\EmployeeDetails;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\Employee;
 use App\Models\User;
@@ -31,6 +32,13 @@ class EmployeeImportHistory extends Page implements HasTable
     protected string $view = 'filament-panels::pages.page';
 
     protected static ?string $title = 'Employee Import History';
+
+    public ?string $returnUrl = null;
+
+    public function mount(): void
+    {
+        $this->returnUrl = $this->normalizeReturnUrl(request()->query('returnUrl'));
+    }
 
     public function table(Table $table): Table
     {
@@ -111,6 +119,7 @@ class EmployeeImportHistory extends Page implements HasTable
                         ->icon(Heroicon::Eye)
                         ->url(fn (Employee $record): string => UserResource::getUrl('import-batch', [
                             'batchId' => $record->employee_import_batch_id,
+                            'returnUrl' => $this->getReturnUrl(),
                         ]))
                         ->visible(fn (Employee $record): bool => filled($record->employee_import_batch_id)),
 
@@ -215,6 +224,24 @@ class EmployeeImportHistory extends Page implements HasTable
                         ->action(fn (Collection $records): int => $this->deleteSelectedImportBatches($records, force: true)),
                 ]),
             ]);
+    }
+
+    protected function getReturnUrl(): string
+    {
+        return $this->returnUrl ?: EmployeeDetails::getUrl();
+    }
+
+    protected function normalizeReturnUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || blank($url)) {
+            return null;
+        }
+
+        $appUrl = url('/');
+
+        return str_starts_with($url, $appUrl) || str_starts_with($url, '/')
+            ? $url
+            : null;
     }
 
     protected function restoreSelectedImportBatches(Collection $records): int
@@ -359,7 +386,7 @@ class EmployeeImportHistory extends Page implements HasTable
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(UserResource::getUrl()),
+                ->url(fn (): string => $this->getReturnUrl()),
         ];
     }
 }

@@ -9,6 +9,7 @@ use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
+use App\Models\User;
 use App\Services\EmployeeDeductionService;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -23,6 +24,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\HtmlString;
 
 trait ManagesEmployeeDetailsForm
@@ -385,6 +387,8 @@ trait ManagesEmployeeDetailsForm
         $data['kids'] = $record->kids ?? 0;
         $data['tenure'] = $record->tenure;
         $data['profile_photo_path'] = $record->user?->profile_photo_path;
+        $data['account_username'] = $record->user?->username;
+        $data['account_password'] = null;
         $data['schedule_type'] = $this->scheduleTypeForRateType($record->rate_type);
 
         return $data;
@@ -395,7 +399,7 @@ trait ManagesEmployeeDetailsForm
         return [
             Tabs::make('Employee Details')
                 ->tabs([
-                    Tabs\Tab::make('Profile Picture')
+                    Tabs\Tab::make('Account')
                         ->icon(Heroicon::UserCircle)
                         ->schema([
                             Placeholder::make('profile_card')
@@ -414,6 +418,30 @@ trait ManagesEmployeeDetailsForm
                                 ->visibility('public')
                                 ->fetchFileInformation(false)
                                 ->columnSpanFull(),
+
+                            Group::make()
+                                ->schema([
+                                    TextInput::make('account_username')
+                                        ->label('Username')
+                                        ->readOnly()
+                                        ->dehydrated(false)
+                                        ->helperText('Automatically generated from the employee ID.'),
+
+                                    TextInput::make('account_password')
+                                        ->label('New Password')
+                                        ->password()
+                                        ->revealable()
+                                        ->dehydrated(fn (?string $state): bool => filled($state))
+                                        ->helperText('Leave empty to keep the current password.'),
+
+                                    Placeholder::make('account_status')
+                                        ->label('Account Status')
+                                        ->content(fn (?ModelsEmployee $record = null): string => $record?->user?->is_disabled ? 'Disabled' : 'Enabled'),
+                                ])
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Basic Info')
@@ -758,20 +786,41 @@ trait ManagesEmployeeDetailsForm
     protected function saveEmployeeDetails(ModelsEmployee $record, array $data): Model
     {
         $profilePhotoPath = $data['profile_photo_path'] ?? null;
+        $accountPassword = $data['account_password'] ?? null;
 
-        unset($data['deductions'], $data['other_deduction_ids'], $data['tenure'], $data['profile_photo_path']);
+        unset(
+            $data['deductions'],
+            $data['other_deduction_ids'],
+            $data['tenure'],
+            $data['profile_photo_path'],
+            $data['account_username'],
+            $data['account_password'],
+        );
         $data = $this->normalizeSalaryData($data);
         $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);
 
-        DB::transaction(function () use ($record, $data, $profilePhotoPath): void {
+        DB::transaction(function () use ($record, $data, $profilePhotoPath, $accountPassword): void {
             foreach (['gsis', 'philhealth', 'pagibig', 'tin', 'sss', 'bank_id_no', 'fingerprint_id'] as $field) {
                 $data[$field] = filled($data[$field] ?? null) ? $data[$field] : null;
             }
 
             $record->update($data);
-            $record->user?->update([
+            $userUpdates = [
                 'profile_photo_path' => $profilePhotoPath,
-            ]);
+            ];
+
+            $username = User::companyUsernameFromUid($record->uid);
+
+            if (filled($username)) {
+                $userUpdates['username'] = $username;
+                $userUpdates['name'] = $username;
+            }
+
+            if (filled($accountPassword)) {
+                $userUpdates['password'] = Hash::make($accountPassword);
+            }
+
+            $record->user?->update($userUpdates);
 
         });
 

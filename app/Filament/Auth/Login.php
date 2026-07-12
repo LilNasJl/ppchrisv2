@@ -78,6 +78,7 @@ class Login extends BaseLogin
     {
         return TextInput::make('username')
             ->label('Username')
+            ->placeholder('Enter your username')
             ->prefixIcon('heroicon-m-user-circle')
             ->prefixIconColor('primary')
             ->required()
@@ -93,6 +94,7 @@ class Login extends BaseLogin
     {
         return TextInput::make('password')
             ->label(__('filament-panels::auth/pages/login.form.password.label'))
+            ->placeholder('Enter your password')
             ->prefixIcon('heroicon-m-lock-closed')
             ->prefixIconColor('primary')
             ->hint(filament()->hasPasswordReset() ? new HtmlString(Blade::render('<x-filament::link :href="filament()->getRequestPasswordResetUrl()" tabindex="-1"> {{ __(\'filament-panels::auth/pages/login.actions.request_password_reset.label\') }}</x-filament::link>')) : null)

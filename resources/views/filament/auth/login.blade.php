@@ -1,12 +1,11 @@
 @php
     $isEmployeePanel = filament()->getCurrentPanel()?->getId() === 'employee';
-    $brandTitle = $isEmployeePanel ? 'SELF SERVICE: HRIS' : 'HRIS';
+    $brandTitle = $isEmployeePanel ? 'HRIS: SELF SERVICE' : 'HRIS';
+    $brandSubtitle = 'Human Resource Information System';
     $logoCandidates = [
-        'image/ppc_logo_circle.png',
-        'image/ppc_logo_circle.jpg',
-        'image/ppc_logo_circle.jpeg',
-        'image/ppc_logo_circle.webp',
-        'image/ppc_logo_circle',
+        'image/ppcwhite.png',
+        'image/ppc_og_logo.png',
+        'image/ppclogo.png',
     ];
     $logoPath = collect($logoCandidates)
         ->first(fn (string $path): bool => file_exists(public_path($path)));
@@ -80,11 +79,6 @@
             line-height: 1.1;
         }
 
-        .hris-mobile-brand,
-        .hris-mobile-subtitle {
-            display: none;
-        }
-
         .hris-auth-side {
             display: flex;
             flex-direction: column;
@@ -96,36 +90,30 @@
         }
 
         .hris-auth-logo-wrap {
-            width: 156px;
-            height: 156px;
+            width: 220px;
+            height: 150px;
             display: grid;
             place-items: center;
-            margin-bottom: 26px;
-            border-radius: 999px;
-            background: #ffffff;
-            box-shadow: 0 24px 44px rgba(15, 23, 42, .24);
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
         }
 
         .hris-auth-logo {
-            width: 108px;
-            height: 108px;
+            width: 220px;
+            height: 150px;
             display: block;
             object-fit: contain;
             object-position: center;
         }
 
-        .hris-auth-side h2 {
-            margin: 0 0 8px;
-            color: #ffffff;
-            font-size: clamp(20px, 2.5vw, 28px);
-            font-weight: 900;
-            line-height: 1.15;
-            letter-spacing: 0;
+        .hris-auth-login-title,
+        .hris-auth-form-subtitle {
+            display: block;
         }
 
-        .hris-auth-side p {
-            max-width: 260px;
-            margin: 0;
+        .hris-auth-form-subtitle {
+            margin-top: 8px;
             color: #eff6ff;
             font-size: 14px;
             line-height: 1.55;
@@ -186,8 +174,10 @@
         }
 
         .hris-auth-form input::placeholder {
-            color: #64748b !important;
-            opacity: 1 !important;
+            color: #cbd5e1 !important;
+            -webkit-text-fill-color: #cbd5e1 !important;
+            font-weight: 400 !important;
+            opacity: .9 !important;
         }
 
         .hris-auth-form .fi-input-wrp:focus-within {
@@ -351,39 +341,26 @@
             }
 
             .hris-auth-login-title {
-                display: none;
+                display: block;
+                font-size: 15px;
+            }
+
+            .hris-auth-form-subtitle {
+                display: none !important;
             }
 
             .hris-auth-heading.has-logo::before {
                 content: "";
-                width: 92px;
-                height: 92px;
+                width: 138px;
+                height: 94px;
                 display: block;
-                border-radius: 999px;
-                background-color: #ffffff;
+                border-radius: 0;
+                background-color: transparent;
                 background-image: url("{{ $hasLogo ? asset($logoPath) : '' }}");
-                background-size: 64px 64px;
+                background-size: contain;
                 background-position: center;
                 background-repeat: no-repeat;
-                box-shadow: 0 16px 34px rgba(15, 23, 42, .2);
-            }
-
-            .hris-mobile-brand {
-                display: block;
-                color: #ffffff !important;
-                font-size: 15px;
-                line-height: 1.2;
-                font-weight: 900;
-                text-align: center;
-            }
-
-            .hris-mobile-subtitle {
-                display: block;
-                color: #eff6ff !important;
-                font-size: 13px;
-                line-height: 1.4;
-                font-weight: 600;
-                text-align: center;
+                filter: brightness(0) invert(1);
             }
 
             .hris-auth-side {
@@ -405,9 +382,8 @@
     <main class="hris-auth-card">
         <section class="hris-auth-form">
             <h1 @class(['hris-auth-heading', 'has-logo' => $hasLogo])>
-                <span class="hris-auth-login-title">Login</span>
-                <span class="hris-mobile-brand">{{ $brandTitle }}</span>
-                <span class="hris-mobile-subtitle">Human Resource Information System</span>
+                <span class="hris-auth-login-title">{{ $brandTitle }}</span>
+                <span class="hris-auth-form-subtitle">{{ $brandSubtitle }}</span>
             </h1>
 
             <div class="hris-auth-content">
@@ -431,9 +407,6 @@
                 </div>
             @endif
 
-            <h2>{{ $brandTitle }}</h2>
-
-            <p>Human Resource Information System</p>
         </aside>
     </main>
 

@@ -5,17 +5,24 @@ namespace App\Filament\Widgets;
 use App\Filament\Pages\EditEmployeeDetails;
 use App\Filament\Pages\EmployeeDetails;
 use App\Filament\Pages\ViewEmployeeDetails;
+use App\Models\AccountStatusHistory;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
+use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Tabs;
@@ -24,6 +31,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
@@ -556,13 +564,14 @@ class EmployeeDetailsTable extends TableWidget
     public function table(Table $table): Table
     {
         return $table
-            ->query(
-                fn (): Builder => ModelsEmployee::query()
-                    ->with(['user', 'designation', 'department', 'branch'])
-                    ->whereHas('user', fn ($query) => $query->where('role', 'employee'))
-            )
+            ->query(fn (): Builder => User::query()
+                ->with(['employee.designation', 'employee.department', 'employee.branch'])
+                ->where('role', 'employee')
+                ->whereHas('employee')
+                ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
+                ->select('users.*'))
             ->defaultSort(fn (Builder $query): Builder => $query
-                ->orderBy('uid'))
+                ->orderBy('account_employees.uid'))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -570,84 +579,146 @@ class EmployeeDetailsTable extends TableWidget
 
                 ImageColumn::make('profile_photo')
                     ->label('Profile')
-                    ->getStateUsing(fn (ModelsEmployee $record): ?string => $record->user?->profile_photo_url)
+                    ->getStateUsing(fn (User $record): ?string => $record->profile_photo_url)
                     ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
                     ->circular(),
 
-                TextColumn::make('uid')
+                TextColumn::make('employee.uid')
                     ->label('ID No.')
                     ->badge()
-                    ->formatStateUsing(fn (ModelsEmployee $record): string => $record->company_id ?? 'N/A')
+                    ->formatStateUsing(fn (mixed $state): string => ModelsEmployee::companyIdFromUid($state) ?? 'N/A')
                     ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('firstname')
-                    ->label('Name')
-                    ->formatStateUsing(
-                        fn (ModelsEmployee $record): string => trim($record->lastname.', '.(filled($record->middlename) ? $record->middlename.'. ' : '').$record->firstname)
-                    )
-                    ->searchable(['lastname', 'middlename', 'firstname'])
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
-                        ->orderBy('lastname', $direction)
-                        ->orderBy('middlename', $direction)
-                        ->orderBy('firstname', $direction)),
+                        ->orderBy('account_employees.uid', $direction)),
 
-                TextColumn::make('designation.title')
+                TextColumn::make('employee.lastname')
+                    ->label('Name')
+                    ->formatStateUsing(fn (User $record): string => $record->employee?->full_name ?? 'N/A')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
+                        ->whereHas('employee', fn (Builder $employeeQuery): Builder => $employeeQuery
+                            ->where('lastname', 'like', "%{$search}%")
+                            ->orWhere('middlename', 'like', "%{$search}%")
+                            ->orWhere('firstname', 'like', "%{$search}%")))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('account_employees.lastname', $direction)
+                        ->orderBy('account_employees.middlename', $direction)
+                        ->orderBy('account_employees.firstname', $direction)),
+
+                TextColumn::make('employee.designation.title')
+                    ->label('Designation')
+                    ->badge()
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('department.name')
+                TextColumn::make('employee.department.name')
                     ->label('Department')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
-                TextColumn::make('branch.branch_name')
+                TextColumn::make('employee.branch.branch_name')
                     ->label('Branch')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
-                TextColumn::make('employment_type')
+                TextColumn::make('employee.employment_type')
                     ->label('Employment Status')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state, ModelsEmployee $record): string => $record->hasEndedEmployment()
+                    ->formatStateUsing(fn (?string $state, User $record): string => $record->employee?->hasEndedEmployment()
                             ? "Employment End: {$state}"
                             : ($state ?: 'N/A')
                     )
-                    ->color(fn (ModelsEmployee $record): string => $record->hasEndedEmployment() ? 'danger' : 'success'),
+                    ->color(fn (User $record): string => $record->employee?->hasEndedEmployment() ? 'danger' : 'success'),
+
+                TextColumn::make('is_disabled')
+                    ->label('Account')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Disabled' : 'Enabled')
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'success'),
+
+                TextColumn::make('created_at')
+                    ->label('Created At')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
+                        ->where('users.created_at', 'like', "%{$search}%"))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('users.created_at', $direction)),
             ])
             ->filters([
-                //
-            ])
-            ->headerActions([
-                //
+                TrashedFilter::make(),
             ])
             ->recordActions([
-
                 ActionGroup::make([
                     Action::make('viewEmployeeDetails')
                         ->label('View')
                         ->icon(Heroicon::Eye)
-                        ->url(fn (ModelsEmployee $record): string => ViewEmployeeDetails::getUrl([
-                            'employeeId' => $record->publicKey(),
+                        ->url(fn (User $record): string => ViewEmployeeDetails::getUrl([
+                            'employeeId' => $record->employee?->publicKey(),
                             'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
                         ])),
 
                     Action::make('editEmployeeDetails')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
-                        ->url(fn (ModelsEmployee $record): string => EditEmployeeDetails::getUrl([
-                            'employeeId' => $record->publicKey(),
+                        ->url(fn (User $record): string => EditEmployeeDetails::getUrl([
+                            'employeeId' => $record->employee?->publicKey(),
                             'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                        ])),
+
+                    Action::make('toggleAccountStatus')
+                        ->label(fn (User $record): string => $record->is_disabled ? 'Enable Account' : 'Disable Account')
+                        ->icon(fn (User $record): Heroicon => $record->is_disabled ? Heroicon::CheckCircle : Heroicon::NoSymbol)
+                        ->color(fn (User $record): string => $record->is_disabled ? 'success' : 'danger')
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (User $record): string => $record->is_disabled ? 'Enable employee account?' : 'Disable employee account?')
+                        ->modalDescription('Please add remarks for this account status change. This will be saved in the account history.')
+                        ->schema([
+                            Textarea::make('remarks')
+                                ->label('Remarks')
+                                ->required()
+                                ->rows(4)
+                                ->maxLength(1000)
+                                ->columnSpanFull(),
+                        ])
+                        ->action(function (User $record, array $data): void {
+                            $newState = ! (bool) $record->is_disabled;
+
+                            $record->forceFill([
+                                'is_disabled' => $newState,
+                            ])->save();
+
+                            AccountStatusHistory::create([
+                                'user_id' => $record->id,
+                                'changed_by_user_id' => auth()->id(),
+                                'is_disabled' => $newState,
+                                'remarks' => $data['remarks'] ?? null,
+                            ]);
+
+                            Notification::make()
+                                ->title($newState ? 'Account disabled' : 'Account enabled')
+                                ->success()
+                                ->send();
+                        }),
+
+                    Action::make('accountHistory')
+                        ->label('Account History')
+                        ->icon(Heroicon::Clock)
+                        ->modalHeading(fn (User $record): string => ($record->employee?->full_name ?? 'Employee').' Account History')
+                        ->modalSubmitAction(false)
+                        ->modalContent(fn (User $record) => view('filament.resources.users.partials.account-history', [
+                            'histories' => $record->accountStatusHistories()
+                                ->with('changedBy')
+                                ->get(),
                         ])),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
-
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    //
+                    DeleteBulkAction::make(),
+                    RestoreBulkAction::make(),
+                    ForceDeleteBulkAction::make(),
                 ]),
             ]);
     }

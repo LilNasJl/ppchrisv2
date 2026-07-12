@@ -28,6 +28,7 @@ class EmployeeLogin extends Login
     {
         return TextInput::make('username')
             ->label('Company ID')
+            ->placeholder('PF0001')
             ->prefixIcon('heroicon-m-identification')
             ->prefixIconColor('primary')
             ->required()
