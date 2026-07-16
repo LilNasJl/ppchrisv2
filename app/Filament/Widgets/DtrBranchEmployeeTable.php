@@ -43,7 +43,7 @@ class DtrBranchEmployeeTable extends TableWidget
                 ImageColumn::make('profile_photo')
                     ->label('Profile')
                     ->getStateUsing(fn (Employee $record): ?string => $record->user?->profile_photo_url)
-                    ->defaultImageUrl(fn (): string => url('/image/ppc_logo_circle.png'))
+                    ->defaultImageUrl(fn (): string => asset('image/ppc-circle-white.png'))
                     ->circular(),
 
                 TextColumn::make('uid')

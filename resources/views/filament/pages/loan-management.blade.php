@@ -1,4 +1,6 @@
 <x-filament-panels::page>
+    @include('filament.pages.partials.compact-management-table-styles')
+
     <style>
         .loan-tabs {
             display: flex;

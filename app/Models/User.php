@@ -105,7 +105,9 @@ class User extends Authenticatable implements FilamentUser
     public function getProfilePhotoUrlAttribute(): ?string
     {
         if (blank($this->profile_photo_path)) {
-            return null;
+            return $this->role === 'employee'
+                ? static::defaultEmployeeProfilePhotoUrl()
+                : null;
         }
 
         $path = Str::of((string) $this->profile_photo_path)
@@ -127,7 +129,9 @@ class User extends Authenticatable implements FilamentUser
         }
 
         if (! Storage::disk('public')->exists($path)) {
-            return null;
+            return $this->role === 'employee'
+                ? static::defaultEmployeeProfilePhotoUrl()
+                : null;
         }
 
         if (Str::startsWith($path, 'profile-photos/')) {
@@ -140,6 +144,11 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    public static function defaultEmployeeProfilePhotoUrl(): string
+    {
+        return asset('image/ppc-circle-white.png');
     }
 
     public function designation()
