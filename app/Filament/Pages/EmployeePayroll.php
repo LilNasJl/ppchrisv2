@@ -204,6 +204,18 @@ class EmployeePayroll extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('printPayslip')
+                ->label('Print / PDF Payslip')
+                ->icon(Heroicon::Printer)
+                ->url(fn (): ?string => $this->selectedPeriod && $this->employee
+                    ? route('payroll.payslip.print', [
+                        'period' => $this->selectedPeriod->publicKey(),
+                        'employee' => $this->employee->publicKey(),
+                    ])
+                    : null)
+                ->openUrlInNewTab()
+                ->visible(fn (): bool => filled($this->selectedPeriod) && filled($this->employee) && filled($this->payrollRow)),
+
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)

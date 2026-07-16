@@ -40,7 +40,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
     use InteractsWithForms;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.employee.pages.table-page';
 
     protected static ?string $slug = 'leave-requests';
 

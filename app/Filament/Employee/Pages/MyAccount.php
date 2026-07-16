@@ -99,6 +99,8 @@ class MyAccount extends Page implements HasForms
                         ->label('Profile Picture')
                         ->image()
                         ->previewable()
+                        ->openable()
+                        ->downloadable()
                         ->acceptedFileTypes(['image/png', 'image/jpeg'])
                         ->maxSize(3072)
                         ->disk('public')

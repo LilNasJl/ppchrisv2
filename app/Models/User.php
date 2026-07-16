@@ -6,6 +6,7 @@ use App\Models\Concerns\HasPublicUuid;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -19,7 +20,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled', 'can_view_payroll'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, HasAvatar
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasPublicUuid, HasRoles, Notifiable, SoftDeletes;
@@ -144,6 +145,11 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    public function getFilamentAvatarUrl(): ?string
+    {
+        return $this->profile_photo_url;
     }
 
     public static function defaultEmployeeProfilePhotoUrl(): string

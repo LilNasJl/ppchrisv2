@@ -6,6 +6,7 @@ use App\Http\Controllers\Hr\EmployeeImportController;
 use App\Http\Controllers\Hr\PayrollByBranchPrintController;
 use App\Http\Controllers\Hr\PayrollSummaryPrintController;
 use App\Http\Controllers\Hr\ReportPrintController;
+use App\Http\Controllers\PayrollPayslipPrintController;
 use App\Models\Leave;
 use App\Models\Memo;
 use App\Models\Ticket;
@@ -109,6 +110,9 @@ Route::get('/hr-tools/payroll-summary/print', PayrollSummaryPrintController::cla
 
 Route::get('/hr-tools/payroll-by-branch/print', PayrollByBranchPrintController::class)
     ->name('hr_tools.payroll_by_branch.print');
+
+Route::get('/payroll/payslip/{period}/{employee?}', PayrollPayslipPrintController::class)
+    ->name('payroll.payslip.print');
 
 Route::middleware('auth')
     ->prefix('hr-tools')

@@ -32,7 +32,12 @@ class Dashboard extends Page
             ->get();
     }
 
-     public function getUpcomingActivitiesProperty(): Collection
+    public function getUpcomingHolidaysProperty(): Collection
+    {
+        return app(HolidayResolver::class)->upcomingNationalHolidays(5);
+    }
+
+    public function getUpcomingActivitiesProperty(): Collection
     {
         return Activity::query()
             ->whereDate('date_to', '>=', now()->toDateString())
@@ -41,10 +46,8 @@ class Dashboard extends Page
             ->get();
     }
 
-    public function getUpcomingHolidaysProperty(): Collection
+    public function showUpcomingHolidays(): void
     {
-        return app(HolidayResolver::class)->upcomingNationalHolidays(5);
+        $this->dispatch('open-modal', id: 'employee-upcoming-holidays');
     }
-
-   
 }

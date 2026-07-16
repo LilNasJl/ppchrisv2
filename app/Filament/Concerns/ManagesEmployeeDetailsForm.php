@@ -115,11 +115,19 @@ trait ManagesEmployeeDetailsForm
             ? '<img src="'.e($photoUrl).'" alt="'.$name.'" style="width: 120px; height: 120px; border-radius: 999px; object-fit: cover; border: 2px solid rgba(96, 165, 250, .7);">'
             : '<div style="width: 120px; height: 120px; border-radius: 999px; display: grid; place-items: center; background: rgba(37, 99, 235, .18); color: #60a5fa; font-size: 32px; font-weight: 800;">'.e($initials ?: 'NA').'</div>';
 
+        $photoActions = $photoUrl
+            ? '<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">'
+                .'<a href="'.e($photoUrl).'" target="_blank" rel="noopener noreferrer" style="border: 1px solid rgba(37, 99, 235, .45); border-radius: 6px; color: #2563eb; font-size: 12px; font-weight: 750; padding: 6px 11px; text-decoration: none;">View</a>'
+                .'<a href="'.e($photoUrl).'" download style="background: #2563eb; border: 1px solid #2563eb; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 750; padding: 6px 11px; text-decoration: none;">Download</a>'
+                .'</div>'
+            : '';
+
         return new HtmlString(
             '<div style="display: grid; place-items: center; gap: 10px; padding: 12px;">'
             .$avatar
             .'<div style="text-align: center;"><div style="font-weight: 800;">'.$name.'</div>'
             .'<div style="color: #94a3b8; font-size: 13px;">'.e($age).'</div></div>'
+            .$photoActions
             .'</div>'
         );
     }
@@ -411,6 +419,8 @@ trait ManagesEmployeeDetailsForm
                                 ->label('Profile Picture')
                                 ->image()
                                 ->previewable()
+                                ->openable()
+                                ->downloadable()
                                 ->acceptedFileTypes(['image/png', 'image/jpeg'])
                                 ->maxSize(3072)
                                 ->disk('public')

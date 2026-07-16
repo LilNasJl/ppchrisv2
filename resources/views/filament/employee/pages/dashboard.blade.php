@@ -13,59 +13,50 @@
 
     <style>
         .employee-dashboard {
-            --ed-page: #f8fafc;
-            --ed-surface: transparent;
-            --ed-surface-soft: transparent;
+            --ed-surface: #ffffff;
+            --ed-surface-muted: #f8fafc;
             --ed-text: #0f172a;
             --ed-muted: #64748b;
-            --ed-border: rgba(15, 23, 42, .14);
-            --ed-shadow: none;
+            --ed-border: rgba(15, 23, 42, .12);
             --ed-blue: #2563eb;
-            --ed-blue-soft: #dbeafe;
-            --ed-green: #059669;
-            --ed-green-soft: #d1fae5;
-            --ed-amber: #d97706;
-            --ed-amber-soft: #fef3c7;
+            --ed-blue-dark: #1e3a8a;
+            --ed-blue-soft: #eff6ff;
 
             color: var(--ed-text);
             display: grid;
-            gap: 20px;
+            gap: 18px;
         }
 
         .dark .employee-dashboard {
-            --ed-page: #020617;
-            --ed-surface: transparent;
-            --ed-surface-soft: transparent;
+            --ed-surface: #0f172a;
+            --ed-surface-muted: #111827;
             --ed-text: #f8fafc;
-            --ed-muted: #cbd5e1;
-            --ed-border: rgba(148, 163, 184, .28);
-            --ed-shadow: none;
-            --ed-blue: #93c5fd;
-            --ed-blue-soft: rgba(37, 99, 235, .18);
-            --ed-green: #6ee7b7;
-            --ed-green-soft: rgba(16, 185, 129, .16);
-            --ed-amber: #fcd34d;
-            --ed-amber-soft: rgba(245, 158, 11, .18);
+            --ed-muted: #94a3b8;
+            --ed-border: rgba(148, 163, 184, .24);
+            --ed-blue: #60a5fa;
+            --ed-blue-dark: #bfdbfe;
+            --ed-blue-soft: rgba(37, 99, 235, .16);
         }
 
-        .employee-dashboard * {
+        .employee-dashboard *,
+        .employee-holiday-modal * {
             box-sizing: border-box;
         }
 
-        .employee-dashboard-hero {
+        .employee-dashboard-hero,
+        .employee-dashboard-panel,
+        .employee-dashboard-birthday {
+            background: var(--ed-surface);
             border: 1px solid var(--ed-border);
             border-radius: 8px;
-            background: var(--ed-surface);
-            box-shadow: var(--ed-shadow);
-            display: grid;
-            gap: 18px;
-            grid-template-columns: minmax(0, 1fr) auto;
-            overflow: hidden;
-            padding: clamp(18px, 3vw, 28px);
         }
 
-        .dark .employee-dashboard-hero {
-            background: var(--ed-surface);
+        .employee-dashboard-hero {
+            border-top: 3px solid var(--ed-blue);
+            display: grid;
+            gap: 20px;
+            grid-template-columns: minmax(0, 1fr) minmax(360px, .9fr);
+            padding: clamp(18px, 3vw, 28px);
         }
 
         .employee-dashboard-eyebrow {
@@ -73,51 +64,73 @@
             display: block;
             font-size: 12px;
             font-weight: 800;
-            letter-spacing: 0;
             margin-bottom: 8px;
             text-transform: uppercase;
         }
 
         .employee-dashboard-hero h2 {
             color: var(--ed-text);
-            font-size: 30px;
+            font-size: clamp(24px, 3vw, 32px);
             font-weight: 850;
-            line-height: 1.1;
+            line-height: 1.15;
             margin: 0;
         }
 
         .employee-dashboard-hero p {
             color: var(--ed-muted);
             font-size: 14px;
-            line-height: 1.5;
-            margin: 10px 0 0;
+            margin: 9px 0 0;
         }
 
         .employee-dashboard-summary {
             align-self: center;
             display: grid;
             gap: 10px;
-            grid-template-columns: repeat(3, minmax(96px, 1fr));
-            min-width: min(420px, 100%);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .employee-dashboard-summary-item {
+            appearance: none;
+            background: var(--ed-surface-muted);
             border: 1px solid var(--ed-border);
             border-radius: 8px;
-            background: transparent;
+            color: inherit;
             display: grid;
-            gap: 5px;
+            gap: 7px;
             min-height: 92px;
-            padding: 12px;
+            padding: 13px;
+            text-align: left;
+            width: 100%;
         }
 
-        .dark .employee-dashboard-summary-item {
-            background: transparent;
+        button.employee-dashboard-summary-item {
+            cursor: pointer;
+            transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+        }
+
+        button.employee-dashboard-summary-item:hover,
+        button.employee-dashboard-summary-item:focus-visible {
+            background: var(--ed-blue-soft);
+            border-color: var(--ed-blue);
+            outline: none;
+            transform: translateY(-1px);
+        }
+
+        .employee-dashboard-summary-top {
+            align-items: center;
+            color: var(--ed-blue);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .employee-dashboard-summary-top svg {
+            height: 18px;
+            width: 18px;
         }
 
         .employee-dashboard-summary-item strong {
-            color: var(--ed-text);
-            font-size: 26px;
+            color: var(--ed-blue-dark);
+            font-size: 25px;
             font-weight: 850;
             line-height: 1;
         }
@@ -131,26 +144,18 @@
 
         .employee-dashboard-birthday {
             align-items: center;
-            background: var(--ed-surface);
-            border: 1px solid var(--ed-border);
-            border-radius: 8px;
-            box-shadow: var(--ed-shadow);
+            border-left: 4px solid var(--ed-blue);
             display: flex;
             gap: 14px;
-            min-width: 0;
             padding: clamp(16px, 2.4vw, 22px);
             width: 100%;
         }
 
-        .dark .employee-dashboard-birthday {
-            background: var(--ed-surface);
-        }
-
         .employee-dashboard-birthday h3 {
             color: var(--ed-text);
-            font-size: clamp(22px, 2.8vw, 34px);
-            font-weight: 900;
-            line-height: 1.08;
+            font-size: clamp(21px, 2.8vw, 32px);
+            font-weight: 850;
+            line-height: 1.12;
             margin: 0;
             overflow-wrap: anywhere;
         }
@@ -158,23 +163,17 @@
         .employee-dashboard-birthday p {
             color: var(--ed-muted);
             font-size: 14px;
-            font-weight: 750;
             margin: 6px 0 0;
         }
 
         .employee-dashboard-main {
             display: grid;
             gap: 18px;
-            grid-template-columns: 1fr;
         }
 
         .employee-dashboard-panel {
-            background: var(--ed-surface);
-            border: 1px solid var(--ed-border);
-            border-radius: 8px;
-            box-shadow: var(--ed-shadow);
             display: grid;
-            gap: 14px;
+            gap: 15px;
             min-width: 0;
             padding: clamp(16px, 2vw, 20px);
         }
@@ -188,67 +187,49 @@
 
         .employee-dashboard-icon {
             align-items: center;
+            background: var(--ed-blue-soft);
             border-radius: 8px;
+            color: var(--ed-blue);
             display: inline-flex;
-            flex: 0 0 42px;
-            height: 42px;
+            flex: 0 0 40px;
+            height: 40px;
             justify-content: center;
-            width: 42px;
+            width: 40px;
         }
 
         .employee-dashboard-icon svg {
-            height: 22px;
-            width: 22px;
-        }
-
-        .employee-dashboard-icon-blue {
-            background: transparent;
-            color: var(--ed-blue);
-        }
-
-        .employee-dashboard-icon-green {
-            background: transparent;
-            color: var(--ed-green);
-        }
-
-        .employee-dashboard-icon-amber {
-            background: transparent;
-            color: var(--ed-amber);
+            height: 21px;
+            width: 21px;
         }
 
         .employee-dashboard-panel-header h3 {
             color: var(--ed-text);
             font-size: 16px;
             font-weight: 850;
-            line-height: 1.2;
+            line-height: 1.25;
             margin: 0;
         }
 
         .employee-dashboard-panel-header p {
             color: var(--ed-muted);
             font-size: 12px;
-            font-weight: 650;
-            line-height: 1.4;
             margin: 3px 0 0;
         }
 
         .employee-dashboard-list {
             display: grid;
             gap: 10px;
-        }
-
-        .employee-dashboard-list-grid {
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         }
 
         .employee-dashboard-item {
+            background: var(--ed-surface-muted);
             border: 1px solid var(--ed-border);
             border-radius: 8px;
-            background: var(--ed-surface-soft);
             display: grid;
-            gap: 8px;
+            gap: 9px;
             min-width: 0;
-            padding: 12px;
+            padding: 13px;
         }
 
         .employee-dashboard-item h4 {
@@ -263,7 +244,7 @@
         .employee-dashboard-item p {
             color: var(--ed-muted);
             font-size: 13px;
-            line-height: 1.45;
+            line-height: 1.5;
             margin: 6px 0 0;
             overflow-wrap: anywhere;
         }
@@ -279,56 +260,105 @@
         }
 
         .employee-dashboard-meta svg {
+            color: var(--ed-blue);
             height: 15px;
             width: 15px;
         }
 
         .employee-dashboard-empty {
             align-items: center;
-            background: var(--ed-surface-soft);
+            background: var(--ed-surface-muted);
             border: 1px dashed var(--ed-border);
             border-radius: 8px;
             color: var(--ed-muted);
             display: flex;
             font-size: 13px;
             font-weight: 700;
-            min-height: 96px;
+            min-height: 82px;
             padding: 16px;
         }
 
-        @media (max-width: 1100px) {
+        .employee-holiday-modal {
+            display: grid;
+            gap: 10px;
+        }
+
+        .employee-holiday-modal-item {
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, .12);
+            border-radius: 8px;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            padding: 12px 14px;
+        }
+
+        .dark .employee-holiday-modal-item {
+            background: #111827;
+            border-color: rgba(148, 163, 184, .24);
+        }
+
+        .employee-holiday-modal-item h4 {
+            font-size: 14px;
+            font-weight: 800;
+            margin: 0;
+        }
+
+        .employee-holiday-modal-date {
+            color: #2563eb;
+            font-size: 12px;
+            font-weight: 750;
+            white-space: nowrap;
+        }
+
+        .dark .employee-holiday-modal-date {
+            color: #60a5fa;
+        }
+
+        @media (max-width: 1024px) {
             .employee-dashboard-hero {
                 grid-template-columns: 1fr;
-            }
-
-            .employee-dashboard-summary {
-                min-width: 0;
             }
         }
 
-        @media (max-width: 680px) {
+        @media (max-width: 640px) {
             .employee-dashboard {
-                gap: 16px;
+                gap: 14px;
             }
 
             .employee-dashboard-hero {
-                padding: 18px;
-            }
-
-            .employee-dashboard-hero h2 {
-                font-size: 24px;
+                padding: 17px;
             }
 
             .employee-dashboard-summary {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
 
             .employee-dashboard-summary-item {
-                min-height: 74px;
+                min-height: 82px;
+                padding: 10px;
+            }
+
+            .employee-dashboard-summary-item strong {
+                font-size: 21px;
+            }
+
+            .employee-dashboard-summary-item span {
+                font-size: 10px;
+            }
+
+            .employee-dashboard-list {
+                grid-template-columns: 1fr;
             }
 
             .employee-dashboard-birthday {
                 align-items: flex-start;
+            }
+
+            .employee-holiday-modal-item {
+                align-items: flex-start;
+                flex-direction: column;
             }
         }
     </style>
@@ -343,14 +373,33 @@
 
             <div class="employee-dashboard-summary" aria-label="Dashboard summary">
                 <div class="employee-dashboard-summary-item">
+                    <div class="employee-dashboard-summary-top">
+                        <x-filament::icon icon="heroicon-o-megaphone" />
+                    </div>
                     <strong>{{ $announcements->count() }}</strong>
                     <span>Announcements</span>
                 </div>
-                <div class="employee-dashboard-summary-item">
+
+                <button
+                    type="button"
+                    class="employee-dashboard-summary-item"
+                    wire:click="showUpcomingHolidays"
+                    wire:loading.attr="disabled"
+                    wire:target="showUpcomingHolidays"
+                    aria-label="View upcoming holidays"
+                >
+                    <div class="employee-dashboard-summary-top">
+                        <x-filament::icon icon="heroicon-o-calendar-days" />
+                        <x-filament::icon icon="heroicon-m-chevron-right" />
+                    </div>
                     <strong>{{ $upcomingHolidays->count() }}</strong>
                     <span>Upcoming holidays</span>
-                </div>
+                </button>
+
                 <div class="employee-dashboard-summary-item">
+                    <div class="employee-dashboard-summary-top">
+                        <x-filament::icon icon="heroicon-o-clipboard-document-list" />
+                    </div>
                     <strong>{{ $upcomingActivities->count() }}</strong>
                     <span>Upcoming activities</span>
                 </div>
@@ -359,7 +408,7 @@
 
         @if ($hasBirthdayToday)
             <section class="employee-dashboard-birthday">
-                <span class="employee-dashboard-icon employee-dashboard-icon-amber">
+                <span class="employee-dashboard-icon">
                     <x-filament::icon icon="heroicon-o-cake" />
                 </span>
                 <div>
@@ -372,7 +421,7 @@
         <div class="employee-dashboard-main">
             <section class="employee-dashboard-panel">
                 <header class="employee-dashboard-panel-header">
-                    <span class="employee-dashboard-icon employee-dashboard-icon-blue">
+                    <span class="employee-dashboard-icon">
                         <x-filament::icon icon="heroicon-o-megaphone" />
                     </span>
                     <div>
@@ -403,33 +452,7 @@
 
             <section class="employee-dashboard-panel">
                 <header class="employee-dashboard-panel-header">
-                    <span class="employee-dashboard-icon employee-dashboard-icon-green">
-                        <x-filament::icon icon="heroicon-o-calendar-days" />
-                    </span>
-                    <div>
-                        <h3>Upcoming Holidays</h3>
-                        <p>Scheduled holidays ahead</p>
-                    </div>
-                </header>
-
-                <div class="employee-dashboard-list employee-dashboard-list-grid">
-                    @forelse ($upcomingHolidays as $holiday)
-                        <article class="employee-dashboard-item">
-                            <h4>{{ $holiday->title }}</h4>
-                            <div class="employee-dashboard-meta">
-                                <x-filament::icon icon="heroicon-o-clock" />
-                                <span>{{ $holiday->date->format('M d, Y') }} - {{ $holiday->type?->type }}</span>
-                            </div>
-                        </article>
-                    @empty
-                        <div class="employee-dashboard-empty">No upcoming holidays.</div>
-                    @endforelse
-                </div>
-            </section>
-
-            <section class="employee-dashboard-panel">
-                <header class="employee-dashboard-panel-header">
-                    <span class="employee-dashboard-icon employee-dashboard-icon-amber">
+                    <span class="employee-dashboard-icon">
                         <x-filament::icon icon="heroicon-o-clipboard-document-list" />
                     </span>
                     <div>
@@ -438,7 +461,7 @@
                     </div>
                 </header>
 
-                <div class="employee-dashboard-list employee-dashboard-list-grid">
+                <div class="employee-dashboard-list">
                     @forelse ($upcomingActivities as $activity)
                         <article class="employee-dashboard-item">
                             <h4>{{ $activity->title }}</h4>
@@ -454,4 +477,27 @@
             </section>
         </div>
     </div>
+
+    <x-filament::modal id="employee-upcoming-holidays" width="2xl">
+        <x-slot name="heading">Upcoming Holidays</x-slot>
+        <x-slot name="description">National holidays scheduled from today onward.</x-slot>
+
+        <div class="employee-holiday-modal">
+            @forelse ($upcomingHolidays as $holiday)
+                <article class="employee-holiday-modal-item">
+                    <div>
+                        <h4>{{ $holiday->title }}</h4>
+                        <div class="employee-dashboard-meta">
+                            {{ $holiday->type?->type ?: 'Holiday' }}
+                        </div>
+                    </div>
+                    <div class="employee-holiday-modal-date">
+                        {{ $holiday->date->format('M d, Y') }}
+                    </div>
+                </article>
+            @empty
+                <div class="employee-dashboard-empty">No upcoming holidays.</div>
+            @endforelse
+        </div>
+    </x-filament::modal>
 </x-filament-panels::page>

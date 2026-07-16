@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollCalculator;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -52,6 +53,22 @@ class Payroll extends Page implements HasForms
         $this->form->fill([
             'period_id' => $this->period_id,
         ]);
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('printPayslip')
+                ->label('Print / PDF Payslip')
+                ->icon(Heroicon::Printer)
+                ->url(fn (): ?string => $this->selectedPeriod
+                    ? route('payroll.payslip.print', [
+                        'period' => $this->selectedPeriod->publicKey(),
+                    ])
+                    : null)
+                ->openUrlInNewTab()
+                ->visible(fn (): bool => filled($this->selectedPeriod) && filled($this->payrollRow)),
+        ];
     }
 
     protected function getFormSchema(): array

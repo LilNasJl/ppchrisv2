@@ -97,11 +97,19 @@ class MyProfile extends Page implements HasForms
                             Section::make('Account Overview')
                                 ->description('Review your account identity and update your sign-in details.')
                                 ->schema([
+                                    Placeholder::make('profile_photo_preview')
+                                        ->hiddenLabel()
+                                        ->content(fn () => view('filament.resources.users.partials.profile-picture', [
+                                            'record' => auth()->user(),
+                                        ]))
+                                        ->columnSpanFull(),
+
                                     FileUpload::make('profile_photo_path')
                                         ->label('Profile Picture')
                                         ->image()
-                                        ->avatar()
                                         ->previewable()
+                                        ->openable()
+                                        ->downloadable()
                                         ->acceptedFileTypes(['image/png', 'image/jpeg'])
                                         ->maxSize(3072)
                                         ->disk('public')
