@@ -11,11 +11,14 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Contracts\TranslatableContentDriver;
@@ -89,7 +92,7 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
                 TextColumn::make('loan_terms_months')
                     ->label('Terms')
-                    ->suffix(' period(s)')
+                    ->getStateUsing(fn (EmployeeLoanRequest $record): string => $record->loan_terms_months.' '.$record->terms_label)
                     ->alignCenter(),
 
                 TextColumn::make('schedule')
@@ -208,6 +211,10 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->disabled()
                         ->dehydrated(false),
 
+                    Hidden::make('terms_basis'),
+
+                    Hidden::make('loan_interest'),
+
                     TextInput::make('loan_type')
                         ->label('Loan Type')
                         ->maxLength(191)
@@ -219,6 +226,11 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
                     Select::make('schedule')
                         ->options(EmployeeLoan::scheduleOptions())
+                        ->live()
+                        ->afterStateUpdated(function (Get $get, Set $set): void {
+                            $set('amortization_start_payroll_period_id', null);
+                            $this->syncCalculatedPayment($get, $set);
+                        })
                         ->required(),
 
                     Textarea::make('requested_reason')
@@ -239,28 +251,39 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->label('Loan Amount')
                         ->numeric()
                         ->minValue(0.01)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                         ->required(),
 
-                    TextInput::make('loan_interest')
-                        ->label('Loan Interest')
+                    TextInput::make('interest_rate')
+                        ->label('Monthly Interest Rate (%)')
+                        ->helperText('Uses flat add-on interest across the final loan term months.')
                         ->numeric()
                         ->minValue(0)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                         ->required(),
 
                     TextInput::make('loan_terms_months')
-                        ->label('Loan Terms')
+                        ->label('Loan Terms (Months)')
+                        ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
                         ->numeric()
                         ->minValue(1)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                         ->required(),
 
                     TextInput::make('payment_amount')
-                        ->label('Payment')
+                        ->label('Payment per Payroll')
                         ->numeric()
-                        ->minValue(0.01)
+                        ->minValue(0)
+                        ->readOnly()
+                        ->helperText('Calculated from the final amount, interest, schedule, and term months.')
                         ->required(),
 
                     Select::make('amortization_start_payroll_period_id')
                         ->label('Loan Amortization Start')
+                        ->helperText('Select an open period. Deductions begin from this period and follow the selected schedule.')
                         ->options(fn (): array => $this->openPayrollPeriodOptions())
                         ->searchable()
                         ->preload()
@@ -293,7 +316,9 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
             'requested_reason' => $request->reason,
             'loan_amount' => $request->loan_amount,
             'loan_interest' => $request->loan_interest,
+            'interest_rate' => $request->interest_rate,
             'loan_terms_months' => $request->loan_terms_months,
+            'terms_basis' => $request->terms_basis,
             'payment_amount' => $request->payment_amount,
             'amortization_start_payroll_period_id' => $isPreferredOpen
                 ? $preferredPeriodId
@@ -313,9 +338,25 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
     protected function defaultOpenPayrollPeriodId(): ?int
     {
-        return PayrollPeriod::query()
-            ->where('is_locked', false)
-            ->newestFirst()
-            ->value('id');
+        return array_key_first($this->openPayrollPeriodOptions());
+    }
+
+    protected function syncCalculatedPayment(Get $get, Set $set): void
+    {
+        if (EmployeeLoan::normalizeTermsBasis($get('terms_basis')) !== EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
+            return;
+        }
+
+        $set('payment_amount', EmployeeLoan::plannedPaymentAmount(
+            (float) ($get('loan_amount') ?? 0),
+            EmployeeLoan::flatAddOnInterest(
+                (float) ($get('loan_amount') ?? 0),
+                (float) ($get('interest_rate') ?? 0),
+                max(1, (int) ($get('loan_terms_months') ?? 1)),
+            ),
+            max(1, (int) ($get('loan_terms_months') ?? 1)),
+            $get('schedule'),
+            $get('terms_basis'),
+        ));
     }
 }

@@ -7,7 +7,6 @@ use App\Models\EmployeeLoan;
 use App\Models\PayrollPeriod;
 use App\Services\EmployeeLoanRequestService;
 use BackedEnum;
-use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -16,6 +15,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -23,12 +23,14 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Url;
 use Throwable;
 
 class Loan extends Page implements HasTable
 {
     use InteractsWithTable;
 
+    #[Url(as: 'section', history: true)]
     public string $activeLoanSection = 'loans';
 
     protected string $view = 'filament.employee.pages.loan';
@@ -67,55 +69,52 @@ class Loan extends Page implements HasTable
                             Select::make('schedule')
                                 ->options(EmployeeLoan::scheduleOptions())
                                 ->default(EmployeeLoan::SCHEDULE_EVERY_PAYROLL)
+                                ->live()
+                                ->afterStateUpdated(function (Get $get, Set $set): void {
+                                    $set('preferred_start_payroll_period_id', null);
+                                    $this->syncCalculatedPayment($get, $set);
+                                })
                                 ->required(),
 
                             TextInput::make('loan_amount')
                                 ->label('Requested Amount')
                                 ->numeric()
                                 ->minValue(0.01)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
-                            TextInput::make('loan_interest')
-                                ->label('Proposed Interest')
+                            TextInput::make('interest_rate')
+                                ->label('Monthly Interest Rate (%)')
+                                ->helperText('Uses flat add-on interest across the requested term months.')
                                 ->numeric()
                                 ->minValue(0)
                                 ->default(0)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
                             TextInput::make('loan_terms_months')
-                                ->label('Requested Terms')
-                                ->helperText('Every Payroll counts payroll periods. Quincena schedules count matching monthly periods.')
+                                ->label('Requested Terms (Months)')
+                                ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
                                 ->numeric()
                                 ->minValue(1)
                                 ->default(1)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
                             TextInput::make('payment_amount')
-                                ->label('Proposed Payment')
+                                ->label('Payment per Payroll')
                                 ->numeric()
-                                ->minValue(0.01)
-                                ->rules([
-                                    fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
-                                        $totalLoan = (float) ($get('loan_amount') ?? 0)
-                                            + (float) ($get('loan_interest') ?? 0);
-                                        $terms = max(1, (int) ($get('loan_terms_months') ?? 1));
-                                        $scheduledTotal = (float) $value * $terms;
-
-                                        if ($totalLoan > 0 && $scheduledTotal + 0.001 < $totalLoan) {
-                                            $minimumPayment = ceil(($totalLoan / $terms) * 100) / 100;
-
-                                            $fail(
-                                                'The proposed payment must be at least '
-                                                .number_format($minimumPayment, 2)
-                                                ." for {$terms} term(s).",
-                                            );
-                                        }
-                                    },
-                                ])
+                                ->minValue(0)
+                                ->readOnly()
+                                ->helperText('Calculated from the requested amount, interest, schedule, and requested term months.')
                                 ->required(),
 
                             Select::make('preferred_start_payroll_period_id')
                                 ->label('Preferred Amortization Start')
+                                ->helperText('Select an open period. Deductions begin from this period and follow the selected schedule.')
                                 ->options(fn (): array => $this->openPayrollPeriodOptions())
                                 ->searchable()
                                 ->preload()
@@ -137,9 +136,9 @@ class Loan extends Page implements HasTable
                     'loan_type' => null,
                     'schedule' => EmployeeLoan::SCHEDULE_EVERY_PAYROLL,
                     'loan_amount' => null,
-                    'loan_interest' => 0,
+                    'interest_rate' => 0,
                     'loan_terms_months' => 1,
-                    'payment_amount' => null,
+                    'payment_amount' => 0,
                     'preferred_start_payroll_period_id' => $this->defaultOpenPayrollPeriodId(),
                     'reason' => null,
                 ])
@@ -284,10 +283,22 @@ class Loan extends Page implements HasTable
 
     protected function defaultOpenPayrollPeriodId(): ?int
     {
-        return PayrollPeriod::query()
-            ->where('is_locked', false)
-            ->newestFirst()
-            ->value('id');
+        return array_key_first($this->openPayrollPeriodOptions());
+    }
+
+    protected function syncCalculatedPayment(Get $get, Set $set): void
+    {
+        $set('payment_amount', EmployeeLoan::plannedPaymentAmount(
+            (float) ($get('loan_amount') ?? 0),
+            EmployeeLoan::flatAddOnInterest(
+                (float) ($get('loan_amount') ?? 0),
+                (float) ($get('interest_rate') ?? 0),
+                max(1, (int) ($get('loan_terms_months') ?? 1)),
+            ),
+            max(1, (int) ($get('loan_terms_months') ?? 1)),
+            $get('schedule'),
+            EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
+        ));
     }
 
     protected function firstValidationMessage(ValidationException $exception): string

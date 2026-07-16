@@ -127,8 +127,7 @@ class PayrollPeriodLockService
             ->where('status', EmployeeLoan::STATUS_ACTIVE)
             ->where('payment_amount', '>', 0)
             ->get()
-            ->filter(fn (EmployeeLoan $loan): bool => $loan->isScheduledForPeriod($period))
-            ->filter(fn (EmployeeLoan $loan): bool => $loan->hasRemainingTerms())
+            ->filter(fn (EmployeeLoan $loan): bool => $loan->canPostPaymentForPeriod($period))
             ->each(function (EmployeeLoan $loan) use ($period): void {
                 $existingPayment = EmployeeLoanPayment::query()
                     ->where('employee_loan_id', $loan->id)

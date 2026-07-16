@@ -11,6 +11,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -18,14 +19,16 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
-use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Validation\ValidationException;
 use Override;
 use UnitEnum;
 
@@ -106,9 +109,14 @@ class LoanManagement extends Page implements HasForms, HasTable
                     ->sortable(),
 
                 TextColumn::make('loan_interest')
-                    ->label('Interest')
+                    ->label('Total Interest')
                     ->formatStateUsing(fn (mixed $state): string => $this->money($state))
                     ->sortable(),
+
+                TextColumn::make('interest_rate')
+                    ->label('Rate / Month')
+                    ->formatStateUsing(fn (mixed $state): string => filled($state) ? number_format((float) $state, 2).'%' : '-')
+                    ->toggleable(),
 
                 TextColumn::make('total_amount')
                     ->label('Total Loan Amount')
@@ -168,7 +176,9 @@ class LoanManagement extends Page implements HasForms, HasTable
                             'loan_date' => optional($record->loan_date)->toDateString(),
                             'loan_amount' => $record->loan_amount,
                             'loan_interest' => $record->loan_interest,
+                            'interest_rate' => $record->interest_rate,
                             'loan_terms_months' => $record->loan_terms_months,
+                            'terms_basis' => $record->terms_basis,
                             'payment_amount' => $record->payment_amount,
                             'schedule' => $record->schedule,
                             'amortization_start_payroll_period_id' => $record->amortization_start_payroll_period_id,
@@ -235,6 +245,12 @@ class LoanManagement extends Page implements HasForms, HasTable
         return [
             Section::make()
                 ->schema([
+                    Hidden::make('terms_basis')
+                        ->default(EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH),
+
+                    Hidden::make('loan_interest')
+                        ->default(0),
+
                     Fieldset::make('Employee Loan Details')
                         ->schema([
                             Select::make('employee_id')
@@ -259,6 +275,11 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->label('Schedule')
                                 ->options(EmployeeLoan::scheduleOptions())
                                 ->default(EmployeeLoan::SCHEDULE_EVERY_PAYROLL)
+                                ->live()
+                                ->afterStateUpdated(function (Get $get, Set $set): void {
+                                    $set('amortization_start_payroll_period_id', null);
+                                    $this->syncCalculatedPayment($get, $set);
+                                })
                                 ->required(),
                         ])
                         ->columns([
@@ -273,32 +294,41 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->numeric()
                                 ->minValue(0)
                                 ->default(0)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
-                            TextInput::make('loan_interest')
-                                ->label('Loan Interest')
+                            TextInput::make('interest_rate')
+                                ->label('Monthly Interest Rate (%)')
+                                ->helperText('Uses flat add-on interest across the selected loan term months.')
                                 ->numeric()
                                 ->minValue(0)
                                 ->default(0)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
                             TextInput::make('loan_terms_months')
-                                ->label('Loan Terms')
-                                ->helperText('Every Payroll uses this as payroll-period count. 1st/2nd Quincena uses this as matching monthly deduction count.')
+                                ->label('Loan Terms (Months)')
+                                ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
                                 ->numeric()
                                 ->minValue(1)
                                 ->default(1)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
                                 ->required(),
 
                             TextInput::make('payment_amount')
-                                ->label('Payment')
+                                ->label('Payment per Payroll')
                                 ->numeric()
                                 ->minValue(0)
-                                ->default(0)
+                                ->readOnly()
+                                ->helperText('Calculated from the total loan, selected schedule, and loan terms. The final payroll payment is adjusted for any centavo balance.')
                                 ->required(),
 
                             Select::make('amortization_start_payroll_period_id')
                                 ->label('Loan Amortization Start')
+                                ->helperText('Select an open period. Deductions begin from this period and follow the selected schedule.')
                                 ->options(fn (): array => $this->openPayrollPeriodOptions())
                                 ->getOptionLabelUsing(fn (mixed $value): ?string => $this->payrollPeriodOptionLabel($value))
                                 ->searchable()
@@ -323,7 +353,9 @@ class LoanManagement extends Page implements HasForms, HasTable
             'schedule' => EmployeeLoan::SCHEDULE_EVERY_PAYROLL,
             'loan_amount' => 0,
             'loan_interest' => 0,
+            'interest_rate' => 0,
             'loan_terms_months' => 1,
+            'terms_basis' => EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
             'payment_amount' => 0,
             'amortization_start_payroll_period_id' => $this->defaultOpenPayrollPeriodId(),
         ];
@@ -338,7 +370,9 @@ class LoanManagement extends Page implements HasForms, HasTable
             'schedule' => null,
             'loan_amount' => null,
             'loan_interest' => null,
+            'interest_rate' => 0,
             'loan_terms_months' => null,
+            'terms_basis' => EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
             'payment_amount' => null,
             'amortization_start_payroll_period_id' => null,
         ];
@@ -346,19 +380,39 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected function normalizeLoanData(array $data, ?EmployeeLoan $loan = null): array
     {
+        $termsBasis = EmployeeLoan::normalizeTermsBasis(
+            $data['terms_basis'] ?? $loan?->terms_basis ?? EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
+        );
+        $schedule = EmployeeLoan::normalizeSchedule($data['schedule'] ?? null);
+        $terms = max(1, (int) ($data['loan_terms_months'] ?? 1));
+        $loanAmount = (float) ($data['loan_amount'] ?? 0);
+        $interestRate = filled($data['interest_rate'] ?? null)
+            ? (float) $data['interest_rate']
+            : $loan?->interest_rate;
+        $loanInterest = EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH
+            ? EmployeeLoan::flatAddOnInterest($loanAmount, $interestRate ?? 0, $terms)
+            : (float) ($data['loan_interest'] ?? $loan?->loan_interest ?? 0);
+        $selectedStartPeriodId = filled($data['amortization_start_payroll_period_id'] ?? null)
+            ? (int) $data['amortization_start_payroll_period_id']
+            : null;
+
+        $startPeriodId = $this->resolveAmortizationStartPeriod($selectedStartPeriodId, $schedule, $termsBasis, $loan);
+
         return [
             'employee_id' => (int) $data['employee_id'],
             'loan_type' => $data['loan_type'] ?? 'Company Loan',
             'loan_date' => $data['loan_date'] ?? now()->toDateString(),
-            'schedule' => EmployeeLoan::normalizeSchedule($data['schedule'] ?? null),
-            'loan_amount' => (float) ($data['loan_amount'] ?? 0),
-            'loan_interest' => (float) ($data['loan_interest'] ?? 0),
-            'loan_terms_months' => max(1, (int) ($data['loan_terms_months'] ?? 1)),
-            'payment_amount' => (float) ($data['payment_amount'] ?? $loan?->payment_amount ?? 0),
+            'schedule' => $schedule,
+            'loan_amount' => $loanAmount,
+            'loan_interest' => $loanInterest,
+            'interest_rate' => $interestRate,
+            'loan_terms_months' => $terms,
+            'terms_basis' => $termsBasis,
+            'payment_amount' => EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH
+                ? EmployeeLoan::plannedPaymentAmount($loanAmount, $loanInterest, $terms, $schedule, $termsBasis)
+                : (float) ($data['payment_amount'] ?? $loan?->payment_amount ?? 0),
             'paid_amount' => (float) ($data['paid_amount'] ?? $loan?->paid_amount ?? 0),
-            'amortization_start_payroll_period_id' => filled($data['amortization_start_payroll_period_id'] ?? null)
-                ? (int) $data['amortization_start_payroll_period_id']
-                : null,
+            'amortization_start_payroll_period_id' => $startPeriodId,
             'status' => $data['status'] ?? $loan?->status ?? EmployeeLoan::STATUS_ACTIVE,
         ];
     }
@@ -417,10 +471,61 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected function defaultOpenPayrollPeriodId(): ?int
     {
-        return PayrollPeriod::query()
-            ->where('is_locked', false)
-            ->newestFirst()
-            ->value('id');
+        return array_key_first($this->openPayrollPeriodOptions());
+    }
+
+    protected function syncCalculatedPayment(Get $get, Set $set): void
+    {
+        if (EmployeeLoan::normalizeTermsBasis($get('terms_basis')) !== EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
+            return;
+        }
+
+        $loanAmount = (float) ($get('loan_amount') ?? 0);
+        $terms = max(1, (int) ($get('loan_terms_months') ?? 1));
+        $loanInterest = EmployeeLoan::flatAddOnInterest(
+            $loanAmount,
+            (float) ($get('interest_rate') ?? 0),
+            $terms,
+        );
+
+        $set('payment_amount', EmployeeLoan::plannedPaymentAmount(
+            $loanAmount,
+            $loanInterest,
+            $terms,
+            $get('schedule'),
+            EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
+        ));
+    }
+
+    protected function resolveAmortizationStartPeriod(
+        ?int $periodId,
+        string $schedule,
+        string $termsBasis,
+        ?EmployeeLoan $loan = null,
+    ): ?int {
+        $period = $periodId ? PayrollPeriod::query()->find($periodId) : null;
+
+        if (! $period) {
+            throw ValidationException::withMessages([
+                'data.amortization_start_payroll_period_id' => 'Select a payroll period.',
+            ]);
+        }
+
+        if (EmployeeLoan::normalizeTermsBasis($termsBasis) !== EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
+            return $period->id;
+        }
+
+        if ($loan && $loan->amortization_start_payroll_period_id === $period->id) {
+            return $period->id;
+        }
+
+        if ($period->is_locked) {
+            throw ValidationException::withMessages([
+                'data.amortization_start_payroll_period_id' => 'Select an open payroll period.',
+            ]);
+        }
+
+        return $period->id;
     }
 
     protected function money(mixed $amount): string

@@ -66,7 +66,7 @@ class EmployeeLoanRequestHistoryTable extends Component implements HasActions, H
 
                 TextColumn::make('loan_terms_months')
                     ->label('Terms')
-                    ->suffix(' period(s)')
+                    ->getStateUsing(fn (EmployeeLoanRequest $record): string => $record->loan_terms_months.' '.$record->terms_label)
                     ->alignCenter(),
 
                 TextColumn::make('schedule')
@@ -121,8 +121,33 @@ class EmployeeLoanRequestHistoryTable extends Component implements HasActions, H
                         ->action(function (EmployeeLoanRequest $record): void {
                             app(EmployeeLoanRequestService::class)->cancel($record, $this->employee());
 
+                            $this->resetTable();
+
                             Notification::make()
                                 ->title('Loan request cancelled')
+                                ->success()
+                                ->send();
+                        }),
+
+                    Action::make('delete')
+                        ->label('Delete Request')
+                        ->icon(Heroicon::Trash)
+                        ->color('danger')
+                        ->visible(fn (EmployeeLoanRequest $record): bool => in_array($record->status, [
+                            EmployeeLoanRequest::STATUS_PENDING,
+                            EmployeeLoanRequest::STATUS_REJECTED,
+                        ], true))
+                        ->requiresConfirmation()
+                        ->modalHeading('Delete loan request?')
+                        ->modalDescription('This permanently removes this pending or rejected request from your history.')
+                        ->modalSubmitActionLabel('Delete Request')
+                        ->action(function (EmployeeLoanRequest $record): void {
+                            app(EmployeeLoanRequestService::class)->delete($record, $this->employee());
+
+                            $this->resetTable();
+
+                            Notification::make()
+                                ->title('Loan request deleted')
                                 ->success()
                                 ->send();
                         }),

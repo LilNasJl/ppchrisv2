@@ -31,7 +31,8 @@ class EmployeeLoanRequestService
             ]);
         }
 
-        $loanData = $this->validateLoanData($data, 'preferred_start_payroll_period_id');
+        $termsBasis = EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH;
+        $loanData = $this->validateLoanData($data, 'preferred_start_payroll_period_id', $termsBasis);
 
         return EmployeeLoanRequest::query()->create([
             'employee_id' => $employee->id,
@@ -40,7 +41,9 @@ class EmployeeLoanRequestService
             'request_date' => now()->toDateString(),
             'loan_amount' => $loanData['loan_amount'],
             'loan_interest' => $loanData['loan_interest'],
+            'interest_rate' => $loanData['interest_rate'],
             'loan_terms_months' => $loanData['loan_terms_months'],
+            'terms_basis' => $termsBasis,
             'payment_amount' => $loanData['payment_amount'],
             'schedule' => $loanData['schedule'],
             'reason' => $loanData['reason'],
@@ -68,7 +71,8 @@ class EmployeeLoanRequestService
                 ]);
             }
 
-            $loanData = $this->validateLoanData($data, 'amortization_start_payroll_period_id');
+            $termsBasis = EmployeeLoan::normalizeTermsBasis($request->terms_basis);
+            $loanData = $this->validateLoanData($data, 'amortization_start_payroll_period_id', $termsBasis);
 
             $loan = EmployeeLoan::query()->create([
                 'employee_id' => $request->employee_id,
@@ -77,7 +81,9 @@ class EmployeeLoanRequestService
                 'loan_date' => $loanData['loan_date'] ?? now()->toDateString(),
                 'loan_amount' => $loanData['loan_amount'],
                 'loan_interest' => $loanData['loan_interest'],
+                'interest_rate' => $loanData['interest_rate'],
                 'loan_terms_months' => $loanData['loan_terms_months'],
+                'terms_basis' => $termsBasis,
                 'payment_amount' => $loanData['payment_amount'],
                 'paid_amount' => 0,
                 'schedule' => $loanData['schedule'],
@@ -161,48 +167,108 @@ class EmployeeLoanRequestService
         });
     }
 
-    protected function validateLoanData(array $data, string $periodField): array
+    public function delete(EmployeeLoanRequest $request, Employee $employee): void
+    {
+        DB::transaction(function () use ($request, $employee): void {
+            $request = EmployeeLoanRequest::withTrashed()->lockForUpdate()->findOrFail($request->id);
+
+            if ((int) $request->employee_id !== (int) $employee->id) {
+                throw ValidationException::withMessages([
+                    'loan_type' => 'You cannot delete another employee\'s loan request.',
+                ]);
+            }
+
+            if ($request->status === EmployeeLoanRequest::STATUS_APPROVED) {
+                throw ValidationException::withMessages([
+                    'loan_type' => 'Approved loan requests are retained as part of the loan record.',
+                ]);
+            }
+
+            $request->forceDelete();
+        });
+    }
+
+    protected function validateLoanData(array $data, string $periodField, string $termsBasis): array
     {
         $validator = Validator::make($data, [
             'loan_type' => ['required', 'string', 'max:191'],
             'loan_date' => ['nullable', 'date'],
             'loan_amount' => ['required', 'numeric', 'gt:0'],
-            'loan_interest' => ['required', 'numeric', 'min:0'],
+            'loan_interest' => ['nullable', 'numeric', 'min:0'],
+            'interest_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'loan_terms_months' => ['required', 'integer', 'min:1'],
-            'payment_amount' => ['required', 'numeric', 'gt:0'],
+            'payment_amount' => ['nullable', 'numeric', 'min:0'],
             'schedule' => ['required', 'in:'.implode(',', array_keys(EmployeeLoan::scheduleOptions()))],
             $periodField => ['required', 'integer', 'exists:payroll_periods,id'],
             'reason' => ['nullable', 'string', 'max:2000'],
             'hr_comment' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $validator->after(function ($validator) use ($data, $periodField): void {
-            $total = (float) ($data['loan_amount'] ?? 0) + (float) ($data['loan_interest'] ?? 0);
-            $scheduledTotal = (float) ($data['payment_amount'] ?? 0) * max(1, (int) ($data['loan_terms_months'] ?? 1));
+        $validator->after(function ($validator) use ($data, $periodField, $termsBasis): void {
+            $terms = max(1, (int) ($data['loan_terms_months'] ?? 1));
+            $schedule = EmployeeLoan::normalizeSchedule($data['schedule'] ?? null);
+            $isCalendarMonthTerms = EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH;
+            $loanInterest = $isCalendarMonthTerms
+                ? EmployeeLoan::flatAddOnInterest(
+                    (float) ($data['loan_amount'] ?? 0),
+                    (float) ($data['interest_rate'] ?? 0),
+                    $terms,
+                )
+                : (float) ($data['loan_interest'] ?? 0);
+            $total = (float) ($data['loan_amount'] ?? 0) + $loanInterest;
+            $deductions = EmployeeLoan::scheduledDeductionsCount($terms, $schedule, $termsBasis);
+            $scheduledTotal = (float) ($data['payment_amount'] ?? 0) * $deductions;
 
-            if ($scheduledTotal + 0.001 < $total) {
+            if (
+                ! $isCalendarMonthTerms
+                && $scheduledTotal + 0.001 < $total
+            ) {
                 $validator->errors()->add(
                     'payment_amount',
-                    'Payment multiplied by the loan terms must cover the total loan amount.',
+                    'Payment multiplied by the scheduled deductions must cover the total loan amount.',
                 );
             }
 
             $periodId = $data[$periodField] ?? null;
 
-            if (
-                filled($periodId)
-                && ! PayrollPeriod::query()->whereKey($periodId)->where('is_locked', false)->exists()
-            ) {
+            $period = filled($periodId)
+                ? PayrollPeriod::query()->whereKey($periodId)->first()
+                : null;
+
+            if (! $period || $period->is_locked) {
                 $validator->errors()->add($periodField, 'Select an open payroll period.');
+
+                return;
             }
+
         });
 
         $validated = $validator->validate();
         $validated['loan_amount'] = round((float) $validated['loan_amount'], 2);
-        $validated['loan_interest'] = round((float) $validated['loan_interest'], 2);
         $validated['loan_terms_months'] = max(1, (int) $validated['loan_terms_months']);
-        $validated['payment_amount'] = round((float) $validated['payment_amount'], 2);
         $validated['schedule'] = EmployeeLoan::normalizeSchedule($validated['schedule']);
+        $validated['interest_rate'] = filled($validated['interest_rate'] ?? null)
+            ? round((float) $validated['interest_rate'], 4)
+            : null;
+
+        if (EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
+            $validated['loan_interest'] = EmployeeLoan::flatAddOnInterest(
+                $validated['loan_amount'],
+                $validated['interest_rate'] ?? 0,
+                $validated['loan_terms_months'],
+            );
+            $validated['payment_amount'] = EmployeeLoan::plannedPaymentAmount(
+                $validated['loan_amount'],
+                $validated['loan_interest'],
+                $validated['loan_terms_months'],
+                $validated['schedule'],
+                $termsBasis,
+            );
+
+        } else {
+            $validated['loan_interest'] = round((float) ($validated['loan_interest'] ?? 0), 2);
+            $validated['payment_amount'] = round((float) $validated['payment_amount'], 2);
+        }
 
         return $validated;
     }

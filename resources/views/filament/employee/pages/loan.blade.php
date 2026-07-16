@@ -4,7 +4,8 @@
             <x-filament::tabs.item
                 :active="$activeLoanSection === 'loans'"
                 icon="heroicon-m-banknotes"
-                wire:click="showLoanSection('loans')"
+                type="button"
+                wire:click="$set('activeLoanSection', 'loans')"
             >
                 My Loans
             </x-filament::tabs.item>
@@ -12,7 +13,8 @@
             <x-filament::tabs.item
                 :active="$activeLoanSection === 'requests'"
                 icon="heroicon-m-clock"
-                wire:click="showLoanSection('requests')"
+                type="button"
+                wire:click="$set('activeLoanSection', 'requests')"
             >
                 Loan Request History
             </x-filament::tabs.item>

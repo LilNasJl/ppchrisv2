@@ -12,10 +12,11 @@
             <div><dt style="color:#64748b;font-size:12px;">Loan Type</dt><dd>{{ $request->loan_type }}</dd></div>
             <div><dt style="color:#64748b;font-size:12px;">Date Requested</dt><dd>{{ $request->request_date?->format('M d, Y') ?: '-' }}</dd></div>
             <div><dt style="color:#64748b;font-size:12px;">Amount</dt><dd>{{ $money($request->loan_amount) }}</dd></div>
-            <div><dt style="color:#64748b;font-size:12px;">Interest</dt><dd>{{ $money($request->loan_interest) }}</dd></div>
+            <div><dt style="color:#64748b;font-size:12px;">Total Interest</dt><dd>{{ $money($request->loan_interest) }}</dd></div>
+            <div><dt style="color:#64748b;font-size:12px;">Monthly Interest Rate</dt><dd>{{ filled($request->interest_rate) ? number_format((float) $request->interest_rate, 2).'%' : '-' }}</dd></div>
             <div><dt style="color:#64748b;font-size:12px;">Total</dt><dd>{{ $money($request->total_amount) }}</dd></div>
             <div><dt style="color:#64748b;font-size:12px;">Payment</dt><dd>{{ $money($request->payment_amount) }}</dd></div>
-            <div><dt style="color:#64748b;font-size:12px;">Terms</dt><dd>{{ $request->loan_terms_months }} period(s)</dd></div>
+            <div><dt style="color:#64748b;font-size:12px;">Terms</dt><dd>{{ $request->loan_terms_months }} {{ $request->terms_label }}</dd></div>
             <div><dt style="color:#64748b;font-size:12px;">Schedule</dt><dd>{{ $request->schedule }}</dd></div>
             <div style="grid-column:1/-1;"><dt style="color:#64748b;font-size:12px;">Preferred Start</dt><dd>{{ $request->preferredStartPayrollPeriod?->title ?: '-' }}</dd></div>
             <div style="grid-column:1/-1;"><dt style="color:#64748b;font-size:12px;">Reason</dt><dd style="white-space:pre-wrap;">{{ $request->reason }}</dd></div>
@@ -38,9 +39,11 @@
             <h3 style="font-size: 14px; font-weight: 800; margin-bottom: 10px;">Approved Loan Terms</h3>
             <dl style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
                 <div><dt style="color:#64748b;font-size:12px;">Loan Amount</dt><dd>{{ $money($approvedLoan->loan_amount) }}</dd></div>
-                <div><dt style="color:#64748b;font-size:12px;">Interest</dt><dd>{{ $money($approvedLoan->loan_interest) }}</dd></div>
+                <div><dt style="color:#64748b;font-size:12px;">Total Interest</dt><dd>{{ $money($approvedLoan->loan_interest) }}</dd></div>
+                <div><dt style="color:#64748b;font-size:12px;">Monthly Interest Rate</dt><dd>{{ filled($approvedLoan->interest_rate) ? number_format((float) $approvedLoan->interest_rate, 2).'%' : '-' }}</dd></div>
                 <div><dt style="color:#64748b;font-size:12px;">Payment</dt><dd>{{ $money($approvedLoan->payment_amount) }}</dd></div>
-                <div><dt style="color:#64748b;font-size:12px;">Terms</dt><dd>{{ $approvedLoan->loan_terms_months }} period(s)</dd></div>
+                <div><dt style="color:#64748b;font-size:12px;">Terms</dt><dd>{{ $approvedLoan->loan_terms_months }} {{ $approvedLoan->terms_label }}</dd></div>
+                <div><dt style="color:#64748b;font-size:12px;">Scheduled Deductions</dt><dd>{{ $approvedLoan->scheduled_deductions_count }}</dd></div>
                 <div><dt style="color:#64748b;font-size:12px;">Schedule</dt><dd>{{ $approvedLoan->schedule }}</dd></div>
                 <div><dt style="color:#64748b;font-size:12px;">Amortization Start</dt><dd>{{ $approvedLoan->amortizationStartPayrollPeriod?->title ?: '-' }}</dd></div>
             </dl>

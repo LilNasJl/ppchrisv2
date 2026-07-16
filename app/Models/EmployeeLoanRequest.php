@@ -26,7 +26,9 @@ class EmployeeLoanRequest extends Model
         'request_date',
         'loan_amount',
         'loan_interest',
+        'interest_rate',
         'loan_terms_months',
+        'terms_basis',
         'payment_amount',
         'schedule',
         'reason',
@@ -40,6 +42,7 @@ class EmployeeLoanRequest extends Model
         'request_date' => 'date',
         'loan_amount' => 'decimal:2',
         'loan_interest' => 'decimal:2',
+        'interest_rate' => 'decimal:4',
         'loan_terms_months' => 'integer',
         'payment_amount' => 'decimal:2',
         'reviewed_at' => 'datetime',
@@ -50,9 +53,28 @@ class EmployeeLoanRequest extends Model
         static::saving(function (EmployeeLoanRequest $request): void {
             $request->loan_amount = max(0, (float) ($request->loan_amount ?? 0));
             $request->loan_interest = max(0, (float) ($request->loan_interest ?? 0));
+            $request->interest_rate = filled($request->interest_rate)
+                ? max(0, (float) $request->interest_rate)
+                : null;
             $request->loan_terms_months = max(1, (int) ($request->loan_terms_months ?? 1));
-            $request->payment_amount = max(0, (float) ($request->payment_amount ?? 0));
             $request->schedule = EmployeeLoan::normalizeSchedule($request->schedule);
+            $request->terms_basis = EmployeeLoan::normalizeTermsBasis($request->terms_basis);
+            if ($request->terms_basis === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH && $request->interest_rate !== null) {
+                $request->loan_interest = EmployeeLoan::flatAddOnInterest(
+                    $request->loan_amount,
+                    $request->interest_rate,
+                    $request->loan_terms_months,
+                );
+            }
+            $request->payment_amount = $request->terms_basis === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH
+                ? EmployeeLoan::plannedPaymentAmount(
+                    $request->loan_amount,
+                    $request->loan_interest,
+                    $request->loan_terms_months,
+                    $request->schedule,
+                    $request->terms_basis,
+                )
+                : max(0, (float) ($request->payment_amount ?? 0));
             $request->status ??= self::STATUS_PENDING;
         });
     }
@@ -90,5 +112,15 @@ class EmployeeLoanRequest extends Model
     public function getTotalAmountAttribute(): float
     {
         return round((float) $this->loan_amount + (float) $this->loan_interest, 2);
+    }
+
+    public function usesCalendarMonthTerms(): bool
+    {
+        return EmployeeLoan::normalizeTermsBasis($this->terms_basis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH;
+    }
+
+    public function getTermsLabelAttribute(): string
+    {
+        return $this->usesCalendarMonthTerms() ? 'month(s)' : 'payroll period(s)';
     }
 }

@@ -7,11 +7,14 @@ use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollSnapshot;
 use App\Services\PayrollCalculator;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Contracts\TranslatableContentDriver;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -19,6 +22,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class PayrollDetailTable extends Component implements HasActions, HasSchemas, HasTable
@@ -36,6 +40,31 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     public ?string $paymentType = null;
 
     public bool $usePagination = true;
+
+    public string $columnPreset = 'summary';
+
+    protected const COLUMN_PRESETS = [
+        'summary' => [
+            'index', 'bank_id_no', 'name', 'designation', 'branch', 'days_worked',
+            'salary_adjustment', 'gross_pay', 'shortages', 'total_deductions', 'net_pay',
+        ],
+        'earnings' => [
+            'index', 'bank_id_no', 'name', 'designation', 'rate', 'monthly_rate',
+            'half_month_pay', 'rate_per_day', 'rate_per_hour', 'days_worked',
+            'salary_adjustment', 'allowance', 'overtime_hours', 'overtime_amount',
+            'regular_holiday', 'special_holiday', 'gross_pay',
+        ],
+        'deductions' => [
+            'index', 'bank_id_no', 'name', 'gross_pay', 'undertime_minutes',
+            'undertime_amount', 'halfday', 'absent', 'late', 'shortages', 'uniform',
+            'other_deductions', 'loan_payment', 'total_deductions', 'net_pay',
+        ],
+        'remittances' => [
+            'index', 'bank_id_no', 'name', 'sss_loan', 'sss_ee', 'hdmf_loan',
+            'hdmf_ee', 'phic_ee', 'total_deductions', 'net_pay',
+        ],
+        'all' => [],
+    ];
 
     protected array $rowCache = [];
 
@@ -65,12 +94,51 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         return $table
             ->query(fn (): Builder => $this->query())
             ->paginated($this->usePagination ? [10, 25, 50, 100] : false)
+            ->headerActions([
+                ActionGroup::make([
+                    Action::make('showSummaryColumns')
+                        ->label('Summary')
+                        ->icon(Heroicon::QueueList)
+                        ->color(fn (): string => $this->columnPreset === 'summary' ? 'primary' : 'gray')
+                        ->action(fn (): mixed => $this->changeColumnPreset('summary')),
+
+                    Action::make('showEarningsColumns')
+                        ->label('Earnings')
+                        ->icon(Heroicon::Banknotes)
+                        ->color(fn (): string => $this->columnPreset === 'earnings' ? 'primary' : 'gray')
+                        ->action(fn (): mixed => $this->changeColumnPreset('earnings')),
+
+                    Action::make('showDeductionColumns')
+                        ->label('Deductions')
+                        ->icon(Heroicon::TableCells)
+                        ->color(fn (): string => $this->columnPreset === 'deductions' ? 'primary' : 'gray')
+                        ->action(fn (): mixed => $this->changeColumnPreset('deductions')),
+
+                    Action::make('showRemittanceColumns')
+                        ->label('Remittances')
+                        ->icon(Heroicon::TableCells)
+                        ->color(fn (): string => $this->columnPreset === 'remittances' ? 'primary' : 'gray')
+                        ->action(fn (): mixed => $this->changeColumnPreset('remittances')),
+
+                    Action::make('showAllColumns')
+                        ->label('All Columns')
+                        ->icon(Heroicon::TableCells)
+                        ->color(fn (): string => $this->columnPreset === 'all' ? 'primary' : 'gray')
+                        ->action(fn (): mixed => $this->changeColumnPreset('all')),
+                ])
+                    ->label(fn (): string => 'View: '.str($this->columnPreset)->headline())
+                    ->icon(Heroicon::TableCells)
+                    ->button(),
+            ])
             ->columns([
-                TextColumn::make('index')->label('#')->rowIndex(),
+                TextColumn::make('index')
+                    ->label('#')
+                    ->rowIndex()
+                    ->visible(fn (): bool => $this->isColumnVisible('index')),
                 $this->textColumn('bank_id_no', 'Bank ID No.'),
-                $this->textColumn('name', 'Name')->wrap(),
-                $this->textColumn('designation', 'Designation')->placeholder('-')->wrap(),
-                $this->textColumn('branch', 'Branch')->placeholder('-')->wrap(),
+                $this->textColumn('name', 'Name'),
+                $this->textColumn('designation', 'Designation')->placeholder('-'),
+                $this->textColumn('branch', 'Branch')->placeholder('-'),
                 $this->textColumn('rate', 'Rate')->alignCenter(),
                 $this->moneyColumn('monthly_rate', 'Monthly Rate'),
                 $this->moneyColumn('half_month_pay', 'Half Month Pay'),
@@ -87,7 +155,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                         $this->rowCache = [];
                         $this->dispatch('payroll-adjustment-updated');
                     })
-                    ->alignEnd(),
+                    ->alignEnd()
+                    ->visible(fn (): bool => $this->isColumnVisible('salary_adjustment')),
 
                 $this->moneyColumn('allowance', 'Allowance'),
                 $this->numberColumn('overtime_hours', 'OT Hrs'),
@@ -110,7 +179,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                         $this->rowCache = [];
                         $this->dispatch('payroll-adjustment-updated');
                     })
-                    ->alignEnd(),
+                    ->alignEnd()
+                    ->visible(fn (): bool => $this->isColumnVisible('shortages')),
 
                 $this->moneyColumn('uniform', 'Uniform'),
                 $this->moneyColumn('other_deductions', 'Other Deductions'),
@@ -125,6 +195,28 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->textColumn('signature', 'Signature'),
             ])
             ->emptyStateHeading('No payroll data available.');
+    }
+
+    public function changeColumnPreset(string $preset): void
+    {
+        if (! array_key_exists($preset, self::COLUMN_PRESETS)) {
+            return;
+        }
+
+        $this->columnPreset = $preset;
+        $this->resetTable();
+        $this->dispatch('payroll-column-preset-changed', preset: $preset);
+    }
+
+    #[On('payroll-column-preset-changed')]
+    public function syncColumnPreset(string $preset): void
+    {
+        if (! array_key_exists($preset, self::COLUMN_PRESETS) || $this->columnPreset === $preset) {
+            return;
+        }
+
+        $this->columnPreset = $preset;
+        $this->resetTable();
     }
 
     public function render()
@@ -308,7 +400,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     {
         return TextColumn::make($key)
             ->label($label)
-            ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => (string) $this->rowValue($record, $key));
+            ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => (string) $this->rowValue($record, $key))
+            ->visible(fn (): bool => $this->isColumnVisible($key));
     }
 
     protected function moneyColumn(string $key, string $label): TextColumn
@@ -317,7 +410,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->label($label)
             ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): mixed => $this->rowValue($record, $key))
             ->formatStateUsing(fn (mixed $state): string => $this->money($state))
-            ->alignEnd();
+            ->alignEnd()
+            ->visible(fn (): bool => $this->isColumnVisible($key));
     }
 
     protected function numberColumn(string $key, string $label): TextColumn
@@ -326,7 +420,14 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->label($label)
             ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): mixed => $this->rowValue($record, $key))
             ->formatStateUsing(fn (mixed $state): string => $this->plainNumber($state))
-            ->alignEnd();
+            ->alignEnd()
+            ->visible(fn (): bool => $this->isColumnVisible($key));
+    }
+
+    protected function isColumnVisible(string $key): bool
+    {
+        return $this->columnPreset === 'all'
+            || in_array($key, self::COLUMN_PRESETS[$this->columnPreset] ?? self::COLUMN_PRESETS['summary'], true);
     }
 
     protected function money(mixed $value): string

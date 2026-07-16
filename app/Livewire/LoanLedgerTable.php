@@ -113,12 +113,14 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
         }
 
         return sprintf(
-            'Total Loan: %s | Paid: %s | Balance: %s | Schedule: %s | Terms: %d | Payment: %s | %d posted, %d reversed',
+            'Total Loan: %s | Paid: %s | Balance: %s | Schedule: %s | Terms: %d %s | %d scheduled deduction(s) | Payment: %s | %d posted, %d reversed',
             number_format((float) $loan->total_amount, 2),
             number_format((float) $loan->paid_amount, 2),
             number_format((float) $loan->balance_amount, 2),
             $loan->schedule,
             (int) $loan->loan_terms_months,
+            $loan->terms_label,
+            (int) $loan->scheduled_deductions_count,
             number_format((float) $loan->payment_amount, 2),
             (int) ($loan->posted_payments_count ?? 0),
             (int) ($loan->voided_payments_count ?? 0),
