@@ -46,8 +46,23 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     public function canBeImpersonated(): bool
     {
-        return in_array($this->role, ['hr', 'admin'], true)
-            && ! (bool) $this->is_disabled;
+        if ((bool) $this->is_disabled || $this->trashed()) {
+            return false;
+        }
+
+        if (in_array($this->role, ['hr', 'admin'], true)) {
+            return true;
+        }
+
+        if ($this->role !== 'employee') {
+            return false;
+        }
+
+        $employee = $this->employee;
+
+        return $employee
+            && ! $employee->trashed()
+            && ! $employee->hasEndedEmployment();
     }
 
     public static function normalizeUsername(?string $username): ?string

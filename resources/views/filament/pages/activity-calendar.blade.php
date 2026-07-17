@@ -69,6 +69,16 @@
             text-align: left;
         }
 
+        .activity-selected {
+            background: rgba(37, 99, 235, .1);
+            box-shadow: inset 0 0 0 2px #2563eb;
+        }
+
+        .dark .activity-selected {
+            background: rgba(96, 165, 250, .14);
+            box-shadow: inset 0 0 0 2px #60a5fa;
+        }
+
         .activity-muted {
             opacity: .42;
         }
@@ -243,7 +253,9 @@
                                     <button
                                         type="button"
                                         wire:click="selectDate('{{ $day['date'] }}')"
-                                        class="activity-day {{ $day['isCurrentMonth'] ? '' : 'activity-muted' }}"
+                                        class="activity-day {{ $day['isCurrentMonth'] ? '' : 'activity-muted' }} {{ $day['isSelected'] ? 'activity-selected' : '' }}"
+                                        aria-pressed="{{ $day['isSelected'] ? 'true' : 'false' }}"
+                                        aria-label="Select {{ \Carbon\Carbon::parse($day['date'])->format('F d, Y') }}"
                                     >
                                         <span class="activity-number {{ $day['isToday'] ? 'activity-today' : '' }}">
                                             {{ $day['day'] }}

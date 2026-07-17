@@ -40,6 +40,8 @@ class ActivityCalendar extends Page
 
     public ?string $dateTo = null;
 
+    public ?string $selectedDate = null;
+
     protected function getHeaderActions(): array
     {
         return [
@@ -57,6 +59,7 @@ class ActivityCalendar extends Page
         $this->calendarMonth = $today->copy()->startOfMonth()->format('Y-m-d');
         $this->dateFrom = $today->toDateString();
         $this->dateTo = $today->toDateString();
+        $this->selectedDate = $today->toDateString();
     }
 
     public function previousMonth(): void
@@ -77,8 +80,9 @@ class ActivityCalendar extends Page
 
     public function selectDate(string $date): void
     {
-        $this->dateFrom = Carbon::parse($date)->toDateString();
-        $this->dateTo = Carbon::parse($date)->toDateString();
+        $this->selectedDate = Carbon::parse($date)->toDateString();
+        $this->dateFrom = $this->selectedDate;
+        $this->dateTo = $this->selectedDate;
         $this->editingActivityId = null;
     }
 
@@ -95,6 +99,7 @@ class ActivityCalendar extends Page
         $this->activityDescription = $activity->description;
         $this->dateFrom = $activity->date_from?->toDateString();
         $this->dateTo = $activity->date_to?->toDateString();
+        $this->selectedDate = $this->dateFrom;
     }
 
     public function resetActivityForm(): void
@@ -105,6 +110,7 @@ class ActivityCalendar extends Page
         $today = now('Asia/Manila')->toDateString();
         $this->dateFrom = $today;
         $this->dateTo = $today;
+        $this->selectedDate = $today;
     }
 
     public function saveActivity(): void
@@ -182,6 +188,7 @@ class ActivityCalendar extends Page
                 'day' => $date->day,
                 'isCurrentMonth' => $date->isSameMonth($month),
                 'isToday' => $dateString === $today,
+                'isSelected' => $dateString === $this->selectedDate,
                 'activities' => $dayActivities,
             ];
         }

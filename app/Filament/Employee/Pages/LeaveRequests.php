@@ -52,7 +52,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     protected static string|\UnitEnum|null $navigationGroup = 'My Workspace';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     public function mount(): void
     {

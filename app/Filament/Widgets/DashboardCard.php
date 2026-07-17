@@ -38,14 +38,17 @@ class DashboardCard extends StatsOverviewWidget
 
         return [
             Stat::make('Total Employee', $this->coloredValue($totalEmployees, '#2563eb'))
+                ->icon('heroicon-s-users')
                 ->color('primary')
                 ->extraAttributes(['data-dashboard-kpi' => 'total-employees']),
 
             Stat::make('Head Count Growth', $this->coloredValue($this->signedCount($this->headCountGrowthThisMonth()), '#0284c7'))
+                ->icon('heroicon-s-user-plus')
                 ->color('info')
                 ->extraAttributes(['data-dashboard-kpi' => 'head-count-growth']),
 
             Stat::make('Over All Attrition Rate', $this->coloredValue($this->attritionRate($this->combinedAttritionTypes()), '#dc2626'))
+                ->icon('heroicon-s-arrow-trending-down')
                 ->color('danger')
                 ->extraAttributes([
                     'data-dashboard-kpi' => 'attrition-rate',
@@ -58,6 +61,7 @@ class DashboardCard extends StatsOverviewWidget
                 ]),
 
             Stat::make('Avg. Employee Tenure', $this->coloredValue($this->averageTenureYears(), '#0ea5e9'))
+                ->icon('heroicon-s-clock')
                 ->color('info')
                 ->extraAttributes(['data-dashboard-kpi' => 'average-tenure']),
         ];

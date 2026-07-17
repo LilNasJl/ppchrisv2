@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
+use App\Services\DtrRecordService;
 use App\Services\HolidayEntitlementService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -163,6 +164,13 @@ class DtrManageTable extends BaseWidget
                     }),
             ])
             ->headerActions([
+                Action::make('printDtr')
+                    ->label('Print / PDF D.T.R')
+                    ->icon('heroicon-m-printer')
+                    ->url(fn (): string => $this->getPrintUrl())
+                    ->openUrlInNewTab()
+                    ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
+
                 Action::make('exportDtr')
                     ->label('Export D.T.R')
                     ->icon('heroicon-m-arrow-down-tray')
@@ -802,22 +810,36 @@ class DtrManageTable extends BaseWidget
 
     protected function getDtrQuery(): Builder
     {
-        $fingerprintId = $this->getFingerprintId();
+        $employee = $this->getEmployee();
         $branchId = $this->getBranchId();
         $payrollPeriodId = $this->getSelectedPayrollPeriodId();
 
-        return ModelsDtr::query()
+        if (! $employee || blank($branchId) || blank($payrollPeriodId)) {
+            return ModelsDtr::query()->whereRaw('1 = 0');
+        }
+
+        return app(DtrRecordService::class)
+            ->query($employee, (int) $branchId, (int) $payrollPeriodId)
             ->with(['payrollPeriod', 'holiday'])
-            ->when(
-                filled($fingerprintId) && filled($branchId) && filled($payrollPeriodId),
-                fn (Builder $query) => $query
-                    ->where('fingerprint_id', $fingerprintId)
-                    ->where('branch_id', $branchId)
-                    ->where('payroll_period_id', $payrollPeriodId),
-                fn (Builder $query) => $query->whereRaw('1 = 0')
-            )
             ->latest('date_in')
             ->latest('time_in');
+    }
+
+    protected function getPrintUrl(): string
+    {
+        $employee = $this->getEmployee();
+        $branch = Branch::query()->find($this->getBranchId());
+        $period = $this->getSelectedPayrollPeriod();
+
+        if (! $employee || ! $branch || ! $period) {
+            return '#';
+        }
+
+        return route('dtr.print', [
+            'period' => $period->publicKey(),
+            'branch' => $branch->publicKey(),
+            'employee' => $employee->publicKey(),
+        ]);
     }
 
     protected function buildDtrData(array $data): array

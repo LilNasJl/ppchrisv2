@@ -127,6 +127,19 @@
             font-weight: 800;
         }
 
+        .ppc-dashboard-summary-heading {
+            align-items: center;
+            display: inline-flex;
+            gap: 0.55rem;
+        }
+
+        .ppc-dashboard-summary-icon {
+            color: var(--dashboard-blue);
+            flex: 0 0 auto;
+            height: 1.15rem;
+            width: 1.15rem;
+        }
+
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-content {
             padding: 1rem;
         }

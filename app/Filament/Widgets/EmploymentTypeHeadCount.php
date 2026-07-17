@@ -2,14 +2,16 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Widgets\Concerns\HasDashboardHeadingIcon;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
+use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
 
 class EmploymentTypeHeadCount extends ChartWidget
 {
-    use HasWidgetShield;
+    use HasDashboardHeadingIcon, HasWidgetShield;
 
     protected ?string $heading = 'Gender Distribution';
 
@@ -19,6 +21,11 @@ class EmploymentTypeHeadCount extends ChartWidget
     ];
 
     protected ?string $maxHeight = '300px';
+
+    protected function getDashboardHeadingIcon(): Heroicon
+    {
+        return Heroicon::Users;
+    }
 
     protected function getData(): array
     {

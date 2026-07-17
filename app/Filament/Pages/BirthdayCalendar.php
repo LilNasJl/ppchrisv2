@@ -111,6 +111,7 @@ class BirthdayCalendar extends Page
                 'day' => $date->day,
                 'isCurrentMonth' => $date->isSameMonth($month),
                 'isToday' => $date->toDateString() === $today,
+                'isSelected' => $date->toDateString() === $this->selectedBirthdayDate,
                 'birthdays' => $birthdays->get($monthDay, collect())->values(),
             ];
         }

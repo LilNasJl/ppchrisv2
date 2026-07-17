@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Filament\Auth\LogoutResponse;
 use App\Models\Activity;
 use App\Models\Announcement;
 use App\Models\Branch;
@@ -28,6 +29,7 @@ use App\Observers\HrActionNotificationObserver;
 use App\Services\AccountLogService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
+use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
@@ -37,8 +39,9 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Spatie\Permission\Models\Role;
+use STS\FilamentImpersonate\Events\EnterImpersonation;
+use STS\FilamentImpersonate\Events\LeaveImpersonation;
 use Throwable;
 
 class AppServiceProvider extends ServiceProvider
@@ -48,7 +51,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(LogoutResponseContract::class, \App\Filament\Auth\LogoutResponse::class);
+        $this->app->bind(LogoutResponseContract::class, LogoutResponse::class);
     }
 
     /**
@@ -74,6 +77,32 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(Logout::class, function (Logout $event): void {
             app(AccountLogService::class)->record('logout', $event->user);
+        });
+
+        Event::listen(EnterImpersonation::class, function (EnterImpersonation $event): void {
+            if (! $event->impersonator instanceof User || ! $event->impersonated instanceof User) {
+                return;
+            }
+
+            app(AccountLogService::class)->record(
+                'impersonation_started',
+                $event->impersonated,
+                $event->impersonator,
+                $event->impersonated->role === 'employee' ? 'employee' : 'hr',
+            );
+        });
+
+        Event::listen(LeaveImpersonation::class, function (LeaveImpersonation $event): void {
+            if (! $event->impersonator instanceof User || ! $event->impersonated instanceof User) {
+                return;
+            }
+
+            app(AccountLogService::class)->record(
+                'impersonation_ended',
+                $event->impersonated,
+                $event->impersonator,
+                $event->impersonated->role === 'employee' ? 'employee' : 'hr',
+            );
         });
     }
 

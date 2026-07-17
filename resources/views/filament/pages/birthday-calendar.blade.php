@@ -74,6 +74,16 @@
             outline: none;
         }
 
+        .birthday-selected {
+            background: rgba(37, 99, 235, .1);
+            box-shadow: inset 0 0 0 2px #2563eb;
+        }
+
+        .dark .birthday-selected {
+            background: rgba(96, 165, 250, .14);
+            box-shadow: inset 0 0 0 2px #60a5fa;
+        }
+
         .birthday-muted {
             opacity: .42;
         }
@@ -256,7 +266,8 @@
                                         <button
                                             type="button"
                                             wire:click="showBirthdays('{{ $day['date'] }}')"
-                                            class="birthday-day birthday-day-button {{ $day['isCurrentMonth'] ? '' : 'birthday-muted' }}"
+                                            class="birthday-day birthday-day-button {{ $day['isCurrentMonth'] ? '' : 'birthday-muted' }} {{ $day['isSelected'] ? 'birthday-selected' : '' }}"
+                                            aria-pressed="{{ $day['isSelected'] ? 'true' : 'false' }}"
                                             aria-label="View {{ $day['birthdays']->count() }} birthday{{ $day['birthdays']->count() === 1 ? '' : 's' }} on {{ \Carbon\Carbon::parse($day['date'])->format('F d') }}"
                                         >
                                             <span class="birthday-number {{ $day['isToday'] ? 'birthday-today' : '' }}">

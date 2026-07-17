@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DtrPrintController;
 use App\Http\Controllers\Hr\DtrExportController;
 use App\Http\Controllers\Hr\DtrImportController;
 use App\Http\Controllers\Hr\EmployeeImportController;
@@ -113,6 +114,9 @@ Route::get('/hr-tools/payroll-by-branch/print', PayrollByBranchPrintController::
 
 Route::get('/payroll/payslip/{period}/{employee?}', PayrollPayslipPrintController::class)
     ->name('payroll.payslip.print');
+
+Route::get('/dtr/print/{period}/{branch}/{employee}', DtrPrintController::class)
+    ->name('dtr.print');
 
 Route::middleware('auth')
     ->prefix('hr-tools')

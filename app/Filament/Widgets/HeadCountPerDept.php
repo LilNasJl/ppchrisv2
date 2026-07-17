@@ -2,14 +2,16 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Widgets\Concerns\HasDashboardHeadingIcon;
 use App\Models\Department;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
+use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
 
 class HeadCountPerDept extends ChartWidget
 {
-    use HasWidgetShield;
+    use HasDashboardHeadingIcon, HasWidgetShield;
 
     protected ?string $heading = 'Head Count Per Department';
 
@@ -19,6 +21,11 @@ class HeadCountPerDept extends ChartWidget
     ];
 
     protected ?string $maxHeight = '300px';
+
+    protected function getDashboardHeadingIcon(): Heroicon
+    {
+        return Heroicon::BuildingOffice2;
+    }
 
     protected function getData(): array
     {

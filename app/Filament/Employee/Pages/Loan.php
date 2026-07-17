@@ -45,7 +45,7 @@ class Loan extends Page implements HasTable
 
     protected static string|\UnitEnum|null $navigationGroup = 'My Workspace';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     protected function getHeaderActions(): array
     {

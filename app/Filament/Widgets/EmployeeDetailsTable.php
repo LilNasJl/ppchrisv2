@@ -37,6 +37,7 @@ use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\HtmlString;
+use STS\FilamentImpersonate\Actions\Impersonate;
 
 class EmployeeDetailsTable extends TableWidget
 {
@@ -721,6 +722,19 @@ class EmployeeDetailsTable extends TableWidget
                                 ->with('changedBy')
                                 ->get(),
                         ])),
+
+                    Impersonate::make('impersonateEmployee')
+                        ->label('Impersonate')
+                        ->guard('web')
+                        ->redirectTo(url('/employee'))
+                        ->backTo(fn (): string => $this->tableReturnUrl(EmployeeDetails::getUrl()))
+                        ->withoutSpa()
+                        ->hidden(fn (User $record): bool => ! auth()->user()?->can('Impersonate:Employee')
+                            || (bool) $record->is_disabled
+                            || $record->trashed()
+                            || ! $record->employee
+                            || $record->employee->trashed()
+                            || $record->employee->hasEndedEmployment()),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
             ])
