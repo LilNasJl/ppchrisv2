@@ -18,6 +18,8 @@ class EducationLevelSummary extends ChartWidget
         'lg' => 1,
     ];
 
+    protected ?string $maxHeight = '300px';
+
     protected function getData(): array
     {
         $data = Employee::query()
@@ -34,14 +36,15 @@ class EducationLevelSummary extends ChartWidget
                     'label' => 'Employees',
                     'data' => $data->values()->all(),
                     'backgroundColor' => [
-                        '#2563EB',
-                        '#16A34A',
-                        '#F59E0B',
-                        '#EF4444',
-                        '#8B5CF6',
-                        '#14B8A6',
-                        '#64748B',
+                        '#1d4ed8',
+                        '#2563eb',
+                        '#3b82f6',
+                        '#60a5fa',
+                        '#7dd3fc',
+                        '#0ea5e9',
+                        '#64748b',
                     ],
+                    'borderWidth' => 1,
                 ],
             ],
             'labels' => $data->keys()->all(),

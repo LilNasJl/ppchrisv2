@@ -18,6 +18,8 @@ class EmploymentTypeHeadCount extends ChartWidget
         'lg' => 1,
     ];
 
+    protected ?string $maxHeight = '300px';
+
     protected function getData(): array
     {
         $baseQuery = Employee::query()
@@ -38,10 +40,12 @@ class EmploymentTypeHeadCount extends ChartWidget
                     'label' => 'Employees',
                     'data' => [$male, $female, $unspecified],
                     'backgroundColor' => [
-                        '#36A2EB',
-                        '#FF6384',
-                        '#94A3B8',
+                        '#2563eb',
+                        '#38bdf8',
+                        '#94a3b8',
                     ],
+                    'borderColor' => '#ffffff',
+                    'borderWidth' => 2,
                 ],
             ],
             'labels' => ['Male', 'Female', 'Unspecified'],

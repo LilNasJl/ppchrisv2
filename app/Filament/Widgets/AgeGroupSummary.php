@@ -19,6 +19,8 @@ class AgeGroupSummary extends ChartWidget
         'lg' => 1,
     ];
 
+    protected ?string $maxHeight = '300px';
+
     protected function getData(): array
     {
         $groups = [
@@ -54,8 +56,10 @@ class AgeGroupSummary extends ChartWidget
                 [
                     'label' => 'Employees',
                     'data' => array_values($groups),
-                    'backgroundColor' => '#3B82F6',
-                    'borderColor' => '#1D4ED8',
+                    'backgroundColor' => '#60a5fa',
+                    'borderColor' => '#1d4ed8',
+                    'borderWidth' => 1,
+                    'borderRadius' => 4,
                 ],
             ],
             'labels' => array_keys($groups),

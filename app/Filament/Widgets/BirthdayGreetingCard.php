@@ -35,7 +35,8 @@ class BirthdayGreetingCard extends StatsOverviewWidget
             Stat::make('HAPPY BIRTHDAY', $names)
                 ->description('Birthday today')
                 ->icon('heroicon-s-cake')
-                ->color('warning'),
+                ->color('primary')
+                ->extraAttributes(['data-dashboard-birthday' => true]),
         ];
     }
 

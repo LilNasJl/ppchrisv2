@@ -38,14 +38,17 @@ class DashboardCard extends StatsOverviewWidget
 
         return [
             Stat::make('Total Employee', $this->coloredValue($totalEmployees, '#2563eb'))
-                ->color('primary'),
+                ->color('primary')
+                ->extraAttributes(['data-dashboard-kpi' => 'total-employees']),
 
-            Stat::make('Head Count Growth', $this->coloredValue($this->signedCount($this->headCountGrowthThisMonth()), '#16a34a'))
-                ->color('success'),
+            Stat::make('Head Count Growth', $this->coloredValue($this->signedCount($this->headCountGrowthThisMonth()), '#0284c7'))
+                ->color('info')
+                ->extraAttributes(['data-dashboard-kpi' => 'head-count-growth']),
 
             Stat::make('Over All Attrition Rate', $this->coloredValue($this->attritionRate($this->combinedAttritionTypes()), '#dc2626'))
                 ->color('danger')
                 ->extraAttributes([
+                    'data-dashboard-kpi' => 'attrition-rate',
                     'class' => 'cursor-pointer transition hover:ring-2 hover:ring-danger-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500/70',
                     'role' => 'button',
                     'tabindex' => '0',
@@ -54,8 +57,9 @@ class DashboardCard extends StatsOverviewWidget
                     'wire:keydown.space.prevent' => 'openAttritionBreakdown',
                 ]),
 
-            Stat::make('Avg. Employee Tenure', $this->coloredValue($this->averageTenureYears(), '#059669'))
-                ->color('success'),
+            Stat::make('Avg. Employee Tenure', $this->coloredValue($this->averageTenureYears(), '#0ea5e9'))
+                ->color('info')
+                ->extraAttributes(['data-dashboard-kpi' => 'average-tenure']),
         ];
     }
 

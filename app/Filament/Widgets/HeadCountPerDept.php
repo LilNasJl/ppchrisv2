@@ -18,6 +18,8 @@ class HeadCountPerDept extends ChartWidget
         'lg' => 1,
     ];
 
+    protected ?string $maxHeight = '300px';
+
     protected function getData(): array
     {
         $departments = Department::query()
@@ -34,6 +36,10 @@ class HeadCountPerDept extends ChartWidget
                 [
                     'label' => 'No. of employees',
                     'data' => $departments->pluck('active_employee_count')->all(),
+                    'backgroundColor' => '#3b82f6',
+                    'borderColor' => '#1d4ed8',
+                    'borderWidth' => 1,
+                    'borderRadius' => 4,
                 ],
             ],
             'labels' => $departments
