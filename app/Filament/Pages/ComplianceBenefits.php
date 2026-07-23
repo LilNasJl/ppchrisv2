@@ -2,7 +2,7 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Widgets\ComplianceBenefitsEmployeeTable;
+use App\Models\Branch as BranchModel;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -27,29 +27,49 @@ class ComplianceBenefits extends Page
 
     protected static ?int $navigationSort = 3;
 
+    public ?int $branchId = null;
+
+    public ?BranchModel $branch = null;
+
+    public function mount(): void
+    {
+        $branchKey = request()->query('branchId');
+
+        if (blank($branchKey)) {
+            return;
+        }
+
+        $this->branchId = BranchModel::resolvePublicId($branchKey);
+        abort_if(blank($this->branchId), 404);
+
+        $this->branch = BranchModel::query()->findOrFail($this->branchId);
+    }
+
+    public function getTitle(): string
+    {
+        return $this->branch
+            ? 'Deductions - '.$this->branch->branch_name
+            : 'Deductions';
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {
-        return [
+        $actions = [];
+
+        if ($this->branch) {
+            $actions[] = Action::make('returnToBranches')
+                ->label('Return')
+                ->icon(Heroicon::ArrowLeft)
+                ->url(static::getUrl());
+        }
+
+        $actions[] =
             Action::make('manageDeductions')
                 ->label('Manage Deductions')
                 ->icon(Heroicon::Cog6Tooth)
-                ->url(ManageDeductions::getUrl()),
-        ];
-    }
+                ->url(ManageDeductions::getUrl());
 
-    #[Override]
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            ComplianceBenefitsEmployeeTable::class,
-        ];
-    }
-
-    public function getHeaderWidgetsColumns(): int|array
-    {
-        return [
-            'default' => 1,
-        ];
+        return $actions;
     }
 }

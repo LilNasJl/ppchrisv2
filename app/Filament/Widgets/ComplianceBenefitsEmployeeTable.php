@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Pages\ComplianceBenefits;
 use App\Filament\Pages\EmployeeComplianceBenefits;
+use App\Models\Branch;
 use App\Models\Employee;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
@@ -24,12 +25,16 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
 
     protected static ?string $heading = 'Deductions';
 
+    public ?int $branchId = null;
+
     public function table(Table $table): Table
     {
         return $table
             ->query(fn (): Builder => Employee::query()
                 ->with(['user', 'branch', 'designation', 'department'])
                 ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
+                ->when(filled($this->branchId), fn (Builder $query): Builder => $query
+                    ->where('branch_id', $this->branchId))
                 ->orderBy('uid'))
             ->columns([
                 TextColumn::make('index')
@@ -91,6 +96,10 @@ class ComplianceBenefitsEmployeeTable extends TableWidget
     {
         $query = request()->query();
         unset($query['returnUrl']);
+
+        if (filled($this->branchId)) {
+            $query['branchId'] = Branch::query()->find($this->branchId)?->publicKey() ?? $this->branchId;
+        }
 
         $query[$this->getTablePaginationPageName()] = $this->getTablePage();
 

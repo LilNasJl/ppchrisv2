@@ -6,6 +6,7 @@ use App\Filament\Pages\EditEmployeeDetails;
 use App\Filament\Pages\EmployeeDetails;
 use App\Filament\Pages\ViewEmployeeDetails;
 use App\Models\AccountStatusHistory;
+use App\Models\Branch;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
@@ -44,6 +45,8 @@ class EmployeeDetailsTable extends TableWidget
     protected static ?string $heading = '';
 
     protected static bool $isDiscovered = false;
+
+    public ?int $branchId = null;
 
     protected const DEDUCTION_GROUPS = [
         'Deductions' => [
@@ -580,6 +583,8 @@ class EmployeeDetailsTable extends TableWidget
                 ->where('role', 'employee')
                 ->whereHas('employee')
                 ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
+                ->when(filled($this->branchId), fn (Builder $query): Builder => $query
+                    ->where('account_employees.branch_id', $this->branchId))
                 ->select('users.*'))
             ->defaultSort(fn (Builder $query): Builder => $query
                 ->orderBy('account_employees.uid'))
@@ -751,6 +756,10 @@ class EmployeeDetailsTable extends TableWidget
     {
         $query = request()->query();
         unset($query['returnUrl']);
+
+        if (filled($this->branchId)) {
+            $query['branchId'] = Branch::query()->find($this->branchId)?->publicKey() ?? $this->branchId;
+        }
 
         $query[$this->getTablePaginationPageName()] = $this->getTablePage();
 

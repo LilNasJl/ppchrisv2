@@ -11,21 +11,27 @@ use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
 use App\Models\User;
 use App\Services\EmployeeDeductionService;
+use App\Services\EmploymentTypeChangeService;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\HtmlString;
+use InvalidArgumentException;
 
 trait ManagesEmployeeDetailsForm
 {
@@ -130,6 +136,126 @@ trait ManagesEmployeeDetailsForm
             .$photoActions
             .'</div>'
         );
+    }
+
+    protected function employmentTypeChangeSummary(?ModelsEmployee $record): HtmlString
+    {
+        if (! $record) {
+            return new HtmlString('<div style="color:#64748b;">No employee selected.</div>');
+        }
+
+        $change = $record->employmentTypeChanges()
+            ->with('changedBy')
+            ->first();
+
+        if (! $change) {
+            return new HtmlString(
+                '<div style="color:#64748b;font-size:13px;">No dated employment type change has been recorded yet.</div>'
+            );
+        }
+
+        $changedBy = $change->changedBy?->username ?: $change->changedBy?->name ?: 'System';
+
+        return new HtmlString(
+            '<div style="display:grid;gap:5px;padding:12px;border:1px solid rgba(148,163,184,.28);border-radius:8px;">'
+            .'<div style="font-size:12px;color:#64748b;">Latest employment type change</div>'
+            .'<div style="font-weight:700;">Effective '.e($change->effective_date?->format('M d, Y') ?? '-').'</div>'
+            .'<div style="font-size:13px;color:#64748b;">'.nl2br(e($change->explanation)).'</div>'
+            .'<div style="font-size:12px;color:#94a3b8;">Recorded by '.e($changedBy).'</div>'
+            .'</div>'
+        );
+    }
+
+    protected function employmentTypeChangeAction(): Action
+    {
+        return Action::make('changeEmploymentType')
+            ->label('Change Employment Type')
+            ->icon(Heroicon::ArrowsRightLeft)
+            ->color('primary')
+            ->modalHeading('Change Employment Type')
+            ->modalDescription('Select the new employment type and record when and why the change took effect.')
+            ->modalSubmitActionLabel('Save Change')
+            ->fillForm(function (): array {
+                $latestChange = $this->employeeRecord?->employmentTypeChanges()->first();
+
+                return [
+                    'employment_type' => $this->employeeRecord?->employment_type,
+                    'effective_date' => $latestChange?->effective_date?->format('Y-m-d') ?? now()->toDateString(),
+                    'explanation' => $latestChange?->employment_type === $this->employeeRecord?->employment_type
+                        ? $latestChange?->explanation
+                        : null,
+                ];
+            })
+            ->schema([
+                Select::make('employment_type')
+                    ->label('Employment Type')
+                    ->options(ModelsEmployee::employmentTypeOptions())
+                    ->searchable()
+                    ->required(),
+
+                DatePicker::make('effective_date')
+                    ->label('Effective Date')
+                    ->maxDate(now())
+                    ->native(false)
+                    ->required(),
+
+                Textarea::make('explanation')
+                    ->label('Explanation')
+                    ->placeholder('Explain the reason or circumstances for this employment type change.')
+                    ->rows(5)
+                    ->maxLength(2000)
+                    ->required()
+                    ->columnSpanFull(),
+            ])
+            ->action(function (array $data): void {
+                if (! $this->employeeRecord) {
+                    return;
+                }
+
+                try {
+                    app(EmploymentTypeChangeService::class)->save(
+                        employee: $this->employeeRecord,
+                        employmentType: $data['employment_type'],
+                        effectiveDate: $data['effective_date'],
+                        explanation: $data['explanation'],
+                        changedBy: auth()->user(),
+                    );
+                } catch (InvalidArgumentException $exception) {
+                    Notification::make()
+                        ->title('Employment type was not updated')
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->send();
+
+                    throw new Halt;
+                }
+
+                $this->employeeRecord->refresh();
+                $this->employeeRecord->unsetRelation('employmentTypeChanges');
+                $this->data['employment_type'] = $this->employeeRecord->employment_type;
+
+                Notification::make()
+                    ->title('Employment type updated')
+                    ->body('The effective date and explanation were saved in the employee history.')
+                    ->success()
+                    ->send();
+            });
+    }
+
+    protected function employmentTypeHistoryAction(): Action
+    {
+        return Action::make('employmentTypeHistory')
+            ->label('Employment History')
+            ->icon(Heroicon::Clock)
+            ->modalHeading(fn (): string => ($this->employeeRecord?->full_name ?? 'Employee').' Employment History')
+            ->modalWidth('5xl')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->modalContent(fn () => view('filament.pages.partials.employment-type-history', [
+                'changes' => $this->employeeRecord
+                    ? $this->employeeRecord->employmentTypeChanges()->with('changedBy')->get()
+                    : collect(),
+            ]));
     }
 
     protected function getDeductionFields(array $titles): array
@@ -620,22 +746,17 @@ trait ManagesEmployeeDetailsForm
 
                             Select::make('employment_type')
                                 ->label('Employment Type')
-                                ->options([
-                                    'Permanent' => 'Permanent',
-                                    'Probationary' => 'Probationary',
-                                    'Temporary' => 'Temporary',
-                                    'Coterminous' => 'Coterminous',
-                                    'Contractual' => 'Contractual',
-                                    'Casual' => 'Casual',
-                                    'Job Order' => 'Job Order',
-                                    'Contract of Service' => 'Contract of Service',
-                                    'Substitute' => 'Substitute',
-                                    'Resigned' => 'Resigned',
-                                    'Terminated' => 'Terminated',
-                                    'Force Resigned' => 'Force Resigned',
-                                    'Death of Employee' => 'Death of Employee',
-                                ])
-                                ->required(),
+                                ->options(ModelsEmployee::employmentTypeOptions())
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->helperText($isReadOnly
+                                    ? 'Employment type changes include an effective date and explanation.'
+                                    : 'Use the Change Employment Type action at the top of this page.'),
+
+                            Placeholder::make('employment_type_change_summary')
+                                ->hiddenLabel()
+                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->employmentTypeChangeSummary($record ?? ($this->employeeRecord ?? null)))
+                                ->columnSpanFull(),
 
                         ])
                         ->columns([
@@ -805,6 +926,7 @@ trait ManagesEmployeeDetailsForm
             $data['profile_photo_path'],
             $data['account_username'],
             $data['account_password'],
+            $data['employment_type'],
         );
         $data = $this->normalizeSalaryData($data);
         $data['schedule_type'] = $this->scheduleTypeForRateType($data['rate_type'] ?? $record->rate_type);

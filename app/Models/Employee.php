@@ -32,6 +32,22 @@ class Employee extends Model
         'Death Employee',
     ];
 
+    public const EMPLOYMENT_TYPES = [
+        'Permanent',
+        'Probationary',
+        'Temporary',
+        'Coterminous',
+        'Contractual',
+        'Casual',
+        'Job Order',
+        'Contract of Service',
+        'Substitute',
+        'Resigned',
+        'Terminated',
+        'Force Resigned',
+        'Death of Employee',
+    ];
+
     protected $fillable = [
         'user_id',
         'employee_import_batch_id',
@@ -208,6 +224,21 @@ class Employee extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function employmentTypeChanges()
+    {
+        return $this->hasMany(EmployeeEmploymentTypeChange::class)
+            ->orderByDesc('effective_date')
+            ->orderByDesc('id');
+    }
+
+    public function latestEmploymentTypeChange()
+    {
+        return $this->hasOne(EmployeeEmploymentTypeChange::class)->ofMany([
+            'effective_date' => 'max',
+            'id' => 'max',
+        ]);
+    }
+
     public function employeeDeductions()
     {
         return $this->hasMany(EmployeeDeduction::class, 'employee_id');
@@ -276,6 +307,11 @@ class Employee extends Model
     public function hasEndedEmployment(): bool
     {
         return in_array($this->employment_type, self::ENDED_EMPLOYMENT_TYPES, true);
+    }
+
+    public static function employmentTypeOptions(): array
+    {
+        return array_combine(self::EMPLOYMENT_TYPES, self::EMPLOYMENT_TYPES);
     }
 
     public function resetLeaveCreditsIfNeeded(): void

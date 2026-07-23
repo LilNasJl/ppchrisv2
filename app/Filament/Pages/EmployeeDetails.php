@@ -2,8 +2,8 @@
 
 namespace App\Filament\Pages;
 
-use App\Filament\Pages\EmployeeImport;
 use App\Filament\Resources\Users\UserResource;
+use App\Models\Branch as BranchModel;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -29,37 +29,79 @@ class EmployeeDetails extends Page
 
     protected static ?int $navigationSort = 1;
 
+    public ?int $branchId = null;
+
+    public ?BranchModel $branch = null;
+
+    public function mount(): void
+    {
+        $branchKey = request()->query('branchId');
+
+        if (blank($branchKey)) {
+            return;
+        }
+
+        $this->branchId = BranchModel::resolvePublicId($branchKey);
+        abort_if(blank($this->branchId), 404);
+
+        $this->branch = BranchModel::query()->findOrFail($this->branchId);
+    }
+
+    public function getTitle(): string
+    {
+        return $this->branch
+            ? 'Accounts & Records - '.$this->branch->branch_name
+            : 'Accounts & Records';
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {
-        return [
+        $actions = [];
+
+        if ($this->branch) {
+            $actions[] = Action::make('returnToBranches')
+                ->label('Return')
+                ->icon(Heroicon::ArrowLeft)
+                ->url(static::getUrl());
+        }
+
+        $actions[] =
             ActionGroup::make([
                 Action::make('importEmployee')
                     ->label('Import Employee')
                     ->icon(Heroicon::ArrowDownTray)
                     ->url(EmployeeImport::getUrl([
-                        'returnUrl' => EmployeeDetails::getUrl(),
+                        'returnUrl' => $this->recordsReturnUrl(),
                     ])),
 
                 Action::make('importHistory')
                     ->label('Import History')
                     ->icon(Heroicon::QueueList)
                     ->url(UserResource::getUrl('import-history', [
-                        'returnUrl' => EmployeeDetails::getUrl(),
+                        'returnUrl' => $this->recordsReturnUrl(),
                     ])),
 
                 Action::make('newEmployeeAccount')
                     ->label('New Employee Account')
                     ->icon(Heroicon::Plus)
                     ->url(UserResource::getUrl('create', [
-                        'returnUrl' => EmployeeDetails::getUrl(),
+                        'returnUrl' => $this->recordsReturnUrl(),
                     ])),
             ])
                 ->label('Manage Records')
                 ->icon(Heroicon::Cog6Tooth)
                 ->button()
-                ->tooltip('Manage Records'),
-        ];
+                ->tooltip('Manage Records');
+
+        return $actions;
+    }
+
+    protected function recordsReturnUrl(): string
+    {
+        return $this->branch
+            ? static::getUrl(['branchId' => $this->branch->publicKey()])
+            : static::getUrl();
     }
 
     // protected ?string $subheading = 'Manage and view employee profiles and employement data';

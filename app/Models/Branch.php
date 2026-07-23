@@ -41,4 +41,9 @@ class Branch extends Model
     {
         return $this->belongsTo(Employee::class, 'employee_id');
     }
+
+    public function employees()
+    {
+        return $this->hasMany(Employee::class, 'branch_id');
+    }
 }
