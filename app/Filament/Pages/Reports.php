@@ -40,9 +40,9 @@ class Reports extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentChartBar;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytic and Reporting';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     public ?string $report_type = 'employee_headcount_branch';
 

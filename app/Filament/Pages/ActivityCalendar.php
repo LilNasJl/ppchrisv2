@@ -26,7 +26,7 @@ class ActivityCalendar extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
 
     public string $calendarMonth;
 

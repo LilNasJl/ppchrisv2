@@ -17,11 +17,11 @@ class Dtr extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::QueueList;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Payroll Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
     protected static ?int $navigationSort = 1;
 
-    protected static ?string $navigationLabel = 'D.T.R';
+    protected static ?string $navigationLabel = 'Daily Time Record';
 
     protected static ?string $title = 'D.T.R Management';
 

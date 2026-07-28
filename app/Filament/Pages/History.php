@@ -32,9 +32,9 @@ class History extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Bell;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytic and Reporting';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     public function table(Table $table): Table
     {

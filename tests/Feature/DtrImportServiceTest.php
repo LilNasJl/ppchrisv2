@@ -1,0 +1,200 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Branch;
+use App\Models\Dtr;
+use App\Models\PayrollPeriod;
+use App\Services\Imports\DtrImportService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
+use Tests\TestCase;
+
+#[RequiresPhpExtension('pdo_sqlite')]
+class DtrImportServiceTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_forgot_to_punch_accepts_its_four_naturally_empty_fields(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period, [
+            'Schedule Type' => 'Forgot to Punch',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$row], 'Forgot punch import');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '999999',
+            'schedule_type' => 'Forgot to Punch',
+            'date_out' => null,
+            'time_out' => null,
+            'schedule_start' => null,
+            'schedule_end' => null,
+            'is_absent' => 1,
+            'is_imported' => 1,
+        ]);
+    }
+
+    public function test_normal_rows_still_require_timeout_and_schedule_fields(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period, [
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$row], 'Invalid regular row');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertCount(4, $result['errors']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_date_in_must_belong_to_the_selected_open_period(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period, [
+            'Date In' => '2026-08-01',
+            'Date Out' => '2026-08-01',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$row], 'Wrong period');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertStringContainsString('within the selected payroll period', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_locked_period_rejects_imports(): void
+    {
+        [$branch, $period] = $this->importContext(locked: true);
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period),
+        ], 'Locked period');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertStringContainsString('locked', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_non_overlapping_same_day_shifts_are_both_imported(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $morning = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Time Out' => '12:00:00',
+        ]);
+        $afternoon = $this->row($branch, $period, [
+            'Time In' => '13:00:00',
+            'Time Out' => '17:00:00',
+            'Schedule Type' => 'Shift2',
+            'Schedule Start' => '13:00:00',
+            'Schedule End' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$morning, $afternoon], 'Split shifts');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseCount('dtrs', 2);
+    }
+
+    public function test_overlapping_same_day_punches_cancel_the_entire_batch(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $first = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Time Out' => '12:00:00',
+        ]);
+        $overlap = $this->row($branch, $period, [
+            'Time In' => '11:30:00',
+            'Time Out' => '15:00:00',
+            'Schedule Type' => 'Shift2',
+            'Schedule Start' => '11:00:00',
+            'Schedule End' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$first, $overlap], 'Overlap');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertSame(2, $result['errors'][0]['row']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_unmapped_fingerprint_id_is_kept_as_an_import_identifier(): void
+    {
+        [$branch, $period] = $this->importContext();
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, ['Fingerprint ID' => '765432']),
+        ], 'Unmapped fingerprint');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', ['fingerprint_id' => '765432']);
+    }
+
+    /**
+     * @return array{0: Branch, 1: PayrollPeriod}
+     */
+    private function importContext(bool $locked = false): array
+    {
+        $branch = Branch::query()->create([
+            'branch_name' => 'Test Branch',
+            'branch_address' => 'Test Address',
+            'mobile_no' => '09123456789',
+            'employee_id' => 0,
+            'no_of_shifts' => 1,
+            'reg_sched_start' => '08:00:00',
+            'reg_sched_end' => '18:00:00',
+            'is_24hrs' => false,
+            'has_broken_time' => false,
+        ]);
+
+        $period = PayrollPeriod::query()->create([
+            'title' => 'Jul 20 - 31, 2026',
+            'date_start' => '2026-07-20',
+            'date_end' => '2026-07-31',
+            'date_payout' => '2026-08-05',
+            'description' => 'Import test period',
+            'is_locked' => $locked,
+        ]);
+
+        return [$branch, $period];
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function row(Branch $branch, PayrollPeriod $period, array $overrides = []): array
+    {
+        return array_replace([
+            'Batch ID' => 'TEST-BATCH',
+            'Period ID' => $period->id,
+            'Branch ID' => $branch->id,
+            'Fingerprint ID' => '999999',
+            'Name' => 'Unmapped Employee',
+            'Date In' => '2026-07-21',
+            'Time In' => '08:00:00',
+            'Date Out' => '2026-07-21',
+            'Time Out' => '18:00:00',
+            'Schedule Type' => 'Regular',
+            'Schedule Start' => '08:00:00',
+            'Schedule End' => '18:00:00',
+        ], $overrides);
+    }
+}

@@ -42,13 +42,13 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected static ?string $title = 'Loan Management';
 
-    protected static ?string $navigationLabel = 'Loans';
+    protected static ?string $navigationLabel = 'Loan Management';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     public string $activeLoanTab = 'list';
 

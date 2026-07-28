@@ -1,9 +1,12 @@
+@php($landingBackground = asset('image/hris-blue-wave-background.png'))
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Philfumes Petroleum Corporation Human Resource Information System">
+    <link rel="icon" type="image/png" href="{{ asset('ppclogo.png') }}?v=20260724">
+    <link rel="apple-touch-icon" href="{{ asset('ppclogo.png') }}?v=20260724">
     <title>HRIS | Philfumes Petroleum Corporation</title>
 
     <style>
@@ -37,7 +40,7 @@
 
         .landing-shell {
             background-color: #fff;
-            background-image: url('{{ asset('image/hris-blue-wave-background.png') }}');
+            background-image: url("{{ $landingBackground }}");
             background-position: center;
             background-repeat: no-repeat;
             background-size: cover;
@@ -59,21 +62,16 @@
             align-items: center;
             color: #0d2450;
             display: inline-flex;
-            gap: 14px;
+            gap: 10px;
             text-decoration: none;
             width: fit-content;
         }
 
         .brand-logo {
-            background: #fff;
-            border: 1px solid #d9e5f5;
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(19, 69, 145, .08);
             display: block;
-            height: 58px;
+            height: 64px;
             object-fit: contain;
-            padding: 5px;
-            width: 58px;
+            width: 64px;
         }
 
         .brand-copy {
@@ -82,6 +80,7 @@
         }
 
         .brand-name {
+            color: #071a3a;
             font-size: 15px;
             font-weight: 800;
             line-height: 1.2;
@@ -105,14 +104,6 @@
         .hero {
             max-width: 590px;
             width: 100%;
-        }
-
-        .eyebrow {
-            color: #1769d2;
-            font-size: 12px;
-            font-weight: 800;
-            margin: 0 0 12px;
-            text-transform: uppercase;
         }
 
         h1 {
@@ -194,7 +185,7 @@
         .portal-actions {
             display: grid;
             gap: 10px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .portal-link {
@@ -455,7 +446,7 @@
         @media (max-width: 800px) {
             .landing-shell {
                 background-color: #0758cf;
-                background-image: url('{{ asset('image/hris-blue-wave-background.png') }}');
+                background-image: url("{{ $landingBackground }}");
                 background-position: 78% center;
                 background-repeat: no-repeat;
                 background-size: cover;
@@ -478,25 +469,19 @@
             }
 
             .brand-logo {
-                border-color: rgba(255, 255, 255, .62);
-                box-shadow: 0 10px 26px rgba(3, 36, 104, .2);
-            }
-
-            .brand-system {
-                color: #dbeeff;
-            }
-
-            .brand-logo {
-                height: 50px;
-                width: 50px;
+                filter: brightness(0) invert(1);
+                height: 58px;
+                width: 58px;
             }
 
             .brand-name {
+                color: #fff;
                 font-size: 13px;
                 max-width: 210px;
             }
 
             .brand-system {
+                color: #dbeeff;
                 font-size: 10px;
             }
 
@@ -639,7 +624,7 @@
         <section class="content-panel">
             <header>
                 <a href="{{ route('landing') }}" class="brand" aria-label="Philfumes HRIS home">
-                    <img src="{{ asset('image/ppclogo.png') }}" alt="Philfumes logo" class="brand-logo">
+                    <img src="{{ asset('image/ppcblueblack.png') }}" alt="PhilFumes logo" class="brand-logo">
                     <span class="brand-copy">
                         <span class="brand-name">Philfumes Petroleum Corporation</span>
                         <span class="brand-system">Human Resource Information System</span>
@@ -649,15 +634,14 @@
 
             <main class="content-main">
                 <div class="hero">
-                    <p class="eyebrow">People. Time. Payroll.</p>
                     <h1>
                         Human Resource
                         <span class="title-accent">Information System</span>
                     </h1>
                     <p class="hero-summary">Everything your people operations need, in one secure place.</p>
-                    <p class="hero-description">
+                    <!-- <p class="hero-description">
                         Manage employee records, D.T.R., payroll, leave, loans, benefits, notices, and self-service access through one connected workspace.
-                    </p>
+                    </p> -->
 
                     <div class="feature-grid" aria-label="HRIS capabilities">
                         <div class="feature-item">
@@ -677,13 +661,16 @@
                     <p class="portal-heading">Choose your secure portal</p>
                     <nav class="portal-actions" aria-label="Login portals">
                         <a href="{{ route('filament.hr.auth.login') }}" class="portal-link portal-link-primary">
-                            Open HR Portal
+                            HR Portal
                         </a>
                         <a href="{{ route('filament.employee.auth.login') }}" class="portal-link portal-link-secondary">
                             Employee Self-Service
                         </a>
+                        <a href="{{ route('filament.kpi.auth.login') }}" class="portal-link portal-link-secondary">
+                            KPI Portal
+                        </a>
                     </nav>
-                    <p class="access-note">Authorized access for Philfumes HR teams and employees.</p>
+                    <p class="access-note">Authorized access for Philfumes HR teams, employees, and assigned KPI raters.</p>
                 </div>
             </main>
         </section>

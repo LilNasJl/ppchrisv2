@@ -28,15 +28,15 @@ class Memo extends Page implements HasTable
 
     protected string $view = 'filament-panels::pages.page';
 
-    protected static ?string $title = 'Notices';
+    protected static ?string $title = 'Employee Notice';
 
-    protected static ?string $navigationLabel = 'Notices';
+    protected static ?string $navigationLabel = 'Employee Notice';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
+    protected static string|UnitEnum|null $navigationGroup = 'Labor Management';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     public function table(Table $table): Table
     {

@@ -464,12 +464,17 @@ function getExportData(t,batchId){
   if(t==='dtr'){
     headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Schedule Start','Schedule End','Branch ID'];
     rows=data.map((r,i)=>{
+      const forgotToPunch=String(r.sched||'').toLowerCase().includes('forgot');
+      const hasTimeOut=!forgotToPunch&&String(r.time_out||'').trim()!=='';
+
       return[
         i+1, batchId, periodId, r.uid??'', r.name||'',
         r.date_in||'', r.time_in||'',
-        r.time_out&&r.time_out!==''?(r.date_out||''):'',
-        r.time_out&&r.time_out!==''?(r.time_out||''):'',
-        r.sched||'', r.sched_start||'', r.sched_end||'',
+        hasTimeOut?(r.date_out||''):'',
+        hasTimeOut?(r.time_out||''):'',
+        r.sched||'',
+        forgotToPunch?'':(r.sched_start||''),
+        forgotToPunch?'':(r.sched_end||''),
         branchId
       ];
     });

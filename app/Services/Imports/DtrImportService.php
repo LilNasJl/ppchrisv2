@@ -5,6 +5,7 @@ namespace App\Services\Imports;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
 use App\Services\HolidayEntitlementService;
@@ -39,7 +40,10 @@ class DtrImportService
             $rowNumber = $index + 1;
 
             try {
-                $validatedRows[] = $this->validateRow(is_array($row) ? $row : [], $fallbackBatchId);
+                $validatedRows[] = [
+                    'row' => $rowNumber,
+                    'data' => $this->validateRow(is_array($row) ? $row : [], $fallbackBatchId),
+                ];
             } catch (ValidationException $exception) {
                 $rowErrors = collect($exception->errors())->flatten()->all();
 
@@ -68,10 +72,37 @@ class DtrImportService
             return $result;
         }
 
+        $pendingRecords = collect();
+
+        foreach ($validatedRows as $validatedRow) {
+            $data = $validatedRow['data'];
+            $metadata = $this->getImportMetadata($data, $importName);
+
+            if ($this->hasConflictingDtr(
+                $data,
+                $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
+                $pendingRecords,
+            )) {
+                $result['failed']++;
+                $result['errors'][] = [
+                    'row' => $validatedRow['row'],
+                    'message' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval.',
+                ];
+            }
+
+            $pendingRecords->push($this->makePendingRecord($data, $metadata));
+        }
+
+        if ($result['errors'] !== []) {
+            $result['message'] = 'Import cancelled. No D.T.R records were saved. Fix the listed rows and import again.';
+
+            return $result;
+        }
+
         try {
             DB::transaction(function () use ($validatedRows, $importName, &$result): void {
-                foreach ($validatedRows as $data) {
-                    $this->saveValidatedRow($data, $importName);
+                foreach ($validatedRows as $validatedRow) {
+                    $this->saveValidatedRow($validatedRow['data'], $importName);
                     $result['successful']++;
                 }
             });
@@ -111,6 +142,7 @@ class DtrImportService
     {
         $requiredColumnErrors = $this->getRequiredColumnErrors($row);
         $data = $this->normalizeRow($row, $fallbackBatchId);
+        $isForgotToPunch = $this->resolveScheduleType($data) === 'Forgot to Punch';
 
         if ($requiredColumnErrors !== []) {
             throw ValidationException::withMessages([
@@ -125,11 +157,11 @@ class DtrImportService
             'fingerprint_id' => ['required', 'integer'],
             'date_in' => ['required', 'date'],
             'time_in' => ['required', 'date_format:H:i:s'],
-            'date_out' => ['required', 'date'],
-            'time_out' => ['required', 'date_format:H:i:s'],
+            'date_out' => [$isForgotToPunch ? 'nullable' : 'required', 'date'],
+            'time_out' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
             'schedule_type' => ['required', 'string', 'max:191'],
-            'schedule_start' => ['required', 'date_format:H:i:s'],
-            'schedule_end' => ['required', 'date_format:H:i:s'],
+            'schedule_start' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
+            'schedule_end' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
         ], [
             'batch_id.required' => 'Batch ID is required.',
             'payroll_period_id.required' => 'Period ID is required.',
@@ -147,6 +179,32 @@ class DtrImportService
 
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->errors()->toArray());
+        }
+
+        $payrollPeriod = PayrollPeriod::query()->find($data['payroll_period_id']);
+
+        if (! $payrollPeriod) {
+            throw ValidationException::withMessages([
+                'payroll_period_id' => 'Period ID does not exist in the system.',
+            ]);
+        }
+
+        if ($payrollPeriod->is_locked) {
+            throw ValidationException::withMessages([
+                'payroll_period_id' => 'The selected payroll period is locked and cannot accept imported D.T.R records.',
+            ]);
+        }
+
+        $dateIn = Carbon::parse($data['date_in'])->startOfDay();
+
+        if (! $dateIn->betweenIncluded($payrollPeriod->date_start, $payrollPeriod->date_end)) {
+            throw ValidationException::withMessages([
+                'date_in' => sprintf(
+                    'Date In must be within the selected payroll period (%s to %s).',
+                    $payrollPeriod->date_start->format('M d, Y'),
+                    $payrollPeriod->date_end->format('M d, Y'),
+                ),
+            ]);
         }
 
         return $data;
@@ -195,6 +253,12 @@ class DtrImportService
      */
     protected function getRequiredColumnErrors(array $row): array
     {
+        $scheduleType = $this->normalizeScheduleType(
+            $this->normalizeNullableString(
+                $this->pick($row, ['schedule_type', 'schedule type', 'sched', 'schedule']),
+            ),
+        );
+
         $requiredColumns = [
             'Batch ID' => ['batch_id', 'batch id', 'batch'],
             'Period ID' => ['payroll_period_id', 'period id', 'period_id', 'payroll period id'],
@@ -202,39 +266,21 @@ class DtrImportService
             'Fingerprint ID' => ['fingerprint_id', 'fingerprint id', 'uid', 'employee_id', 'employee_uid', 'user id'],
             'Date In' => ['date_in', 'date in'],
             'Time In' => ['time_in', 'time in'],
-            'Date Out' => ['date_out', 'date out'],
-            'Time Out' => ['time_out', 'time out'],
             'Schedule Type' => ['schedule_type', 'schedule type', 'sched', 'schedule'],
-            'Schedule Start' => ['schedule_start', 'schedule start', 'sched_start'],
-            'Schedule End' => ['schedule_end', 'schedule end', 'sched_end'],
         ];
 
+        if ($scheduleType !== 'Forgot to Punch') {
+            $requiredColumns += [
+                'Date Out' => ['date_out', 'date out'],
+                'Time Out' => ['time_out', 'time out'],
+                'Schedule Start' => ['schedule_start', 'schedule start', 'sched_start'],
+                'Schedule End' => ['schedule_end', 'schedule end', 'sched_end'],
+            ];
+        }
+
         $errors = [];
-        $emptyKeys = [];
-
-        foreach ($row as $key => $value) {
-            $normalizedKey = $this->normalizeKey((string) $key);
-
-            if ($normalizedKey === '') {
-                continue;
-            }
-
-            if (blank($this->cleanSpreadsheetValue($value))) {
-                $emptyKeys[$normalizedKey] = trim((string) $key);
-            }
-        }
-
-        foreach ($emptyKeys as $label) {
-            $errors[] = "{$label} is required.";
-        }
 
         foreach ($requiredColumns as $label => $aliases) {
-            foreach ($aliases as $alias) {
-                if (array_key_exists($this->normalizeKey($alias), $emptyKeys)) {
-                    continue 2;
-                }
-            }
-
             if (blank($this->cleanSpreadsheetValue($this->pick($row, $aliases)))) {
                 $errors[] = "{$label} is required.";
             }
@@ -473,21 +519,140 @@ class DtrImportService
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function hasConflictingDtr(array $data, ?string $dayPart): bool
+    protected function hasConflictingDtr(array $data, ?string $dayPart, $additionalRecords = null): bool
     {
-        $scheduleType = $this->resolveScheduleType($data);
-        $records = $this->getExistingDateRecords($data);
+        $records = $this->getPotentialConflictRecords($data);
 
-        if ($scheduleType === 'Overtime') {
-            return $records->contains(fn (Dtr $record): bool => $this->normalizeScheduleType($record->schedule_type) === 'Overtime');
+        if ($additionalRecords) {
+            $records = $records
+                ->concat($additionalRecords->filter(
+                    fn (Dtr $record): bool => (int) $record->payroll_period_id === (int) $data['payroll_period_id']
+                        && (int) $record->branch_id === (int) $this->getImportedBranchId($data)
+                        && (string) $record->fingerprint_id === (string) $data['fingerprint_id'],
+                ))
+                ->values();
         }
 
-        $records = $records
-            ->reject(fn (Dtr $record): bool => $this->normalizeScheduleType($record->schedule_type) === 'Overtime')
+        $dateIn = Carbon::parse($data['date_in'])->toDateString();
+        $administrativeRecords = $records
+            ->filter(fn (Dtr $record): bool => $this->isAdministrativeDtr($record))
+            ->filter(fn (Dtr $record): bool => Carbon::parse($record->date_in)->toDateString() === $dateIn)
             ->values();
 
-        return app(DtrDayPartService::class)
-            ->conflictsWith($records, $dayPart);
+        if (app(DtrDayPartService::class)->conflictsWith($administrativeRecords, $dayPart)) {
+            return true;
+        }
+
+        foreach ($records->reject(fn (Dtr $record): bool => $this->isAdministrativeDtr($record)) as $record) {
+            $existingInterval = $this->getDtrInterval($record);
+            $newInterval = $this->getDtrInterval($data);
+
+            if ($existingInterval && $newInterval) {
+                if (
+                    $newInterval[0]->lessThan($existingInterval[1])
+                    && $existingInterval[0]->lessThan($newInterval[1])
+                ) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (Carbon::parse($record->date_in)->toDateString() === $dateIn) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return \Illuminate\Support\Collection<int, Dtr>
+     */
+    protected function getPotentialConflictRecords(array $data)
+    {
+        if (
+            blank($data['payroll_period_id'] ?? null)
+            || blank($this->getImportedBranchId($data))
+            || blank($data['fingerprint_id'] ?? null)
+            || blank($data['date_in'] ?? null)
+        ) {
+            return collect();
+        }
+
+        $rangeStart = Carbon::parse($data['date_in'])->subDay()->toDateString();
+        $rangeEnd = filled($data['date_out'] ?? null)
+            ? Carbon::parse($data['date_out'])->toDateString()
+            : Carbon::parse($data['date_in'])->toDateString();
+
+        return Dtr::query()
+            ->where('payroll_period_id', $data['payroll_period_id'])
+            ->where('branch_id', $this->getImportedBranchId($data))
+            ->where('fingerprint_id', (string) $data['fingerprint_id'])
+            ->whereBetween('date_in', [$rangeStart, $rangeEnd])
+            ->get();
+    }
+
+    protected function isAdministrativeDtr(Dtr $record): bool
+    {
+        if (in_array($record->entry_source, [
+            DtrDayPartService::SOURCE_LEAVE,
+            DtrDayPartService::SOURCE_ABSENCE,
+        ], true)) {
+            return true;
+        }
+
+        $scheduleType = str($record->schedule_type ?? '')->lower();
+
+        return $scheduleType->contains('leave') || $scheduleType->contains('absent');
+    }
+
+    /**
+     * @param  array<string, mixed>|Dtr  $record
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    protected function getDtrInterval(array|Dtr $record): ?array
+    {
+        $dateIn = $record instanceof Dtr ? $record->date_in : ($record['date_in'] ?? null);
+        $timeIn = $record instanceof Dtr ? $record->time_in : ($record['time_in'] ?? null);
+        $dateOut = $record instanceof Dtr ? $record->date_out : ($record['date_out'] ?? null);
+        $timeOut = $record instanceof Dtr ? $record->time_out : ($record['time_out'] ?? null);
+
+        if (blank($dateIn) || blank($timeIn) || blank($dateOut) || blank($timeOut)) {
+            return null;
+        }
+
+        $start = Carbon::parse("{$dateIn} {$timeIn}");
+        $end = Carbon::parse("{$dateOut} {$timeOut}");
+
+        if ($end->lessThan($start)) {
+            $end->addDay();
+        }
+
+        return [$start, $end];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $metadata
+     */
+    protected function makePendingRecord(array $data, array $metadata): Dtr
+    {
+        return (new Dtr)->forceFill([
+            'batch_id' => $data['batch_id'],
+            'payroll_period_id' => $data['payroll_period_id'],
+            'branch_id' => $data['branch_id'],
+            'fingerprint_id' => $data['fingerprint_id'],
+            'date_in' => $data['date_in'],
+            'time_in' => $data['time_in'],
+            'date_out' => $data['date_out'],
+            'time_out' => $data['time_out'],
+            'schedule_type' => $data['schedule_type'],
+            'schedule_start' => $data['schedule_start'],
+            'schedule_end' => $data['schedule_end'],
+            ...$metadata,
+        ]);
     }
 
     /**

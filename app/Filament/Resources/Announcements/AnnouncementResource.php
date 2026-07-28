@@ -32,19 +32,19 @@ class AnnouncementResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
-    protected static ?string $navigationLabel = 'Memo & Annc.';
+    protected static ?string $navigationLabel = 'Company Memorandum';
 
-    protected static ?string $modelLabel = 'Memo & Announcement';
+    protected static ?string $modelLabel = 'Company Memorandum';
 
-    protected static ?string $pluralModelLabel = 'Memo & Annc.';
+    protected static ?string $pluralModelLabel = 'Company Memorandum';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 4;
 
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->components([
-                Section::make('Memo & Announcement')
+                Section::make('Company Memorandum')
                     ->schema([
                         TextInput::make('title')
                             ->required()

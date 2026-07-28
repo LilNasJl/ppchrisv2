@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Under Construction</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: grid;
+            place-items: center;
+            overflow: hidden;
+            background: transparent;
+            padding: 2rem;
+        }
+
+        img {
+            display: block;
+            width: min(100%, 44rem);
+            max-height: calc(100vh - 4rem);
+            object-fit: contain;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem;
+            }
+
+            img {
+                max-height: calc(100vh - 2rem);
+            }
+        }
+    </style>
+</head>
+<body>
+    <img src="image/under_construction.png" alt="This module is under construction">
+</body>
+</html>

@@ -30,7 +30,7 @@ class EmployeePanelProvider extends PanelProvider
             ->brandName('HRMS: SELF SERVICE')
             ->globalSearch(false)
             ->databaseNotifications()
-            ->favicon(url('ppclogo.png'))
+            ->favicon(asset('ppclogo.png').'?v=20260724')
             ->login(EmployeeLogin::class)
             ->navigationGroups([
                 NavigationGroup::make('My Workspace'),

@@ -17,13 +17,13 @@ class ComplianceBenefits extends Page
 
     protected string $view = 'filament.pages.compliance-benefits';
 
-    protected static ?string $title = 'Deductions';
+    protected static ?string $title = 'Benefits & Company Deduction Management';
 
-    protected static ?string $navigationLabel = 'Deductions';
+    protected static ?string $navigationLabel = 'Benefits & Company Deduction Management';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::MinusCircle;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
     protected static ?int $navigationSort = 3;
 
@@ -48,8 +48,8 @@ class ComplianceBenefits extends Page
     public function getTitle(): string
     {
         return $this->branch
-            ? 'Deductions - '.$this->branch->branch_name
-            : 'Deductions';
+            ? 'Benefits & Company Deduction Management - '.$this->branch->branch_name
+            : 'Benefits & Company Deduction Management';
     }
 
     #[Override]

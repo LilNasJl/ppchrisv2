@@ -12,6 +12,7 @@ use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use UnitEnum;
 
 class Dashboard extends Page
 {
@@ -20,6 +21,10 @@ class Dashboard extends Page
     protected string $view = 'filament.pages.dashboard';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Analytic and Reporting';
+
+    protected static ?int $navigationSort = 1;
 
     protected function getHeaderWidgets(): array
     {

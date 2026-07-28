@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\KpiAccount;
 use App\Models\User;
 
 return [
@@ -42,6 +43,10 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'kpi' => [
+            'driver' => 'session',
+            'provider' => 'kpi_accounts',
+        ],
     ],
 
     /*
@@ -65,6 +70,10 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+        'kpi_accounts' => [
+            'driver' => 'eloquent',
+            'model' => KpiAccount::class,
         ],
 
         // 'users' => [

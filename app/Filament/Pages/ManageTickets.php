@@ -36,9 +36,9 @@ class ManageTickets extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     public function table(Table $table): Table
     {

@@ -28,9 +28,11 @@ class LeaveResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'Leave';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Reports and Documents';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
+
+    protected static ?string $navigationLabel = 'Leave Tracking';
 
     public static function form(Schema $schema): Schema
     {

@@ -20,9 +20,11 @@ class Payroll extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Payroll Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
     protected static ?int $navigationSort = 2;
+
+    protected static ?string $navigationLabel = 'Payroll Processing';
 
     #[Override]
     protected function getHeaderActions(): array

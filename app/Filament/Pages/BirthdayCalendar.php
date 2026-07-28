@@ -24,7 +24,7 @@ class BirthdayCalendar extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 2;
 
     public string $calendarMonth;
 

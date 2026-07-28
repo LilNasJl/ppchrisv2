@@ -1,6 +1,10 @@
 @php
-    $isEmployeePanel = filament()->getCurrentPanel()?->getId() === 'employee';
-    $brandTitle = $isEmployeePanel ? 'HRIS: SELF SERVICE' : 'HRIS';
+    $panelId = filament()->getCurrentPanel()?->getId();
+    $brandTitle = match ($panelId) {
+        'employee' => 'HRIS: SELF SERVICE',
+        'kpi' => 'KPI PORTAL',
+        default => 'HRIS',
+    };
     $brandSubtitle = 'Human Resource Information System';
     $logoCandidates = [
         'image/ppcwhite.png',

@@ -32,9 +32,9 @@ class ThirteenthMonthPay extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 6;
 
     public ?string $year = null;
 

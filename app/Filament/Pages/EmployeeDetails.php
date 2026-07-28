@@ -21,7 +21,7 @@ class EmployeeDetails extends Page
 
     protected static ?string $title = 'Accounts & Records';
 
-    protected static ?string $navigationLabel = 'Accounts & Records';
+    protected static ?string $navigationLabel = 'Masterdata';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Identification;
 
