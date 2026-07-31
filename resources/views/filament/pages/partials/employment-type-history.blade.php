@@ -28,7 +28,7 @@
                             {{ $change->employment_type }}
                         </td>
                         <td class="max-w-sm whitespace-normal px-3 py-3 text-gray-600 dark:text-gray-300">
-                            {{ $change->explanation }}
+                            {{ $change->explanation ?: 'No explanation provided.' }}
                         </td>
                         <td class="px-3 py-3 text-gray-600 dark:text-gray-300">
                             {{ $change->changedBy?->username ?: $change->changedBy?->name ?: 'System' }}

@@ -1,6 +1,24 @@
 <x-filament-panels::page>
     @include('filament.pages.partials.compact-management-table-styles')
 
+    @if (! $branch)
+        <x-filament::tabs label="Masterdata view">
+            <x-filament::tabs.item
+                :active="$viewMode === 'all'"
+                wire:click="$set('viewMode', 'all')"
+            >
+                All Employees
+            </x-filament::tabs.item>
+
+            <x-filament::tabs.item
+                :active="$viewMode === 'branches'"
+                wire:click="$set('viewMode', 'branches')"
+            >
+                By Branch
+            </x-filament::tabs.item>
+        </x-filament::tabs>
+    @endif
+
     @if ($branch)
         <x-filament::section compact>
             <div class="flex items-center gap-3">
@@ -21,6 +39,8 @@
         </x-filament::section>
 
         @livewire(\App\Filament\Widgets\EmployeeDetailsTable::class, ['branchId' => $branchId])
+    @elseif ($viewMode === 'all')
+        @livewire(\App\Filament\Widgets\EmployeeDetailsTable::class, [], key('masterdata-all-employees'))
     @else
         @livewire(\App\Filament\Widgets\EmployeeManagementBranchTable::class, ['context' => 'records'])
     @endif

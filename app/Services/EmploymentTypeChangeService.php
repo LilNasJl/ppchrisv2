@@ -15,20 +15,17 @@ class EmploymentTypeChangeService
         Employee $employee,
         string $employmentType,
         string $effectiveDate,
-        string $explanation,
+        ?string $explanation,
         ?User $changedBy = null,
     ): EmployeeEmploymentTypeChange {
         if (! in_array($employmentType, Employee::EMPLOYMENT_TYPES, true)) {
             throw new InvalidArgumentException('The selected employment type is invalid.');
         }
 
-        $explanation = trim($explanation);
+        $explanation = trim((string) $explanation);
+        $explanation = $explanation !== '' ? $explanation : null;
 
-        if ($explanation === '') {
-            throw new InvalidArgumentException('An explanation is required for the employment type change.');
-        }
-
-        if (mb_strlen($explanation) > 2000) {
+        if ($explanation !== null && mb_strlen($explanation) > 2000) {
             throw new InvalidArgumentException('The employment type change explanation may not exceed 2,000 characters.');
         }
 

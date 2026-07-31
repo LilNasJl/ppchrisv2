@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Employee;
+use App\Services\ProbationaryEmploymentPromotionService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
 use Illuminate\Foundation\Inspiring;
@@ -41,5 +42,15 @@ Artisan::command('payroll-period:auto-lock-due', function (PayrollPeriodLockServ
     $this->info("Locked {$locked} payroll period(s) after payout.");
 })->purpose('Lock payroll periods after their payout date and process deduction terms');
 
+Artisan::command('employment:promote-eligible', function (ProbationaryEmploymentPromotionService $service): void {
+    $promoted = $service->promoteEligible();
+
+    $this->info("Promoted {$promoted} eligible probationary employee(s) to Permanent.");
+})->purpose('Promote probationary employees after completing six calendar months of service');
+
 Schedule::command('payroll-period:ensure-current')->hourly();
 Schedule::command('payroll-period:auto-lock-due')->hourly();
+Schedule::command('employment:promote-eligible')
+    ->hourly()
+    ->timezone(config('app.timezone'))
+    ->withoutOverlapping();

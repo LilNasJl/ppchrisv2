@@ -160,7 +160,7 @@ trait ManagesEmployeeDetailsForm
             '<div style="display:grid;gap:5px;padding:12px;border:1px solid rgba(148,163,184,.28);border-radius:8px;">'
             .'<div style="font-size:12px;color:#64748b;">Latest employment type change</div>'
             .'<div style="font-weight:700;">Effective '.e($change->effective_date?->format('M d, Y') ?? '-').'</div>'
-            .'<div style="font-size:13px;color:#64748b;">'.nl2br(e($change->explanation)).'</div>'
+            .'<div style="font-size:13px;color:#64748b;">'.nl2br(e($change->explanation ?: 'No explanation provided.')).'</div>'
             .'<div style="font-size:12px;color:#94a3b8;">Recorded by '.e($changedBy).'</div>'
             .'</div>'
         );
@@ -204,7 +204,6 @@ trait ManagesEmployeeDetailsForm
                     ->placeholder('Explain the reason or circumstances for this employment type change.')
                     ->rows(5)
                     ->maxLength(2000)
-                    ->required()
                     ->columnSpanFull(),
             ])
             ->action(function (array $data): void {
@@ -217,7 +216,7 @@ trait ManagesEmployeeDetailsForm
                         employee: $this->employeeRecord,
                         employmentType: $data['employment_type'],
                         effectiveDate: $data['effective_date'],
-                        explanation: $data['explanation'],
+                        explanation: $data['explanation'] ?? null,
                         changedBy: auth()->user(),
                     );
                 } catch (InvalidArgumentException $exception) {
@@ -236,7 +235,7 @@ trait ManagesEmployeeDetailsForm
 
                 Notification::make()
                     ->title('Employment type updated')
-                    ->body('The effective date and explanation were saved in the employee history.')
+                    ->body('The effective date and employment type details were saved in the employee history.')
                     ->success()
                     ->send();
             });

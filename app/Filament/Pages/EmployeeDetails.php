@@ -10,6 +10,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Livewire\Attributes\Url;
 use Override;
 use UnitEnum;
 
@@ -33,8 +34,15 @@ class EmployeeDetails extends Page
 
     public ?BranchModel $branch = null;
 
+    #[Url(as: 'view', except: 'all')]
+    public string $viewMode = 'all';
+
     public function mount(): void
     {
+        if (! in_array($this->viewMode, ['all', 'branches'], true)) {
+            $this->viewMode = 'all';
+        }
+
         $branchKey = request()->query('branchId');
 
         if (blank($branchKey)) {
@@ -45,6 +53,7 @@ class EmployeeDetails extends Page
         abort_if(blank($this->branchId), 404);
 
         $this->branch = BranchModel::query()->findOrFail($this->branchId);
+        $this->viewMode = 'branches';
     }
 
     public function getTitle(): string
@@ -63,7 +72,7 @@ class EmployeeDetails extends Page
             $actions[] = Action::make('returnToBranches')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(static::getUrl());
+                ->url(static::getUrl(['view' => 'branches']));
         }
 
         $actions[] =
@@ -101,7 +110,7 @@ class EmployeeDetails extends Page
     {
         return $this->branch
             ? static::getUrl(['branchId' => $this->branch->publicKey()])
-            : static::getUrl();
+            : static::getUrl($this->viewMode === 'branches' ? ['view' => 'branches'] : []);
     }
 
     // protected ?string $subheading = 'Manage and view employee profiles and employement data';

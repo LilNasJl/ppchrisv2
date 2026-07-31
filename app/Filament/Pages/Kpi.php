@@ -57,10 +57,10 @@ class Kpi extends Page
     public function viewOptions(): array
     {
         return [
-            'departments' => 'Department Overview',
-            'attendants' => 'Attendant / Cashier',
-            'employees' => 'All Employees',
-            'branches' => 'Branch Overview',
+            'departments' => 'Per Departments',
+            'attendants' => 'Per Attendant / Cashier',
+            'employees' => 'Per Employee',
+            'branches' => 'Per Branch/Station',
         ];
     }
 
