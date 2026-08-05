@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
@@ -164,23 +165,28 @@ class DtrManageTable extends BaseWidget
                     }),
             ])
             ->headerActions([
-                Action::make('printDtr')
-                    ->label('Print / PDF D.T.R')
-                    ->icon('heroicon-m-printer')
-                    ->url(fn (): string => $this->getPrintUrl())
-                    ->openUrlInNewTab()
-                    ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
+                ActionGroup::make([
+                    Action::make('exportDtr')
+                        ->label('Export as Excel')
+                        ->icon('heroicon-m-arrow-down-tray')
+                        ->url(fn (): string => route('hr_tools.export.dtr', [
+                            'employee_id' => $this->employeeId,
+                            'branch_id' => $this->branchId,
+                            'period_id' => $this->periodId,
+                        ]))
+                        ->openUrlInNewTab()
+                        ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
 
-                Action::make('exportDtr')
-                    ->label('Export D.T.R')
+                    Action::make('printDtr')
+                        ->label('Print / PDF')
+                        ->icon('heroicon-m-printer')
+                        ->url(fn (): string => $this->getPrintUrl())
+                        ->openUrlInNewTab()
+                        ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
+                ])
+                    ->label('Export/Print DTR')
                     ->icon('heroicon-m-arrow-down-tray')
-                    ->url(fn (): string => route('hr_tools.export.dtr', [
-                        'employee_id' => $this->employeeId,
-                        'branch_id' => $this->branchId,
-                        'period_id' => $this->periodId,
-                    ]))
-                    ->openUrlInNewTab()
-                    ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
+                    ->button(),
 
                 ActionGroup::make([
                     Action::make('dtrOverview')
@@ -416,6 +422,10 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
+        if (! $this->validateSchedulePair($data, 'Unable to add D.T.R record')) {
+            return;
+        }
+
         $dtrData = $this->buildDtrData($data);
 
         if ($this->hasConflictingDtrOnDate($dtrData['date_in'], $dtrData['day_part'])) {
@@ -457,6 +467,10 @@ class DtrManageTable extends BaseWidget
         }
 
         if (! $this->validateDtrTypeForDate($data, 'Unable to update D.T.R record')) {
+            return;
+        }
+
+        if (! $this->validateSchedulePair($data, 'Unable to update D.T.R record')) {
             return;
         }
 
@@ -762,14 +776,13 @@ class DtrManageTable extends BaseWidget
         }
 
         $records = $this->getScopedDtrQuery()->get();
-        $workDates = $records
+        $workRecords = $records
             ->filter(fn (ModelsDtr $record): bool => ! (bool) $record->is_absent
                 && blank($record->leave_id)
                 && ! in_array($record->schedule_type, ['Absent', 'Leave', 'Overtime'], true)
                 && filled($record->date_in))
-            ->map(fn (ModelsDtr $record): string => Carbon::parse($record->date_in)->toDateString())
-            ->unique()
             ->values();
+        $workDayUnits = app(DtrAttendanceUnitService::class)->attendanceDays($workRecords);
         $leaveDayCount = $records
             ->filter(fn (ModelsDtr $record): bool => filled($record->leave_id)
                 || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
@@ -779,7 +792,7 @@ class DtrManageTable extends BaseWidget
         return [
             'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
             'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
-            'total_days_work' => $workDates->count() + $leaveDayCount,
+            'total_days_work' => $workDayUnits + $leaveDayCount,
             'late' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
             'undertime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
             'credited_overtime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
@@ -794,7 +807,10 @@ class DtrManageTable extends BaseWidget
         return [
             'dtr_type' => $record->schedule_type === 'Overtime'
                 ? 'overtime'
-                : (app(DtrDayPartService::class)->normalize($record->day_part) === DtrDayPartService::WHOLE_DAY ? 'regular' : 'half_day'),
+                : ($this->isBrokenScheduleType($record->schedule_type)
+                    || app(DtrDayPartService::class)->normalize($record->day_part) === DtrDayPartService::WHOLE_DAY
+                        ? 'regular'
+                        : 'half_day'),
             'day_part' => app(DtrDayPartService::class)->normalize($record->day_part),
             'date_in' => $record->date_in,
             'time_in' => $record->time_in,
@@ -849,13 +865,17 @@ class DtrManageTable extends BaseWidget
         $dtrType = $data['dtr_type'] ?? ((bool) ($data['overtime_only'] ?? false) ? 'overtime' : 'regular');
         $overtimeOnly = $dtrType === 'overtime';
         $usesSaturdaySchedule = ! $overtimeOnly && $this->usesSaturdaySchedule($dateIn);
+        $selectedScheduleStartColumn = $data['schedule_start'] ?? null;
+        $isBrokenSchedule = ! $usesSaturdaySchedule && $this->isBrokenScheduleColumn($selectedScheduleStartColumn);
         $dayPart = $overtimeOnly
             ? DtrDayPartService::WHOLE_DAY
-            : ($dtrType === 'half_day'
+            : ($isBrokenSchedule
+                ? $this->brokenScheduleDayPart($selectedScheduleStartColumn)
+                : ($dtrType === 'half_day'
                 ? app(DtrDayPartService::class)->normalize($data['day_part'] ?? null)
                 : ($this->isMonthlyRateEmployee()
                     ? ($this->suggestOpenDayPart($dateIn) ?: DtrDayPartService::WHOLE_DAY)
-                    : DtrDayPartService::WHOLE_DAY));
+                    : DtrDayPartService::WHOLE_DAY)));
 
         if ($overtimeOnly) {
             $scheduleStart = '00:00:00';
@@ -868,10 +888,10 @@ class DtrManageTable extends BaseWidget
         } else {
             $scheduleStart = $this->getScheduleTime($data['schedule_start'] ?? null);
             $scheduleEnd = $this->getScheduleTime($data['schedule_end'] ?? null);
-            $scheduleStartColumn = $data['schedule_start'] ?? null;
+            $scheduleStartColumn = $selectedScheduleStartColumn;
         }
 
-        if (! $overtimeOnly && $dayPart !== DtrDayPartService::WHOLE_DAY) {
+        if (! $overtimeOnly && ! $isBrokenSchedule && $dayPart !== DtrDayPartService::WHOLE_DAY) {
             [$scheduleStart, $scheduleEnd] = app(DtrDayPartService::class)
                 ->scheduleWindow($dateIn, $scheduleStart, $scheduleEnd, $dayPart);
         }
@@ -1056,6 +1076,31 @@ class DtrManageTable extends BaseWidget
         return true;
     }
 
+    protected function validateSchedulePair(array $data, string $title): bool
+    {
+        if (($data['dtr_type'] ?? 'regular') === 'overtime' || $this->usesSaturdaySchedule($data['date_in'] ?? null)) {
+            return true;
+        }
+
+        $scheduleStartColumn = $data['schedule_start'] ?? null;
+        $scheduleEndColumn = $data['schedule_end'] ?? null;
+        $expectedEndColumn = filled($scheduleStartColumn)
+            ? str($scheduleStartColumn)->replaceEnd('_start', '_end')->toString()
+            : null;
+
+        if (filled($expectedEndColumn) && $scheduleEndColumn === $expectedEndColumn) {
+            return true;
+        }
+
+        Notification::make()
+            ->title($title)
+            ->body('Schedule Start and Schedule End must belong to the same schedule.')
+            ->danger()
+            ->send();
+
+        return false;
+    }
+
     protected function getScheduleEndOptions(): array
     {
         return $this->getScheduleOptions($this->getScheduleEndColumns());
@@ -1155,9 +1200,32 @@ class DtrManageTable extends BaseWidget
         return match ($scheduleStartColumn) {
             'reg_sched_start' => 'Regular',
             'shift1_start', 'shift2_start', 'shift3_start' => 'Shifting',
-            'broken_shift1_start', 'broken_shift2_start' => 'Broken Shift',
+            'broken_shift1_start' => 'Brkn1',
+            'broken_shift2_start' => 'Brkn2',
             default => 'Manual',
         };
+    }
+
+    protected function isBrokenScheduleColumn(?string $scheduleStartColumn): bool
+    {
+        return in_array($scheduleStartColumn, ['broken_shift1_start', 'broken_shift2_start'], true);
+    }
+
+    protected function brokenScheduleDayPart(?string $scheduleStartColumn): string
+    {
+        return $scheduleStartColumn === 'broken_shift2_start'
+            ? DtrDayPartService::AFTERNOON
+            : DtrDayPartService::MORNING;
+    }
+
+    protected function isBrokenScheduleType(?string $scheduleType): bool
+    {
+        $normalized = str($scheduleType ?? '')
+            ->lower()
+            ->replace([' ', '_', '-'], '')
+            ->toString();
+
+        return str_contains($normalized, 'broken') || str_contains($normalized, 'brkn');
     }
 
     protected function usesSaturdaySchedule(mixed $date): bool

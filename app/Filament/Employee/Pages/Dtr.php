@@ -5,6 +5,7 @@ namespace App\Filament\Employee\Pages;
 use App\Models\Dtr as DtrModel;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use BackedEnum;
@@ -260,7 +261,7 @@ class Dtr extends Page implements HasForms, HasTable
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|float>
      */
     public function getOverviewProperty(): array
     {
@@ -283,16 +284,29 @@ class Dtr extends Page implements HasForms, HasTable
             ->selectRaw('COUNT(*) as total_entries')
             ->selectRaw('SUM(CASE WHEN COALESCE(is_absent, 0) = 1 THEN 1 ELSE 0 END) as absent_entries')
             ->selectRaw("SUM(CASE WHEN leave_id IS NOT NULL OR LOWER(COALESCE(schedule_type, '')) = 'leave' THEN 1 ELSE 0 END) as leave_entries")
-            ->selectRaw("SUM(CASE WHEN COALESCE(is_absent, 0) = 0 AND leave_id IS NULL AND LOWER(COALESCE(schedule_type, '')) <> 'leave' THEN 1 ELSE 0 END) as present_entries")
             ->selectRaw('COALESCE(SUM(late), 0) as total_late')
             ->selectRaw('COALESCE(SUM(undertime), 0) as total_undertime')
             ->selectRaw('COALESCE(SUM(credited_overtime), 0) as total_credited_overtime')
             ->selectRaw('COALESCE(SUM(credited_work_hrs), 0) as total_credited_work')
             ->first();
 
-        return collect($defaults)
+        $overview = collect($defaults)
             ->mapWithKeys(fn (int $default, string $key): array => [$key => (int) ($summary?->{$key} ?? $default)])
             ->all();
+
+        $overview['present_entries'] = app(DtrAttendanceUnitService::class)
+            ->attendanceDays($this->baseDtrQuery()->get());
+
+        return $overview;
+    }
+
+    public function formatDayUnits(mixed $units): string
+    {
+        $units = max(0, (float) $units);
+
+        return fmod($units, 1.0) === 0.0
+            ? number_format($units)
+            : number_format($units, 1);
     }
 
     public function formatMinutes(mixed $minutes): string

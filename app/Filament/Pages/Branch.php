@@ -332,8 +332,8 @@ class Branch extends Page
                             'shift2_end' => $data['shift2_end'],
                             'broken_shift1_start' => $data['broken_shift1_start'],
                             'broken_shift1_end' => $data['broken_shift1_end'],
-                            'broken_shift2_start' => $data['broken_shift2_end'],
-                            'broken_shift2_end' => $data['broken_shift2_start'],
+                            'broken_shift2_start' => $data['broken_shift2_start'],
+                            'broken_shift2_end' => $data['broken_shift2_end'],
                             'opening_hrs' => $data['opening_hrs'] ?? $data['shift1_start'],
                             'closed_hrs' => $data['closed_hrs'] ?? $data['shift2_end'],
                         ]);

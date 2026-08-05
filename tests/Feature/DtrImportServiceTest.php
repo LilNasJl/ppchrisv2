@@ -112,6 +112,38 @@ class DtrImportServiceTest extends TestCase
         $this->assertDatabaseCount('dtrs', 2);
     }
 
+    public function test_broken_shifts_are_imported_as_distinct_half_day_segments(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $firstSegment = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Time Out' => '12:00:00',
+            'Schedule Type' => 'Broken Shift 1',
+            'Schedule Start' => '08:00:00',
+            'Schedule End' => '12:00:00',
+        ]);
+        $secondSegment = $this->row($branch, $period, [
+            'Time In' => '13:00:00',
+            'Time Out' => '17:00:00',
+            'Schedule Type' => 'Broken Shift 2',
+            'Schedule Start' => '13:00:00',
+            'Schedule End' => '17:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$firstSegment, $secondSegment], 'Broken shifts');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseHas('dtrs', [
+            'schedule_type' => 'Brkn1',
+            'day_part' => 'morning',
+        ]);
+        $this->assertDatabaseHas('dtrs', [
+            'schedule_type' => 'Brkn2',
+            'day_part' => 'afternoon',
+        ]);
+    }
+
     public function test_overlapping_same_day_punches_cancel_the_entire_batch(): void
     {
         [$branch, $period] = $this->importContext();

@@ -25,9 +25,10 @@
         th, td { border: 1px solid #4b5563; color: #111827; padding: 5px 4px; text-align: center; vertical-align: middle; }
         th { background: #eaf2ff; font-weight: 800; }
         th:nth-child(1), td:nth-child(1) { width: 5%; }
-        th:nth-child(2), td:nth-child(2), th:nth-child(4), td:nth-child(4) { width: 17%; }
-        th:nth-child(3), td:nth-child(3), th:nth-child(5), td:nth-child(5) { width: 13%; }
-        th:nth-child(6), td:nth-child(6) { width: 35%; }
+        th:nth-child(2), td:nth-child(2), th:nth-child(4), td:nth-child(4) { width: 15%; }
+        th:nth-child(3), td:nth-child(3), th:nth-child(5), td:nth-child(5) { width: 11%; }
+        th:nth-child(6), td:nth-child(6) { width: 14%; }
+        th:nth-child(7), td:nth-child(7) { width: 29%; }
         .empty { color: #4b5563; padding: 18px; }
         .signatures { display: grid; gap: 48px; grid-template-columns: 1fr 1fr; margin-top: 48px; text-align: center; }
         .signature-line { border-top: 1px solid #111827; font-size: 10px; padding-top: 5px; }
@@ -87,6 +88,7 @@
                     <th>Time In</th>
                     <th>Date Out</th>
                     <th>Time Out</th>
+                    <th>Schedule</th>
                     <th>Status / Remarks</th>
                 </tr>
             </thead>
@@ -98,10 +100,11 @@
                         <td>{{ $row['time_in'] }}</td>
                         <td>{{ $row['date_out'] }}</td>
                         <td>{{ $row['time_out'] }}</td>
+                        <td>{{ $row['schedule'] }}</td>
                         <td>{{ $row['status'] }}</td>
                     </tr>
                 @empty
-                    <tr><td class="empty" colspan="6">No D.T.R entries are available for this payroll period.</td></tr>
+                    <tr><td class="empty" colspan="7">No D.T.R entries are available for this payroll period.</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('previous_type')->nullable();
             $table->string('employment_type');
             $table->date('effective_date');
-            $table->text('explanation');
+            $table->text('explanation')->nullable();
             $table->foreignId('changed_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 

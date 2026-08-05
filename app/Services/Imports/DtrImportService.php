@@ -498,6 +498,18 @@ class DtrImportService
      */
     protected function resolveImportedDayPart(array $data): string
     {
+        return match ($this->resolveScheduleType($data)) {
+            'Brkn1' => DtrDayPartService::MORNING,
+            'Brkn2' => DtrDayPartService::AFTERNOON,
+            default => $this->resolveNonBrokenImportedDayPart($data),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function resolveNonBrokenImportedDayPart(array $data): string
+    {
         if (! $this->isMonthlyRateEmployee($data)) {
             return DtrDayPartService::WHOLE_DAY;
         }

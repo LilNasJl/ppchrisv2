@@ -77,15 +77,16 @@ class DtrPrintController extends Controller
     {
         $isLeave = filled($record->leave_id)
             || str($record->schedule_type)->lower()->toString() === 'leave';
+        $isForgotToPunch = str($record->schedule_type)->lower()->contains('forgot');
         $isAbsent = (bool) $record->is_absent;
-        $isNonPunch = $isLeave || $isAbsent;
+        $isNonPunch = $isLeave || ($isAbsent && ! $isForgotToPunch);
         $dayPart = app(DtrDayPartService::class)->label($record->day_part);
 
         $status = match (true) {
             $isLeave => 'Leave',
+            $isForgotToPunch => 'Forgot to Punch',
             $isAbsent => 'Absent',
             str($record->schedule_type)->lower()->toString() === 'overtime' => 'Overtime',
-            str($record->schedule_type)->lower()->contains('forgot') => 'Forgot to Punch',
             default => 'Present',
         };
 
@@ -102,8 +103,33 @@ class DtrPrintController extends Controller
             'time_in' => $isNonPunch ? '-' : $this->formatTime($record->time_in),
             'date_out' => $this->formatDate($record->date_out),
             'time_out' => $isNonPunch ? '-' : $this->formatTime($record->time_out),
+            'schedule' => $this->formatScheduleType($record->schedule_type),
             'status' => $status,
         ];
+    }
+
+    protected function formatScheduleType(?string $scheduleType): string
+    {
+        $normalized = str($scheduleType)
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', '')
+            ->toString();
+
+        return match ($normalized) {
+            '' => '-',
+            'regular', 'regularschedule', 'regsched' => 'Regular',
+            'shift1' => 'Shift1',
+            'shift2' => 'Shift2',
+            'shift3' => 'Shift3',
+            'brkn1', 'broken1', 'brokenshift1' => 'Broken1',
+            'brkn2', 'broken2', 'brokenshift2' => 'Broken2',
+            'saturday' => 'Saturday',
+            'overtime' => 'Overtime',
+            'forgottopunch' => 'Forgot to Punch',
+            'leave' => 'Leave',
+            'absent' => 'Absent',
+            default => str($scheduleType)->trim()->headline()->toString(),
+        };
     }
 
     protected function isNextDayTimeout(Dtr $record): bool

@@ -267,8 +267,8 @@
                             <div class="employee-dtr-value">{{ number_format($overview['total_entries']) }}</div>
                         </div>
                         <div class="employee-dtr-metric">
-                            <div class="employee-dtr-label">Present</div>
-                            <div class="employee-dtr-value">{{ number_format($overview['present_entries']) }}</div>
+                            <div class="employee-dtr-label">Present Days</div>
+                            <div class="employee-dtr-value">{{ $this->formatDayUnits($overview['present_entries']) }}</div>
                         </div>
                         <div class="employee-dtr-metric">
                             <div class="employee-dtr-label">Leave</div>

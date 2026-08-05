@@ -476,23 +476,12 @@ class PayrollCalculator
 
     protected function workedDtrDays(Collection $dtrs): float
     {
-        return (float) $this->payableWorkDtrs($dtrs)
-            ->unique(fn (Dtr $dtr): string => (string) $dtr->date_in)
-            ->count();
+        return app(DtrAttendanceUnitService::class)->attendanceDays($dtrs);
     }
 
     protected function workedDtrEntries(Collection $dtrs): float
     {
-        return (float) $this->payableWorkDtrs($dtrs)
-            ->count();
-    }
-
-    protected function payableWorkDtrs(Collection $dtrs): Collection
-    {
-        return $dtrs
-            ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
-            ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime')
-            ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in));
+        return app(DtrAttendanceUnitService::class)->dailyRatePayUnits($dtrs);
     }
 
     protected function deductibleDtrs(Collection $dtrs): Collection
