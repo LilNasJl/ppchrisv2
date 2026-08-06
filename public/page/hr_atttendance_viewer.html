@@ -283,6 +283,7 @@ function proc(buf,t,fn){
     if(t==='dtr'){
       normalized._dayPart=dpart(normalized);
       normalized._dayCount=dayCount(normalized);
+      Object.assign(normalized,normalizeRegularMetrics(normalized,normalized._dayPart));
       normalized._overtimeStatus=overtimeStatus(normalized);
     }
     return normalized;
@@ -381,6 +382,31 @@ function dpart(r){
 }
 function dpartLabel(part){return({morning:'Morning',afternoon:'Afternoon',whole_day:'Whole Day',unclassified:'Review Required',provisional:'Pending Timeout'})[part]||'Whole Day';}
 function dayCount(r){const p=dpart(r);return p==='morning'||p==='afternoon'?0.5:['unclassified','provisional'].includes(p)?0:1;}
+function formatMinutes(value){return`${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}:00`;}
+function normalizeRegularMetrics(r,part=dpart(r)){
+  if(!isRegular(r.sched)||!r.date_out||!r.time_out||r.date_in!==r.date_out)return{};
+  const ai=tmin(r.time_in),ao=tmin(r.time_out),ss=tmin(r.sched_start),se=tmin(r.sched_end);
+  if([ai,ao,ss,se].some(v=>v===null)||ao<=ai||se<=ss)return{};
+  if(part==='unclassified')return{late:0,undertime:0,early:0,overtime:0};
+  let windowStart=ss,windowEnd=se,actualIn=ai,actualOut=ao;
+  if(part==='morning'){
+    windowEnd=Math.min(se,720);
+    actualOut=Math.min(actualOut,windowEnd);
+  }else if(part==='afternoon'){
+    windowStart=Math.max(ss,780);
+    actualIn=Math.max(actualIn,windowStart);
+  }
+  if(windowEnd<=windowStart)return{};
+  const lateDelta=actualIn-windowStart;
+  return{
+    sched_start:formatMinutes(windowStart),
+    sched_end:formatMinutes(windowEnd),
+    late:lateDelta>1?lateDelta:0,
+    undertime:Math.max(0,windowEnd-actualOut),
+    early:Math.max(0,windowStart-actualIn),
+    overtime:Math.max(0,actualOut-windowEnd)
+  };
+}
 function overtimeStatus(r){
   const overtime=parseInt(r.overtime,10)||0;
   if(overtime<30)return'n/a';
