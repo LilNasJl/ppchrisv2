@@ -60,6 +60,11 @@
     }
 </style>
 
+@php
+    $attendanceUnits = app(\App\Services\DtrAttendanceUnitService::class);
+    $resolvedDayPart = $attendanceUnits->dayPartForRecord($record);
+@endphp
+
 <div class="employee-dtr-details">
     <dl class="employee-dtr-details-grid">
         <div class="employee-dtr-detail"><dt>Status</dt><dd>{{ $status }}</dd></div>
@@ -71,7 +76,8 @@
         <div class="employee-dtr-detail"><dt>Schedule Start</dt><dd>{{ filled($record->schedule_start) ? \Carbon\Carbon::parse($record->schedule_start)->format('h:i A') : '-' }}</dd></div>
         <div class="employee-dtr-detail"><dt>Schedule End</dt><dd>{{ filled($record->schedule_end) ? \Carbon\Carbon::parse($record->schedule_end)->format('h:i A') : '-' }}</dd></div>
         <div class="employee-dtr-detail"><dt>Schedule Type</dt><dd>{{ filled($record->schedule_type) ? str($record->schedule_type)->replace('_', ' ')->title() : '-' }}</dd></div>
-        <div class="employee-dtr-detail"><dt>Day Part</dt><dd>{{ app(\App\Services\DtrDayPartService::class)->label($record->day_part) }}</dd></div>
+        <div class="employee-dtr-detail"><dt>Day Part</dt><dd>{{ app(\App\Services\DtrDayPartService::class)->label($resolvedDayPart) }}</dd></div>
+        <div class="employee-dtr-detail"><dt>Day Count</dt><dd>{{ number_format($attendanceUnits->recordAttendanceUnits($record), 1) }}</dd></div>
         <div class="employee-dtr-detail"><dt>Late</dt><dd>{{ max(0, (int) $record->late) }} min</dd></div>
         <div class="employee-dtr-detail"><dt>Undertime</dt><dd>{{ max(0, (int) $record->undertime) }} min</dd></div>
         <div class="employee-dtr-detail"><dt>Overtime</dt><dd>{{ max(0, (int) $record->overtime) }} min</dd></div>

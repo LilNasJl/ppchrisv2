@@ -59,13 +59,26 @@ class DtrManageTable extends BaseWidget
                 TextColumn::make('attendance_status')
                     ->label('Status')
                     ->badge()
-                    ->getStateUsing(fn (ModelsDtr $record): string => $record->leave_id || $record->schedule_type === 'Leave'
-                            ? 'Leave'
-                            : ($record->is_absent ? 'Absent' : 'Present')
-                    )
+                    ->getStateUsing(function (ModelsDtr $record): string {
+                        if ($record->leave_id || $record->schedule_type === 'Leave') {
+                            return 'Leave';
+                        }
+
+                        if ($record->is_absent) {
+                            return 'Absent';
+                        }
+
+                        return match (app(DtrAttendanceUnitService::class)->dayPartForRecord($record)) {
+                            DtrDayPartService::MORNING => 'Present - Morning',
+                            DtrDayPartService::AFTERNOON => 'Present - Afternoon',
+                            DtrDayPartService::UNCLASSIFIED => 'Review Required',
+                            default => 'Present',
+                        };
+                    })
                     ->color(fn (string $state): string => match ($state) {
                         'Leave' => 'info',
                         'Absent' => 'danger',
+                        'Review Required' => 'warning',
                         default => 'success',
                     }),
 
@@ -109,11 +122,18 @@ class DtrManageTable extends BaseWidget
                 TextColumn::make('day_part')
                     ->label('DAY PART')
                     ->badge()
+                    ->getStateUsing(fn (ModelsDtr $record): string => app(DtrAttendanceUnitService::class)->dayPartForRecord($record))
                     ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
                     ->color(fn (?string $state): string => match (app(DtrDayPartService::class)->normalize($state)) {
                         DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 'info',
+                        DtrDayPartService::UNCLASSIFIED => 'warning',
                         default => 'gray',
                     }),
+
+                TextColumn::make('attendance_unit')
+                    ->label('DAY COUNT')
+                    ->getStateUsing(fn (ModelsDtr $record): float => app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record))
+                    ->formatStateUsing(fn (float $state): string => number_format($state, 1)),
 
                 TextColumn::make('late')
                     ->label('LATE')
@@ -803,21 +823,27 @@ class DtrManageTable extends BaseWidget
     protected function getEditFormData(ModelsDtr $record): array
     {
         $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true);
+        $dayPart = app(DtrAttendanceUnitService::class)->dayPartForRecord($record);
+        $usesRegularSchedule = app(DtrDayPartService::class)->isRegularScheduleType($record->schedule_type);
 
         return [
             'dtr_type' => $record->schedule_type === 'Overtime'
                 ? 'overtime'
                 : ($this->isBrokenScheduleType($record->schedule_type)
-                    || app(DtrDayPartService::class)->normalize($record->day_part) === DtrDayPartService::WHOLE_DAY
+                    || $dayPart === DtrDayPartService::WHOLE_DAY
                         ? 'regular'
                         : 'half_day'),
-            'day_part' => app(DtrDayPartService::class)->normalize($record->day_part),
+            'day_part' => $dayPart === DtrDayPartService::UNCLASSIFIED ? null : $dayPart,
             'date_in' => $record->date_in,
             'time_in' => $record->time_in,
             'date_out' => $record->date_out,
             'time_out' => $record->time_out,
-            'schedule_start' => $usesSaturdaySchedule ? null : $this->getScheduleColumnByTime($record->schedule_start, $this->getScheduleStartColumns()),
-            'schedule_end' => $usesSaturdaySchedule ? null : $this->getScheduleColumnByTime($record->schedule_end, $this->getScheduleEndColumns()),
+            'schedule_start' => $usesSaturdaySchedule
+                ? null
+                : ($usesRegularSchedule ? 'reg_sched_start' : $this->getScheduleColumnByTime($record->schedule_start, $this->getScheduleStartColumns())),
+            'schedule_end' => $usesSaturdaySchedule
+                ? null
+                : ($usesRegularSchedule ? 'reg_sched_end' : $this->getScheduleColumnByTime($record->schedule_end, $this->getScheduleEndColumns())),
             'saturday_schedule_start' => '08:00:00',
             'saturday_schedule_end' => '11:00:00',
             'comment' => $record->comment,
@@ -872,10 +898,8 @@ class DtrManageTable extends BaseWidget
             : ($isBrokenSchedule
                 ? $this->brokenScheduleDayPart($selectedScheduleStartColumn)
                 : ($dtrType === 'half_day'
-                ? app(DtrDayPartService::class)->normalize($data['day_part'] ?? null)
-                : ($this->isMonthlyRateEmployee()
-                    ? ($this->suggestOpenDayPart($dateIn) ?: DtrDayPartService::WHOLE_DAY)
-                    : DtrDayPartService::WHOLE_DAY)));
+                    ? app(DtrDayPartService::class)->normalize($data['day_part'] ?? null)
+                    : DtrDayPartService::WHOLE_DAY));
 
         if ($overtimeOnly) {
             $scheduleStart = '00:00:00';
@@ -891,6 +915,22 @@ class DtrManageTable extends BaseWidget
             $scheduleStartColumn = $selectedScheduleStartColumn;
         }
 
+        $timeIn = $this->normalizeTime($data['time_in']);
+        $timeOut = $this->normalizeTime($data['time_out']);
+        $scheduleType = $this->getScheduleTypeLabel($scheduleStartColumn, $overtimeOnly, $usesSaturdaySchedule);
+
+        if (! $overtimeOnly && ! $usesSaturdaySchedule && ! $isBrokenSchedule && $dtrType !== 'half_day') {
+            $dayPart = app(DtrDayPartService::class)->classifyRegularPunch(
+                dateIn: $dateIn,
+                timeIn: $timeIn,
+                dateOut: $dateOut,
+                timeOut: $timeOut,
+                scheduleStart: $scheduleStart,
+                scheduleEnd: $scheduleEnd,
+                scheduleType: $scheduleType,
+            );
+        }
+
         if (! $overtimeOnly && ! $isBrokenSchedule && $dayPart !== DtrDayPartService::WHOLE_DAY) {
             [$scheduleStart, $scheduleEnd] = app(DtrDayPartService::class)
                 ->scheduleWindow($dateIn, $scheduleStart, $scheduleEnd, $dayPart);
@@ -900,8 +940,8 @@ class DtrManageTable extends BaseWidget
             ...$data,
             'date_in' => $dateIn,
             'date_out' => $dateOut,
-            'time_in' => $this->normalizeTime($data['time_in']),
-            'time_out' => $this->normalizeTime($data['time_out']),
+            'time_in' => $timeIn,
+            'time_out' => $timeOut,
             'schedule_start' => $scheduleStart,
             'schedule_end' => $scheduleEnd,
             'schedule_start_column' => $scheduleStartColumn,
@@ -914,7 +954,7 @@ class DtrManageTable extends BaseWidget
             'time_in' => $calculationData['time_in'],
             'date_out' => $dateOut,
             'time_out' => $calculationData['time_out'],
-            'schedule_type' => $this->getScheduleTypeLabel($scheduleStartColumn, $overtimeOnly, $usesSaturdaySchedule),
+            'schedule_type' => $scheduleType,
             'day_part' => $dayPart,
             'entry_source' => DtrDayPartService::SOURCE_MANUAL,
             'schedule_start' => $scheduleStart,
@@ -929,6 +969,10 @@ class DtrManageTable extends BaseWidget
 
     protected function calculateDtr(array $data): array
     {
+        if (app(DtrDayPartService::class)->normalize($data['day_part'] ?? null) === DtrDayPartService::UNCLASSIFIED) {
+            return app(DtrCalculator::class)->emptyCalculationData();
+        }
+
         return app(DtrCalculator::class)->calculate(
             dateIn: $data['date_in'],
             timeIn: $data['time_in'],
@@ -943,6 +987,7 @@ class DtrManageTable extends BaseWidget
                 $this->usesSaturdaySchedule($data['date_in'] ?? null),
             ),
             overtimeOnly: (bool) ($data['overtime_only'] ?? false),
+            dayPart: $data['day_part'] ?? null,
         );
     }
 

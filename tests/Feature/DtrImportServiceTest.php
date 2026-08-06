@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
-use App\Models\Dtr;
 use App\Models\PayrollPeriod;
 use App\Services\Imports\DtrImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -165,6 +164,87 @@ class DtrImportServiceTest extends TestCase
         $this->assertSame(1, $result['failed']);
         $this->assertSame(2, $result['errors'][0]['row']);
         $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_regular_morning_half_day_is_imported_without_missing_afternoon_undertime(): void
+    {
+        [$branch, $period] = $this->importContext();
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Time In' => '08:15:00',
+                'Time Out' => '12:00:00',
+            ]),
+        ], 'Morning half day');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'day_part' => 'morning',
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '12:00:00',
+            'late' => 15,
+            'undertime' => 0,
+        ]);
+    }
+
+    public function test_regular_afternoon_half_day_is_imported_without_missing_morning_late(): void
+    {
+        [$branch, $period] = $this->importContext();
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Time In' => '13:00:00',
+                'Time Out' => '17:30:00',
+            ]),
+        ], 'Afternoon half day');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'day_part' => 'afternoon',
+            'schedule_start' => '13:00:00',
+            'schedule_end' => '18:00:00',
+            'late' => 0,
+            'undertime' => 30,
+        ]);
+    }
+
+    public function test_regular_morning_and_afternoon_rows_import_in_the_same_batch(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $morning = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Time Out' => '12:00:00',
+        ]);
+        $afternoon = $this->row($branch, $period, [
+            'Time In' => '13:00:00',
+            'Time Out' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$morning, $afternoon], 'Complete split day');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertDatabaseHas('dtrs', ['day_part' => 'morning']);
+        $this->assertDatabaseHas('dtrs', ['day_part' => 'afternoon']);
+    }
+
+    public function test_break_only_regular_record_is_marked_for_review_and_not_calculated(): void
+    {
+        [$branch, $period] = $this->importContext();
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Time In' => '12:01:00',
+                'Time Out' => '12:59:00',
+            ]),
+        ], 'Break-only record');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'day_part' => 'unclassified',
+            'late' => 0,
+            'undertime' => 0,
+            'work_hrs' => 0,
+        ]);
     }
 
     public function test_unmapped_fingerprint_id_is_kept_as_an_import_identifier(): void

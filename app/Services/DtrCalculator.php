@@ -16,6 +16,7 @@ class DtrCalculator
         ?string $scheduleStartColumn = null,
         ?string $scheduleType = null,
         bool $overtimeOnly = false,
+        ?string $dayPart = null,
     ): array {
         $actualIn = Carbon::parse("{$dateIn} {$timeIn}");
         $actualOut = Carbon::parse("{$dateOut} {$timeOut}");
@@ -37,6 +38,18 @@ class DtrCalculator
 
         if ($scheduleEndAt->lessThanOrEqualTo($scheduleStartAt)) {
             $scheduleEndAt->addDay();
+        }
+
+        $normalizedDayPart = app(DtrDayPartService::class)->normalize($dayPart);
+
+        // Lunch is not payable overtime for a morning half-day and is not
+        // early clock-in for an afternoon half-day.
+        if ($normalizedDayPart === DtrDayPartService::MORNING && $actualOut->greaterThan($scheduleEndAt)) {
+            $actualOut = $scheduleEndAt->copy();
+        }
+
+        if ($normalizedDayPart === DtrDayPartService::AFTERNOON && $actualIn->lessThan($scheduleStartAt)) {
+            $actualIn = $scheduleStartAt->copy();
         }
 
         $breaks = $this->breaksFor($scheduleStartColumn, $scheduleType, $scheduleStartAt, $scheduleEndAt);

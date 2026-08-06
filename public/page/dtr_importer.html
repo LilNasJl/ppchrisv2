@@ -84,7 +84,7 @@ async function loadFile(file){
 }
 
 function renderPreview(){
-  const preferred=['#','Batch ID','Period ID','Branch ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Schedule Start','Schedule End'];
+  const preferred=['#','Batch ID','Period ID','Branch ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End'];
   const keys=Object.keys(rows[0]||{});
   const cols=[...preferred.filter(c=>keys.includes(c)),...keys.filter(c=>!preferred.includes(c))];
   el('head').innerHTML=cols.length?'<tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>':'';

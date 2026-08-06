@@ -19,11 +19,13 @@ class DtrAttendanceUnitService
         return (float) $this->payableRecords($records)
             ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
             ->sum(function (Collection $dateRecords): float {
-                $hasFullDayRecord = $dateRecords->contains(
-                    fn (Dtr $record): bool => $this->brokenSegment($record) === null,
+                $hasOtherFullDayRecord = $dateRecords->contains(
+                    fn (Dtr $record): bool => ! $this->isRegular($record) && $this->brokenSegment($record) === null,
                 );
 
-                return $hasFullDayRecord ? 1.0 : $this->brokenUnits($dateRecords);
+                return $hasOtherFullDayRecord
+                    ? 1.0
+                    : min(1.0, $this->regularUnits($dateRecords) + $this->brokenUnits($dateRecords));
             });
     }
 
@@ -39,11 +41,49 @@ class DtrAttendanceUnitService
             ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
             ->sum(function (Collection $dateRecords): float {
                 $fullDayEntries = $dateRecords
-                    ->filter(fn (Dtr $record): bool => $this->brokenSegment($record) === null)
+                    ->filter(fn (Dtr $record): bool => ! $this->isRegular($record) && $this->brokenSegment($record) === null)
                     ->count();
 
-                return $fullDayEntries + $this->brokenUnits($dateRecords);
+                return $fullDayEntries + $this->regularUnits($dateRecords) + $this->brokenUnits($dateRecords);
             });
+    }
+
+    public function dayPartForRecord(Dtr $record): string
+    {
+        if (! $this->isRegular($record)) {
+            return app(DtrDayPartService::class)->normalize($record->day_part);
+        }
+
+        if (filled($record->date_in) && filled($record->time_in) && filled($record->date_out) && filled($record->time_out)) {
+            return app(DtrDayPartService::class)->classifyRegularPunch(
+                dateIn: (string) $record->date_in,
+                timeIn: (string) $record->time_in,
+                dateOut: (string) $record->date_out,
+                timeOut: (string) $record->time_out,
+                scheduleStart: (string) $record->schedule_start,
+                scheduleEnd: (string) $record->schedule_end,
+                scheduleType: (string) $record->schedule_type,
+            );
+        }
+
+        return app(DtrDayPartService::class)->normalize($record->day_part);
+    }
+
+    public function recordAttendanceUnits(Dtr $record): float
+    {
+        if ($this->payableRecords(collect([$record]))->isEmpty()) {
+            return 0.0;
+        }
+
+        if ($this->isRegular($record)) {
+            return match ($this->dayPartForRecord($record)) {
+                DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 0.5,
+                DtrDayPartService::UNCLASSIFIED => 0.0,
+                default => 1.0,
+            };
+        }
+
+        return $this->brokenSegment($record) === null ? 1.0 : 0.5;
     }
 
     /**
@@ -79,6 +119,31 @@ class DtrAttendanceUnitService
             ->count();
 
         return min(1.0, $segments * 0.5);
+    }
+
+    protected function regularUnits(Collection $records): float
+    {
+        $parts = $records
+            ->filter(fn (Dtr $record): bool => $this->isRegular($record))
+            ->map(fn (Dtr $record): string => $this->dayPartForRecord($record))
+            ->values();
+
+        if ($parts->contains(DtrDayPartService::WHOLE_DAY)) {
+            return 1.0;
+        }
+
+        return min(1.0, $parts
+            ->filter(fn (string $part): bool => in_array($part, [
+                DtrDayPartService::MORNING,
+                DtrDayPartService::AFTERNOON,
+            ], true))
+            ->unique()
+            ->count() * 0.5);
+    }
+
+    protected function isRegular(Dtr $record): bool
+    {
+        return app(DtrDayPartService::class)->isRegularScheduleType($record->schedule_type);
     }
 
     protected function brokenSegment(Dtr $record): ?string

@@ -8,8 +8,8 @@ use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
-use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollPeriodBranchExclusion;
+use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use App\Models\PayrollSnapshot;
 use Carbon\Carbon;
@@ -206,6 +206,15 @@ class PayrollCalculator
 
         $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay);
         $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue);
+
+        if (! $isDaily) {
+            $halfDayAbsenceMinutes += $this->inferredRegularHalfDayAbsenceMinutes(
+                $dtrs,
+                $workHoursPerDay,
+                $halfDayValue,
+            );
+        }
+
         $absenceDayValue = ($wholeAbsenceMinutes + $halfDayAbsenceMinutes) / ($workHoursPerDay * 60);
         $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) : $this->workedDtrDays($dtrs);
         $daysWorked = $isDaily
@@ -504,6 +513,58 @@ class PayrollCalculator
             ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
             ->reject(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === DtrDayPartService::WHOLE_DAY)
             ->sum(fn (Dtr $dtr): float => (float) ($dtr->absence_minutes ?: $fallbackMinutes));
+    }
+
+    protected function inferredRegularHalfDayAbsenceMinutes(
+        Collection $dtrs,
+        float $workHoursPerDay,
+        float $halfDayValue,
+    ): float {
+        $fallbackMinutes = $workHoursPerDay * 60 * $halfDayValue;
+        $dayPartService = app(DtrDayPartService::class);
+        $attendanceUnits = app(DtrAttendanceUnitService::class);
+
+        return $dtrs
+            ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in))
+            ->groupBy(fn (Dtr $dtr): string => Carbon::parse($dtr->date_in)->toDateString())
+            ->sum(function (Collection $dateRecords) use ($fallbackMinutes, $dayPartService, $attendanceUnits): float {
+                $workedRegularParts = $dateRecords
+                    ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent || filled($dtr->leave_id))
+                    ->filter(fn (Dtr $dtr): bool => $dayPartService->isRegularScheduleType($dtr->schedule_type))
+                    ->map(fn (Dtr $dtr): string => $attendanceUnits->dayPartForRecord($dtr))
+                    ->filter(fn (string $part): bool => in_array($part, [
+                        DtrDayPartService::MORNING,
+                        DtrDayPartService::AFTERNOON,
+                    ], true))
+                    ->unique()
+                    ->values();
+
+                if ($workedRegularParts->count() !== 1) {
+                    return 0.0;
+                }
+
+                $missingPart = $workedRegularParts->first() === DtrDayPartService::MORNING
+                    ? DtrDayPartService::AFTERNOON
+                    : DtrDayPartService::MORNING;
+
+                $missingPartCovered = $dateRecords->contains(function (Dtr $dtr) use ($missingPart, $dayPartService): bool {
+                    $isLeave = filled($dtr->leave_id)
+                        || $dtr->entry_source === DtrDayPartService::SOURCE_LEAVE
+                        || Str::lower((string) $dtr->schedule_type) === 'leave';
+                    $isAbsence = (bool) $dtr->is_absent
+                        || $dtr->entry_source === DtrDayPartService::SOURCE_ABSENCE;
+
+                    if (! $isLeave && ! $isAbsence) {
+                        return false;
+                    }
+
+                    $coveredPart = $dayPartService->normalize($dtr->day_part);
+
+                    return $coveredPart === DtrDayPartService::WHOLE_DAY || $coveredPart === $missingPart;
+                });
+
+                return $missingPartCovered ? 0.0 : $fallbackMinutes;
+            });
     }
 
     protected function absenceMinutesFor(Collection $dtrs, float $workHoursPerDay, string $dayPart): float

@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use App\Support\CompanyExportHeader;
@@ -80,7 +81,8 @@ class DtrPrintController extends Controller
         $isForgotToPunch = str($record->schedule_type)->lower()->contains('forgot');
         $isAbsent = (bool) $record->is_absent;
         $isNonPunch = $isLeave || ($isAbsent && ! $isForgotToPunch);
-        $dayPart = app(DtrDayPartService::class)->label($record->day_part);
+        $attendanceUnits = app(DtrAttendanceUnitService::class);
+        $dayPart = app(DtrDayPartService::class)->label($attendanceUnits->dayPartForRecord($record));
 
         $status = match (true) {
             $isLeave => 'Leave',
@@ -92,6 +94,8 @@ class DtrPrintController extends Controller
 
         if (in_array($dayPart, ['Morning', 'Afternoon'], true)) {
             $status .= ' - '.$dayPart;
+        } elseif ($dayPart === 'Review Required') {
+            $status = $dayPart;
         }
 
         if ($this->isNextDayTimeout($record)) {
@@ -104,6 +108,7 @@ class DtrPrintController extends Controller
             'date_out' => $this->formatDate($record->date_out),
             'time_out' => $isNonPunch ? '-' : $this->formatTime($record->time_out),
             'schedule' => $this->formatScheduleType($record->schedule_type),
+            'day_count' => number_format($attendanceUnits->recordAttendanceUnits($record), 1),
             'status' => $status,
         ];
     }

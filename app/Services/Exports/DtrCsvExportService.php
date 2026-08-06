@@ -4,6 +4,8 @@ namespace App\Services\Exports;
 
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Services\DtrAttendanceUnitService;
+use App\Services\DtrDayPartService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DtrCsvExportService
@@ -19,6 +21,8 @@ class DtrCsvExportService
             'Date Out',
             'Time Out',
             'Schedule Type',
+            'Day Part',
+            'Day Count',
             'Schedule Start',
             'Schedule End',
             'Late',
@@ -73,6 +77,8 @@ class DtrCsvExportService
                         $record->date_out,
                         $record->time_out,
                         $record->schedule_type,
+                        app(DtrDayPartService::class)->label(app(DtrAttendanceUnitService::class)->dayPartForRecord($record)),
+                        number_format(app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record), 1, '.', ''),
                         $record->schedule_start,
                         $record->schedule_end,
                         $record->late,
