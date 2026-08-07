@@ -43,16 +43,6 @@ class EmploymentTypeChangeService
                 && $lockedEmployee->employment_type === $employmentType;
 
             if ($isLatestChangeCorrection) {
-                $previousChange = $lockedEmployee->employmentTypeChanges()
-                    ->whereKeyNot($latestChange->getKey())
-                    ->first();
-
-                if ($previousChange && $date->lt($previousChange->effective_date->startOfDay())) {
-                    throw new InvalidArgumentException(
-                        'The effective date cannot be earlier than the previous employment type change.'
-                    );
-                }
-
                 $latestChange->update([
                     'effective_date' => $date->toDateString(),
                     'explanation' => $explanation,
@@ -60,12 +50,6 @@ class EmploymentTypeChangeService
                 ]);
 
                 return $latestChange->refresh();
-            }
-
-            if ($latestChange && $date->lt($latestChange->effective_date->startOfDay())) {
-                throw new InvalidArgumentException(
-                    'The effective date cannot be earlier than the latest employment type change.'
-                );
             }
 
             $change = $lockedEmployee->employmentTypeChanges()->create([

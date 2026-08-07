@@ -69,6 +69,30 @@ class ProbationaryEmploymentPromotionTest extends TestCase
         $this->assertSame('Probationary', $employee->refresh()->employment_type);
     }
 
+    public function test_manual_employment_change_accepts_a_date_earlier_than_the_latest_change(): void
+    {
+        $employee = $this->employee('0001', 'Temporary', '2026-01-01');
+        $service = app(EmploymentTypeChangeService::class);
+
+        $service->save(
+            employee: $employee,
+            employmentType: 'Probationary',
+            effectiveDate: '2026-07-01',
+            explanation: null,
+        );
+
+        $backdatedChange = $service->save(
+            employee: $employee->refresh(),
+            employmentType: 'Contractual',
+            effectiveDate: '2026-06-01',
+            explanation: 'Backdated correction.',
+        );
+
+        $this->assertSame('2026-06-01', $backdatedChange->effective_date->toDateString());
+        $this->assertSame('Contractual', $employee->refresh()->employment_type);
+        $this->assertDatabaseCount('employee_employment_type_changes', 2);
+    }
+
     protected function employee(string $uid, string $employmentType, string $hiredDate): Employee
     {
         $user = User::factory()->create([
