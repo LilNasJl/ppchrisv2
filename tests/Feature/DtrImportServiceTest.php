@@ -111,6 +111,100 @@ class DtrImportServiceTest extends TestCase
         $this->assertDatabaseCount('dtrs', 2);
     }
 
+    public function test_completed_session_followed_by_later_forgot_to_punch_is_imported(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $period->update(['date_end' => '2026-08-15']);
+
+        $completed = $this->row($branch, $period, [
+            'Fingerprint ID' => '970824',
+            'Name' => 'RIZZEL',
+            'Date In' => '2026-08-03',
+            'Time In' => '08:01:57',
+            'Date Out' => '2026-08-03',
+            'Time Out' => '15:03:55',
+        ]);
+        $forgot = $this->row($branch, $period, [
+            'Fingerprint ID' => '970824',
+            'Name' => 'RIZZEL',
+            'Date In' => '2026-08-03',
+            'Time In' => '18:01:30',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Type' => 'Forgot to Punch',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$completed, $forgot], 'Multiple daily sessions');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '970824',
+            'date_in' => '2026-08-03',
+            'time_in' => '08:01:57',
+            'time_out' => '15:03:55',
+        ]);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '970824',
+            'date_in' => '2026-08-03',
+            'time_in' => '18:01:30',
+            'time_out' => null,
+            'schedule_type' => 'Forgot to Punch',
+        ]);
+    }
+
+    public function test_forgot_to_punch_starting_inside_completed_session_is_rejected(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $completed = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Time Out' => '15:00:00',
+        ]);
+        $overlappingForgot = $this->row($branch, $period, [
+            'Time In' => '14:30:00',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Type' => 'Forgot to Punch',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$completed, $overlappingForgot], 'Overlapping open punch');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertSame(2, $result['errors'][0]['row']);
+        $this->assertStringContainsString('overlaps', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_completed_session_after_an_unresolved_punch_is_rejected(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $open = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Type' => 'Forgot to Punch',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+        $laterCompleted = $this->row($branch, $period, [
+            'Time In' => '13:00:00',
+            'Time Out' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$open, $laterCompleted], 'Unresolved earlier punch');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertSame(2, $result['errors'][0]['row']);
+        $this->assertStringContainsString('earlier punch remains open', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
     public function test_broken_shifts_are_imported_as_distinct_half_day_segments(): void
     {
         [$branch, $period] = $this->importContext();

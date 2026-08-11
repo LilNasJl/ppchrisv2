@@ -34,7 +34,7 @@ class ThirteenthMonthPay extends Page implements HasForms
 
     protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 7;
 
     public ?string $year = null;
 

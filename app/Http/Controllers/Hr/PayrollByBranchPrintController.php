@@ -27,19 +27,10 @@ class PayrollByBranchPrintController extends Controller
 
         abort_unless(array_key_exists($branch->id, $branchOptions), 404);
 
-        $rows = $calculator->rows($period, $branch->id);
-        $atmRows = $rows
-            ->filter(fn (array $row): bool => str((string) ($row['payment_type'] ?? ''))->lower()->contains('atm'))
-            ->values();
-        $cashRows = $rows
-            ->reject(fn (array $row): bool => str((string) ($row['payment_type'] ?? ''))->lower()->contains('atm'))
-            ->values();
-
         return view('payroll.print-by-branch', [
             'period' => $period,
             'branch' => $branch,
-            'atmRows' => $atmRows,
-            'cashRows' => $cashRows,
+            'rows' => $calculator->rows($period, $branch->id),
             'signatory' => PayrollSignatory::default(),
         ]);
     }

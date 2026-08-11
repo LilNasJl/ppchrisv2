@@ -48,7 +48,7 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     public string $activeLoanTab = 'list';
 

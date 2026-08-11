@@ -87,7 +87,7 @@ class DtrImportService
                 $result['failed']++;
                 $result['errors'][] = [
                     'row' => $validatedRow['row'],
-                    'message' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval.',
+                    'message' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval, or an earlier punch remains open.',
                 ];
             }
 
@@ -222,7 +222,7 @@ class DtrImportService
 
         if ($this->hasConflictingDtr($data, $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY)) {
             throw ValidationException::withMessages([
-                'date_in' => 'A conflicting D.T.R, leave, or absence entry already exists for this date and day part.',
+                'date_in' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval, or an earlier punch remains open.',
             ]);
         }
 
@@ -563,9 +563,12 @@ class DtrImportService
             return true;
         }
 
+        $newInterval = $this->getDtrInterval($data);
+        $newStart = $this->getDtrStart($data);
+
         foreach ($records->reject(fn (Dtr $record): bool => $this->isAdministrativeDtr($record)) as $record) {
             $existingInterval = $this->getDtrInterval($record);
-            $newInterval = $this->getDtrInterval($data);
+            $existingStart = $this->getDtrStart($record);
 
             if ($existingInterval && $newInterval) {
                 if (
@@ -578,9 +581,30 @@ class DtrImportService
                 continue;
             }
 
-            if (Carbon::parse($record->date_in)->toDateString() === $dateIn) {
+            if (! $existingStart || ! $newStart) {
                 return true;
             }
+
+            // A later open punch is valid after a completed session. Treat the
+            // open punch as unresolved from its start onward for future rows.
+            if ($existingInterval && ! $newInterval) {
+                if ($newStart->greaterThanOrEqualTo($existingInterval[1])) {
+                    continue;
+                }
+
+                return true;
+            }
+
+            if (! $existingInterval && $newInterval) {
+                if ($newInterval[1]->lessThanOrEqualTo($existingStart)) {
+                    continue;
+                }
+
+                return true;
+            }
+
+            // Two unresolved sessions cannot be ordered safely without a Time Out.
+            return true;
         }
 
         return false;
@@ -626,6 +650,21 @@ class DtrImportService
         $scheduleType = str($record->schedule_type ?? '')->lower();
 
         return $scheduleType->contains('leave') || $scheduleType->contains('absent');
+    }
+
+    /**
+     * @param  array<string, mixed>|Dtr  $record
+     */
+    protected function getDtrStart(array|Dtr $record): ?Carbon
+    {
+        $dateIn = $record instanceof Dtr ? $record->date_in : ($record['date_in'] ?? null);
+        $timeIn = $record instanceof Dtr ? $record->time_in : ($record['time_in'] ?? null);
+
+        if (blank($dateIn) || blank($timeIn)) {
+            return null;
+        }
+
+        return Carbon::parse("{$dateIn} {$timeIn}");
     }
 
     /**

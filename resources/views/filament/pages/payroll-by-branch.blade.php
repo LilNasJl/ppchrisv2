@@ -93,33 +93,16 @@
                 </p>
             </div>
 
-            <h3 class="payroll-section-title" style="font-size: 16px;">ATM Payroll</h3>
             <div class="payroll-screen-table">
                 <livewire:payroll-detail-table
                     :period-id="(int) $this->period_id"
                     :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
-                    payment-type="atm"
-                    :key="'atm-payroll-'.$this->period_id.'-'.$this->branch_id"
+                    :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id"
                 />
             </div>
             <div class="payroll-print-table">
                 @include('filament.pages.partials.payroll-detail-table', [
-                    'rows' => $this->atmRows,
-                ])
-            </div>
-
-            <h3 class="payroll-section-title" style="font-size: 16px;">Cash Payroll</h3>
-            <div class="payroll-screen-table">
-                <livewire:payroll-detail-table
-                    :period-id="(int) $this->period_id"
-                    :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
-                    payment-type="cash"
-                    :key="'cash-payroll-'.$this->period_id.'-'.$this->branch_id"
-                />
-            </div>
-            <div class="payroll-print-table">
-                @include('filament.pages.partials.payroll-detail-table', [
-                    'rows' => $this->cashRows,
+                    'rows' => $this->rows,
                 ])
             </div>
 

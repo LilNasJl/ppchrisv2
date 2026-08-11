@@ -25,7 +25,7 @@ class ComplianceBenefits extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public ?int $branchId = null;
 

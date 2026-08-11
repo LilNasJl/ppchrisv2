@@ -113,24 +113,10 @@ class PayrollByBranch extends Page implements HasForms
         return filled($firstBranchId) ? (string) $firstBranchId : null;
     }
 
-    public function getAtmRowsProperty(): Collection
-    {
-        return $this->rows
-            ->filter(fn (array $row): bool => str((string) ($row['payment_type'] ?? ''))->lower()->contains('atm'))
-            ->values();
-    }
-
-    public function getCashRowsProperty(): Collection
-    {
-        return $this->rows
-            ->reject(fn (array $row): bool => str((string) ($row['payment_type'] ?? ''))->lower()->contains('atm'))
-            ->values();
-    }
-
     #[On('payroll-adjustment-updated')]
     public function refreshPayrollRows(): void
     {
-        //
+        // Re-render computed payroll rows after inline adjustments.
     }
 
     public function exportExcel(): StreamedResponse
@@ -239,30 +225,25 @@ class PayrollByBranch extends Page implements HasForms
         return response()->streamDownload(function () use ($headers): void {
             echo CompanyExportHeader::excelHtml(count($headers));
             echo CompanyExportHeader::exportTitleHtml('Payroll By Branch', count($headers));
+            echo '<table '.CompanyExportHeader::tableAttributes().'><thead><tr>';
 
-            foreach (['ATM Payroll' => $this->atmRows, 'Cash Payroll' => $this->cashRows] as $title => $rows) {
-                echo '<h3 style="font-family:Arial,Helvetica,sans-serif;color:#000;">'.e($title).'</h3>';
-                echo '<table '.CompanyExportHeader::tableAttributes().'><thead><tr>';
-
-                foreach ($headers as $label) {
-                    echo '<th '.CompanyExportHeader::thStyle().'>'.e($label).'</th>';
-                }
-
-                echo '</tr></thead><tbody>';
-
-                foreach ($rows as $row) {
-                    echo '<tr>';
-
-                    foreach (array_keys($headers) as $key) {
-                        echo '<td '.CompanyExportHeader::tdStyle().'>'.e((string) ($row[$key] ?? '')).'</td>';
-                    }
-
-                    echo '</tr>';
-                }
-
-                echo '</tbody></table><br>';
+            foreach ($headers as $label) {
+                echo '<th '.CompanyExportHeader::thStyle().'>'.e($label).'</th>';
             }
 
+            echo '</tr></thead><tbody>';
+
+            foreach ($this->rows as $row) {
+                echo '<tr>';
+
+                foreach (array_keys($headers) as $key) {
+                    echo '<td '.CompanyExportHeader::tdStyle().'>'.e((string) ($row[$key] ?? '')).'</td>';
+                }
+
+                echo '</tr>';
+            }
+
+            echo '</tbody></table><br>';
             echo '<br><table '.CompanyExportHeader::tableAttributes().'>';
             echo '<tr><th '.CompanyExportHeader::thStyle().'>Prepared by</th><th '.CompanyExportHeader::thStyle().'>Checked by</th><th '.CompanyExportHeader::thStyle().'>Approved by</th></tr>';
             echo '<tr><td '.CompanyExportHeader::tdStyle().'>'.e($this->prepared_by).'</td><td '.CompanyExportHeader::tdStyle().'>'.e($this->checked_by).'</td><td '.CompanyExportHeader::tdStyle().'>'.e($this->approved_by).'</td></tr>';

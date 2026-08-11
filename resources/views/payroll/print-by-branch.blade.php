@@ -119,17 +119,6 @@
             margin-top: 10px;
         }
 
-        .payroll-section:first-of-type {
-            margin-top: 0;
-        }
-
-        .payroll-section-title {
-            color: #000;
-            font-size: 11px;
-            font-weight: 800;
-            margin: 0 0 4px;
-        }
-
         .payroll-table thead {
             display: table-header-group;
         }
@@ -211,13 +200,7 @@
         <div class="generated-at">Date Generated: {{ \App\Support\CompanyExportHeader::generatedAt() }}</div>
 
         <section class="payroll-section">
-            <h2 class="payroll-section-title">ATM Payroll</h2>
-            @include('filament.pages.partials.payroll-detail-table', ['rows' => $atmRows])
-        </section>
-
-        <section class="payroll-section">
-            <h2 class="payroll-section-title">Cash Payroll</h2>
-            @include('filament.pages.partials.payroll-detail-table', ['rows' => $cashRows])
+            @include('filament.pages.partials.payroll-detail-table', ['rows' => $rows])
         </section>
 
         <div class="signatories">
