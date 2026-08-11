@@ -1,9 +1,10 @@
 <?php
 
 use App\Models\Employee;
-use App\Services\ProbationaryEmploymentPromotionService;
+use App\Services\DtrDailyAggregationService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
+use App\Services\ProbationaryEmploymentPromotionService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -47,6 +48,14 @@ Artisan::command('employment:promote-eligible', function (ProbationaryEmployment
 
     $this->info("Promoted {$promoted} eligible probationary employee(s) to Permanent.");
 })->purpose('Promote probationary employees after completing six calendar months of service');
+
+Artisan::command('dtr:recalculate-daily {--period=}', function (DtrDailyAggregationService $service): void {
+    $periodId = filled($this->option('period')) ? (int) $this->option('period') : null;
+    $groups = $service->recalculatePeriod($periodId);
+
+    $scope = $periodId ? " for payroll period {$periodId}" : '';
+    $this->info("Recalculated {$groups} employee-day D.T.R group(s){$scope}.");
+})->purpose('Recalculate combined daily Regular attendance metrics');
 
 Schedule::command('payroll-period:ensure-current')->hourly();
 Schedule::command('payroll-period:auto-lock-due')->hourly();

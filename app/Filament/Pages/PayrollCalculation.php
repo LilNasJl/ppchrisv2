@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
+use App\Services\DtrDailyAggregationService;
 use App\Services\PayrollCalculator;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -48,6 +49,8 @@ class PayrollCalculation extends Page implements HasForms
 
     public ?string $work_hours_per_day = null;
 
+    public ?string $late_grace_minutes = null;
+
     public ?string $half_day_work_day_value = null;
 
     public ?string $overtime_rate_multiplier = null;
@@ -75,6 +78,7 @@ class PayrollCalculation extends Page implements HasForms
             'regular_work_days_per_month' => $setting->regular_work_days_per_month,
             'regular_half_month_days' => $setting->regular_half_month_days,
             'work_hours_per_day' => $setting->work_hours_per_day,
+            'late_grace_minutes' => $setting->late_grace_minutes,
             'half_day_work_day_value' => $setting->half_day_work_day_value,
             'overtime_rate_multiplier' => $setting->overtime_rate_multiplier,
             'regular_holiday_rate' => $setting->regular_holiday_rate,
@@ -114,6 +118,14 @@ class PayrollCalculation extends Page implements HasForms
                     ->required()
                     ->minValue(1)
                     ->helperText('Used to compute rate per hour.'),
+
+                TextInput::make('late_grace_minutes')
+                    ->label('Late Grace (Minutes)')
+                    ->numeric()
+                    ->required()
+                    ->minValue(0)
+                    ->maxValue(60)
+                    ->helperText('A punch inside this grace period is not counted as late.'),
 
                 TextInput::make('half_day_work_day_value')
                     ->label('Half-Day Value')
@@ -193,6 +205,8 @@ class PayrollCalculation extends Page implements HasForms
             $data
         );
 
+        app(DtrDailyAggregationService::class)->recalculatePeriod($this->period->id);
+
         Notification::make()
             ->title('Payroll calculation updated')
             ->body('The formula settings now apply only to this payroll period.')
@@ -209,6 +223,7 @@ class PayrollCalculation extends Page implements HasForms
         $daysPerMonth = $settings->divisor('regular_work_days_per_month');
         $halfMonthDays = $settings->value('regular_half_month_days');
         $workHours = $settings->divisor('work_hours_per_day');
+        $lateGrace = (int) round($settings->value('late_grace_minutes'));
         $halfDay = $settings->value('half_day_work_day_value');
         $overtimeMultiplier = $settings->value('overtime_rate_multiplier');
         $holidayOvertimePremium = $settings->value('holiday_overtime_premium_rate');
@@ -217,6 +232,7 @@ class PayrollCalculation extends Page implements HasForms
         return [
             ['name' => 'Rate per day', 'formula' => "Monthly employee: Monthly Rate / {$daysPerMonth}. Daily employee: Employee Daily Rate or D.T.R daily-rate snapshot."],
             ['name' => 'Rate per hour', 'formula' => "Rate Per Day / {$workHours}."],
+            ['name' => 'Late grace', 'formula' => "Daily Regular attendance arriving within {$lateGrace} minute(s) of schedule start has no late deduction."],
             ['name' => 'Monthly employee days worked', 'formula' => "{$halfMonthDays} - Absence Days - (Approved Half-Day Count x {$halfDay})."],
             ['name' => 'Daily employee days worked', 'formula' => 'Count payable D.T.R entries, excluding absences and overtime-only rows, then deduct approved half-days.'],
             ['name' => 'Base pay', 'formula' => "Monthly employee: Rate Per Day x {$halfMonthDays}. Daily employee: Rate Per Day x Days Worked."],

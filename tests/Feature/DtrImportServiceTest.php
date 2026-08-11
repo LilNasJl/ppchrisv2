@@ -205,6 +205,65 @@ class DtrImportServiceTest extends TestCase
         $this->assertDatabaseCount('dtrs', 0);
     }
 
+    public function test_forgot_to_punch_does_not_block_a_completed_session_on_the_next_day(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $period->update([
+            'date_start' => '2026-07-28',
+            'date_end' => '2026-08-15',
+        ]);
+
+        $forgot = $this->row($branch, $period, [
+            'Fingerprint ID' => '830729',
+            'Name' => 'EFREN',
+            'Date In' => '2026-07-28',
+            'Time In' => '18:00:49',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Type' => 'Forgot to Punch',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+        $nextDay = $this->row($branch, $period, [
+            'Fingerprint ID' => '830729',
+            'Name' => 'EFREN',
+            'Date In' => '2026-07-29',
+            'Time In' => '07:49:36',
+            'Date Out' => '2026-07-29',
+            'Time Out' => '18:00:04',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$forgot, $nextDay], 'Calendar cutoff');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseCount('dtrs', 2);
+    }
+
+    public function test_forgot_to_punch_still_blocks_a_later_completed_session_on_the_same_day(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $forgot = $this->row($branch, $period, [
+            'Time In' => '08:00:00',
+            'Date Out' => '',
+            'Time Out' => '',
+            'Schedule Type' => 'Forgot to Punch',
+            'Schedule Start' => '',
+            'Schedule End' => '',
+        ]);
+        $laterCompleted = $this->row($branch, $period, [
+            'Time In' => '13:00:00',
+            'Time Out' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$forgot, $laterCompleted], 'Same-day conflict');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertSame(2, $result['errors'][0]['row']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
     public function test_broken_shifts_are_imported_as_distinct_half_day_segments(): void
     {
         [$branch, $period] = $this->importContext();

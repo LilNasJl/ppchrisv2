@@ -25,6 +25,7 @@ use App\Models\PayrollSignatory;
 use App\Models\SystemAccount;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Observers\DtrDailyAggregationObserver;
 use App\Observers\HrActionNotificationObserver;
 use App\Services\AccountLogService;
 use App\Services\PayrollPeriodGenerator;
@@ -64,6 +65,8 @@ class AppServiceProvider extends ServiceProvider
         foreach ($this->hrNotifiableModels() as $model) {
             $model::observe(HrActionNotificationObserver::class);
         }
+
+        Dtr::observe(DtrDailyAggregationObserver::class);
 
         $this->registerAccountLogEvents();
         $this->ensureCurrentPayrollPeriodForWebRequests();

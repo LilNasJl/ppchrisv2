@@ -7,6 +7,7 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
+use App\Services\DtrDailyAggregationService;
 use App\Services\DtrDayPartService;
 use App\Services\HolidayEntitlementService;
 use Carbon\Carbon;
@@ -102,10 +103,16 @@ class DtrImportService
 
         try {
             DB::transaction(function () use ($validatedRows, $importName, &$result): void {
-                foreach ($validatedRows as $validatedRow) {
-                    $this->saveValidatedRow($validatedRow['data'], $importName);
-                    $result['successful']++;
-                }
+                $dailyAggregation = app(DtrDailyAggregationService::class);
+
+                $dailyAggregation->withoutAutomaticRecalculation(function () use ($validatedRows, $importName, &$result): void {
+                    foreach ($validatedRows as $validatedRow) {
+                        $this->saveValidatedRow($validatedRow['data'], $importName);
+                        $result['successful']++;
+                    }
+                });
+
+                $dailyAggregation->recalculateRows(array_column($validatedRows, 'data'));
             });
 
             $result['message'] = 'D.T.R import completed successfully.';
@@ -132,7 +139,16 @@ class DtrImportService
     {
         $data = $this->validateRow($row, $fallbackBatchId);
 
-        return DB::transaction(fn (): array => $this->saveValidatedRow($data, $importName));
+        return DB::transaction(function () use ($data, $importName): array {
+            $dailyAggregation = app(DtrDailyAggregationService::class);
+            $result = $dailyAggregation->withoutAutomaticRecalculation(
+                fn (): array => $this->saveValidatedRow($data, $importName),
+            );
+
+            $dailyAggregation->recalculateRows([$data]);
+
+            return $result;
+        });
     }
 
     /**
@@ -678,11 +694,21 @@ class DtrImportService
         $dateOut = $record instanceof Dtr ? $record->date_out : ($record['date_out'] ?? null);
         $timeOut = $record instanceof Dtr ? $record->time_out : ($record['time_out'] ?? null);
 
-        if (blank($dateIn) || blank($timeIn) || blank($dateOut) || blank($timeOut)) {
+        if (blank($dateIn) || blank($timeIn)) {
             return null;
         }
 
         $start = Carbon::parse("{$dateIn} {$timeIn}");
+
+        // Forgot-to-punch rows are finalized at the calendar cutoff. Bounding
+        // them to their own day prevents one missed timeout from blocking all
+        // later dates while retaining same-day overlap protection.
+        if (blank($dateOut) || blank($timeOut)) {
+            return $this->isFinalizedForgotToPunch($record)
+                ? [$start, $start->copy()->endOfDay()]
+                : null;
+        }
+
         $end = Carbon::parse("{$dateOut} {$timeOut}");
 
         if ($end->lessThan($start)) {
@@ -690,6 +716,18 @@ class DtrImportService
         }
 
         return [$start, $end];
+    }
+
+    /**
+     * @param  array<string, mixed>|Dtr  $record
+     */
+    protected function isFinalizedForgotToPunch(array|Dtr $record): bool
+    {
+        $scheduleType = $record instanceof Dtr
+            ? $record->schedule_type
+            : ($record['schedule_type'] ?? null);
+
+        return $this->normalizeScheduleType($scheduleType) === 'Forgot to Punch';
     }
 
     /**
@@ -911,13 +949,19 @@ class DtrImportService
         }
 
         if (is_numeric($state)) {
-            return Carbon::createFromTimestamp(((float) $state - 25569) * 86400)
-                ->second(0)
-                ->format('H:i:s');
+            $seconds = (int) round((((float) $state) - floor((float) $state)) * 86400);
+            $seconds = ($seconds % 86400 + 86400) % 86400;
+
+            return sprintf(
+                '%02d:%02d:%02d',
+                intdiv($seconds, 3600),
+                intdiv($seconds % 3600, 60),
+                $seconds % 60,
+            );
         }
 
         try {
-            return Carbon::parse($state)->second(0)->format('H:i:s');
+            return Carbon::parse($state)->format('H:i:s');
         } catch (\Throwable) {
             return null;
         }
