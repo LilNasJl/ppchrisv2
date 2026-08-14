@@ -67,6 +67,37 @@ input[type=file]{display:none;}
 .del-row{padding:6px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:4px;color:var(--ah);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .del-row:hover{background:rgba(239,68,68,.18);color:#fecaca;}
 
+.import-bar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;}
+.import-destination{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.import-field{display:grid;gap:6px;}
+.import-field label{color:var(--dim);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.import-input{width:100%;background:#0d1017;border:1px solid var(--border);border-radius:5px;color:var(--white);font-size:13px;padding:10px 12px;outline:none;}
+.import-input:focus{border-color:var(--accent);}
+.import-input::placeholder{color:var(--muted);}
+.import-input option{background:#0d1017;color:var(--white);}
+.import-btn{border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:#04110d;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.5px;padding:10px 18px;text-transform:uppercase;white-space:nowrap;}
+.import-btn:hover{filter:brightness(1.08);}
+.import-btn:disabled{cursor:not-allowed;filter:none;opacity:.38;}
+.source-note{grid-column:1/-1;color:var(--dim);font-size:11px;line-height:1.5;}
+
+.modal-backdrop{align-items:center;background:rgba(2,6,12,.82);display:none;inset:0;justify-content:center;padding:18px;position:fixed;z-index:9999;}
+.modal-backdrop.open{display:flex;}
+.modal-card{background:#111722;border:1px solid #263449;border-radius:8px;box-shadow:0 24px 70px rgba(0,0,0,.55);max-width:520px;padding:24px;width:100%;}
+.modal-card h2{color:var(--white);font-size:18px;margin-bottom:7px;}
+.modal-copy{color:var(--dim);font-size:13px;line-height:1.55;}
+.progress-track{background:#080b10;border:1px solid var(--border);border-radius:999px;height:12px;margin:22px 0 10px;overflow:hidden;}
+.progress-fill{background:var(--accent);height:100%;transition:width .22s ease;width:0;}
+.progress-row{align-items:center;display:flex;justify-content:space-between;gap:12px;}
+.progress-stage{color:var(--text);font-size:12px;}
+.progress-value{color:var(--accent);font-family:var(--mono);font-size:13px;font-weight:800;}
+.result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0;}
+.result-item{background:#0b1018;border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;}
+.result-item strong{color:var(--white);display:block;font-size:21px;line-height:1.1;}
+.result-item span{color:var(--dim);font-size:10px;letter-spacing:.7px;text-transform:uppercase;}
+.modal-actions{display:flex;justify-content:flex-end;margin-top:18px;}
+.modal-close{background:var(--blue);border:0;border-radius:5px;color:white;cursor:pointer;font-size:12px;font-weight:800;padding:9px 18px;}
+.error-list{background:#170c10;border:1px solid rgba(239,68,68,.35);border-radius:6px;color:#fecaca;font-size:12px;line-height:1.5;margin-top:16px;max-height:210px;overflow:auto;padding:12px 14px;}
+
 .tw{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--card);}
 table{width:100%;border-collapse:collapse;font-size:14px;}
 thead th{background:#0d1017;color:var(--dim);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;padding:14px 20px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;transition:color .15s;}
@@ -112,6 +143,7 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
 .exp-item .ei{font-size:15px;width:20px;text-align:center;}
 .exp-item.csv .ei{color:#22c55e;} .exp-item.xls .ei{color:#16a34a;} .exp-item.pdf .ei{color:#ef4444;} .exp-item.prn .ei{color:#60a5fa;}
 @media print{.no-print{display:none!important;}}
+@media(max-width:700px){.import-bar,.import-destination{grid-template-columns:1fr}.import-btn{width:100%}.result-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -136,6 +168,28 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
     </div>
     <div id="dtr-data" style="display:none">
       <div class="stats" id="dtr-stats"></div>
+      <div class="import-bar no-print">
+        <div class="import-destination">
+          <div class="import-field">
+            <label for="dtr-period-id">Payroll Period</label>
+            <select class="import-input" id="dtr-period-id" onchange="updateImportButton()">
+              <option value="">Select payroll period</option>
+            </select>
+          </div>
+          <div class="import-field">
+            <label for="dtr-branch-id">Branch</label>
+            <select class="import-input" id="dtr-branch-id" onchange="updateImportButton()">
+              <option value="">Select branch</option>
+            </select>
+          </div>
+        </div>
+        <div class="import-field">
+          <label for="dtr-import-name">Import Name</label>
+          <input class="import-input" id="dtr-import-name" type="text" maxlength="191" placeholder="e.g., July 26-10 biometric backup" oninput="updateImportButton()">
+        </div>
+        <button class="import-btn" id="dtr-import-btn" type="button" onclick="importDtr()" disabled>Import D.T.R</button>
+        <div class="source-note" id="dtr-source-note">The complete decoded BIN file will be validated and calculated by HRIS. Table filters do not reduce the imported records.</div>
+      </div>
       <div class="toolbar">
         <input class="srch" id="dq" type="text" placeholder="Search User ID…" oninput="fil('dtr')">
         <select class="sel" id="ds" onchange="fil('dtr')">
@@ -151,7 +205,6 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
           <span class="exp-main disabled" id="dtr-exp-label">⬇ Export</span>
           <button class="exp-arr" id="dtr-exp-arr" onclick="toggleDrop('dtr')" disabled title="Export options">▾</button>
           <div class="exp-drop" id="dtr-exp-drop">
-            <button class="exp-item csv" onclick="doExport('dtr','csv')"><span class="ei">📄</span>CSV (.csv)</button>
             <button class="exp-item xls" onclick="doExport('dtr','excel')"><span class="ei">📊</span>Excel (.xlsx)</button>
             <button class="exp-item pdf" onclick="doExport('dtr','pdf')"><span class="ei">📕</span>PDF (print)</button>
             <button class="exp-item prn" onclick="doExport('dtr','print')"><span class="ei">🖨️</span>Print</button>
@@ -235,15 +288,73 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
   </div>
 </main>
 
+<div class="modal-backdrop" id="progress-modal" role="dialog" aria-modal="true" aria-labelledby="progress-title">
+  <div class="modal-card">
+    <h2 id="progress-title">Preparing D.T.R</h2>
+    <p class="modal-copy" id="progress-copy">Please keep this page open while the file is processed.</p>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-row">
+      <span class="progress-stage" id="progress-stage">Reading file</span>
+      <span class="progress-value" id="progress-value">0%</span>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
+  <div class="modal-card">
+    <h2 id="result-title">D.T.R Import Complete</h2>
+    <p class="modal-copy" id="result-message"></p>
+    <div class="result-grid" id="result-summary"></div>
+    <div class="error-list" id="result-errors" style="display:none"></div>
+    <div class="modal-actions"><button class="modal-close" type="button" onclick="closeResultModal()">Done</button></div>
+  </div>
+</div>
+
 <script>
 const XOR=0xA5,PAGE=50;
+const PARAMS=new URLSearchParams(window.location.search);
+const IMPORT_ENDPOINT=PARAMS.get('endpoint')||'/hr-tools/import/dtr';
+const CSRF_TOKEN=(()=>{try{return window.parent.document.querySelector('meta[name="csrf-token"]')?.content||'';}catch(error){return'';}})();
+const MAX_BIN_BYTES=5*1024*1024;
 const S={
-  dtr:{raw:[],filtered:[],sk:'date_in',sd:1,pg:1},
+  dtr:{raw:[],filtered:[],sk:'date_in',sd:1,pg:1,fileName:'',fileHash:null,batchId:'',imported:false},
   emp:{raw:[],filtered:[],sk:'uid',    sd:1,pg:1}
 };
 const BD={dtr:'db',emp:'eb'};
 const TL={dtr:'dt',emp:'et'};
 const PG={dtr:'dp',emp:'ep'};
+
+function decodeFrameOptions(name){
+  try{
+    const encoded=window.frameElement?.dataset?.[name]||'';
+    if(!encoded)return[];
+    const bytes=Uint8Array.from(atob(encoded),character=>character.charCodeAt(0));
+    const options=JSON.parse(new TextDecoder().decode(bytes));
+    return Array.isArray(options)?options:[];
+  }catch(error){
+    console.error(`Unable to load ${name}.`,error);
+    return[];
+  }
+}
+
+function populateDestinationSelect(id,options,placeholder,initialValue=''){
+  const select=document.getElementById(id);
+  if(!select)return;
+  select.replaceChildren(new Option(placeholder,''));
+  options.forEach(item=>select.add(new Option(String(item.label||''),String(item.value||''))));
+  select.value=String(initialValue||'');
+}
+
+function populateDestinationOptions(){
+  populateDestinationSelect('dtr-period-id',decodeFrameOptions('periodOptions'),'Select payroll period',PARAMS.get('period_id'));
+  populateDestinationSelect('dtr-branch-id',decodeFrameOptions('branchOptions'),'Select branch',PARAMS.get('branch_id'));
+  updateImportButton();
+}
+
+function selectedPeriodId(){return document.getElementById('dtr-period-id')?.value||'';}
+function selectedBranchId(){return document.getElementById('dtr-branch-id')?.value||'';}
+
+populateDestinationOptions();
 
 function sw(t){
   ['dtr','emp'].forEach((v,i)=>{
@@ -258,25 +369,66 @@ function decode(ab){
   while(p+2<=b.length){
     const len=(b[p]<<8)|b[p+1];p+=2;
     if(!len)break;
-    if(p+len>b.length){err.push('Truncated');break;}
+    if(p+len>b.length){err.push(`Record ${rec.length+1} is truncated.`);break;}
     let j='';for(let i=0;i<len;i++)j+=String.fromCharCode(b[p+i]^XOR);p+=len;
-    try{rec.push(JSON.parse(j));}catch(e){err.push('Parse:'+j.slice(0,30));}
+    try{rec.push(JSON.parse(j));}catch(e){err.push(`Record ${rec.length+1} contains invalid data.`);}
   }
   return{rec,err};
 }
 
-function lf(e,t){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=x=>proc(x.target.result,t,f.name);r.readAsArrayBuffer(f);}
+function lf(e,t){const f=e.target.files[0];if(f)readBinFile(f,t);}
 function dov(e,id){e.preventDefault();document.getElementById(id).classList.add('drag');}
 function dol(id){document.getElementById(id).classList.remove('drag');}
 function ddr(e,t){
   e.preventDefault();
   document.getElementById({dtr:'dz-dtr',emp:'dz-emp'}[t]).classList.remove('drag');
   const f=e.dataTransfer.files[0];if(!f)return;
-  const r=new FileReader();r.onload=x=>proc(x.target.result,t,f.name);r.readAsArrayBuffer(f);
+  readBinFile(f,t);
 }
-function proc(buf,t,fn){
+
+function showFilePicker(t,show){
+  const picker=document.getElementById(t==='dtr'?'dz-dtr':'dz-emp');
+  if(picker)picker.style.display=show?'':'none';
+}
+
+function readBinFile(file,t){
+  if(!/\.bin$/i.test(file.name)){
+    showResult(false,'Invalid backup file','Please select a .bin backup generated by the biometric attendance device.',0,0,0,['Only .bin files are accepted.']);
+    return;
+  }
+  if(file.size>MAX_BIN_BYTES){
+    showResult(false,'Backup file is too large','The selected file exceeds the 5 MB direct-import limit.',0,0,0,[]);
+    return;
+  }
+
+  showProgress(t==='dtr'?'Reading D.T.R backup':'Reading employee backup','Reading encrypted BIN file',1);
+  const reader=new FileReader();
+  reader.onprogress=e=>{
+    if(e.lengthComputable)setProgress(Math.max(1,Math.round((e.loaded/e.total)*65)),'Reading encrypted BIN file');
+  };
+  reader.onerror=()=>{
+    closeProgress();
+    showResult(false,'Unable to read backup','The browser could not read the selected file.',0,0,0,[]);
+  };
+  reader.onload=async e=>proc(e.target.result,t,file.name);
+  reader.readAsArrayBuffer(file);
+}
+
+async function sha256(buf){
+  if(!window.crypto?.subtle)return null;
+  const digest=await window.crypto.subtle.digest('SHA-256',buf);
+  return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
+async function proc(buf,t,fn){
+  setProgress(72,'Decoding and checking record integrity');
   const{rec,err}=decode(buf);
-  if(!rec.length){alert('No valid records in "'+fn+'".\n'+(err.length?err.slice(0,3).join('\n'):'File may be empty.'));return;}
+  if(err.length||!rec.length){
+    closeProgress();
+    showResult(false,'Backup could not be decoded',`No records from ${fn} were loaded. The file must be complete before it can be imported.`,0,rec.length,err.length,err.length?err:['The file is empty.']);
+    return;
+  }
+  setProgress(86,'Preparing the complete preview');
   const stamp=Date.now();
   S[t].raw=rec.map((row,index)=>{
     const normalized={...row,_rowId:`${t}-${stamp}-${index}`};
@@ -288,12 +440,25 @@ function proc(buf,t,fn){
     }
     return normalized;
   });
+  if(t==='dtr'){
+    S.dtr.fileName=fn;
+    S.dtr.fileHash=await sha256(buf);
+    S.dtr.batchId=genBatchId();
+    S.dtr.imported=false;
+  }
   S[t].filtered=[...S[t].raw];S[t].pg=1;
   S[t].sk=t==='dtr'?'date_in':'uid';S[t].sd=1;
   renderStats(t);srt(t);
+  showFilePicker(t,false);
   document.getElementById(t+'-data').style.display='block';
   document.getElementById(t+'-exp-arr').disabled=false;
   document.getElementById(t+'-exp-label').classList.remove('disabled');
+  if(t==='dtr'){
+    document.getElementById('dtr-source-note').textContent=`${fn} - ${rec.length} decoded record${rec.length===1?'':'s'}. The complete set will be imported regardless of table filters.`;
+    updateImportButton();
+  }
+  setProgress(100,'Preview ready');
+  setTimeout(closeProgress,280);
 }
 
 function renderStats(t){
@@ -472,6 +637,7 @@ function deleteRow(t,rowId){
   S[t].pg=Math.min(S[t].pg,pages);
   renderStats(t);
   ren(t);
+  updateImportButton();
 }
 
 function paginate(t,total){
@@ -495,13 +661,156 @@ function gp(t,p){S[t].pg=p;ren(t);document.getElementById('panel-'+t).scrollInto
 
 function clr(t){
   S[t].raw=[];S[t].filtered=[];
+  showFilePicker(t,true);
   document.getElementById(t+'-data').style.display='none';
   document.getElementById(t+'-exp-arr').disabled=true;
   document.getElementById(t+'-exp-label').classList.add('disabled');
   document.getElementById(t+'-exp-drop').classList.remove('open');
   document.getElementById({dtr:'f-dtr',emp:'f-emp'}[t]).value='';
+  if(t==='dtr'){
+    Object.assign(S.dtr,{fileName:'',fileHash:null,batchId:'',imported:false});
+    document.getElementById('dtr-import-name').value='';
+    document.getElementById('dtr-source-note').textContent='The complete decoded BIN file will be validated and calculated by HRIS. Table filters do not reduce the imported records.';
+    updateImportButton();
+  }
 }
 function x(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function showProgress(title,stage,percent=0){
+  document.getElementById('progress-title').textContent=title;
+  document.getElementById('progress-copy').textContent='Please keep this page open while HRIS processes the complete file.';
+  document.getElementById('progress-modal').classList.add('open');
+  setProgress(percent,stage);
+}
+function setProgress(percent,stage){
+  const value=Math.max(0,Math.min(100,Math.round(percent)));
+  document.getElementById('progress-fill').style.width=value+'%';
+  document.getElementById('progress-value').textContent=value+'%';
+  document.getElementById('progress-stage').textContent=stage;
+}
+function closeProgress(){document.getElementById('progress-modal').classList.remove('open');}
+function closeResultModal(){document.getElementById('result-modal').classList.remove('open');}
+function showResult(ok,title,message,successful=0,skipped=0,failed=0,errors=[]){
+  document.getElementById('result-title').textContent=title;
+  document.getElementById('result-message').textContent=message;
+  document.getElementById('result-summary').innerHTML=`
+    <div class="result-item"><strong style="color:var(--accent)">${Number(successful)||0}</strong><span>Imported</span></div>
+    <div class="result-item"><strong style="color:var(--brk)">${Number(skipped)||0}</strong><span>Skipped</span></div>
+    <div class="result-item"><strong style="color:${ok?'var(--dim)':'var(--ah)'}">${Number(failed)||0}</strong><span>Failed</span></div>`;
+  const list=document.getElementById('result-errors');
+  if(errors.length){
+    list.style.display='block';
+    list.innerHTML=errors.slice(0,100).map(error=>`<div>${x(typeof error==='string'?error:`Row ${error.row||'?'}: ${error.message||'Unable to import row.'}`)}</div>`).join('');
+  }else{
+    list.style.display='none';list.innerHTML='';
+  }
+  document.getElementById('result-modal').classList.add('open');
+}
+
+function updateImportButton(){
+  const button=document.getElementById('dtr-import-btn');
+  if(!button)return;
+  const ready=S.dtr.raw.length>0
+    && !S.dtr.imported
+    && !!selectedPeriodId()
+    && !!selectedBranchId()
+    && document.getElementById('dtr-import-name').value.trim().length>0;
+  button.disabled=!ready;
+}
+
+function buildImportRows(){
+  const periodId=selectedPeriodId();
+  const branchId=selectedBranchId();
+  return S.dtr.raw.map(r=>{
+    const forgot=String(r.sched||'').toLowerCase().includes('forgot');
+    const hasTimeout=!forgot&&String(r.time_out||'').trim()!=='';
+    return {
+      batch_id:S.dtr.batchId,
+      payroll_period_id:periodId,
+      branch_id:branchId,
+      fingerprint_id:r.uid??'',
+      date_in:r.date_in||'',
+      time_in:r.time_in||'',
+      date_out:hasTimeout?(r.date_out||''):'',
+      time_out:hasTimeout?(r.time_out||''):'',
+      schedule_type:r.sched||'',
+      day_part:dpart(r),
+      schedule_start:forgot?'':(r.sched_start||''),
+      schedule_end:forgot?'':(r.sched_end||''),
+      source_session_id:r.session_id||'',
+      source_filename:S.dtr.fileName,
+      source_file_hash:S.dtr.fileHash
+    };
+  });
+}
+
+function importDtr(){
+  const name=document.getElementById('dtr-import-name').value.trim();
+  const periodId=selectedPeriodId();
+  const branchId=selectedBranchId();
+  if(!periodId||!branchId){
+    showResult(false,'Import setup is incomplete','Select both a payroll period and branch before importing.',0,0,0,[]);
+    return;
+  }
+  if(!name||!S.dtr.raw.length)return;
+
+  const rows=buildImportRows();
+  const payload=JSON.stringify({import_name:name,batch_id:S.dtr.batchId,rows});
+  const request=new XMLHttpRequest();
+  let serverProgress;
+
+  showProgress('Importing D.T.R','Preparing complete import payload',5);
+  document.getElementById('dtr-import-btn').disabled=true;
+  request.open('POST',IMPORT_ENDPOINT,true);
+  request.withCredentials=true;
+  request.setRequestHeader('Content-Type','application/json');
+  request.setRequestHeader('Accept','application/json');
+  request.setRequestHeader('X-Requested-With','XMLHttpRequest');
+  if(CSRF_TOKEN)request.setRequestHeader('X-CSRF-TOKEN',CSRF_TOKEN);
+
+  request.upload.onprogress=e=>{
+    if(e.lengthComputable)setProgress(12+Math.round((e.loaded/e.total)*58),'Uploading decoded D.T.R records');
+  };
+  request.upload.onload=()=>{
+    let progress=72;
+    setProgress(progress,'Validating rows and calculating D.T.R');
+    serverProgress=setInterval(()=>{
+      progress=Math.min(94,progress+2);
+      setProgress(progress,'Validating rows and calculating D.T.R');
+    },450);
+  };
+  request.onerror=()=>{
+    clearInterval(serverProgress);closeProgress();updateImportButton();
+    showResult(false,'D.T.R import failed','The server could not be reached. No D.T.R records were saved.',0,0,rows.length,[]);
+  };
+  request.onload=()=>{
+    clearInterval(serverProgress);
+    let result={},parsed=true;
+    try{result=JSON.parse(request.responseText||'{}');}catch(error){parsed=false;result={message:'The server returned an unreadable response.',errors:[]};}
+    const validationErrors=!parsed
+      ?['Your session may have expired. Reload the HRIS page, sign in, and try again.']
+      :result.errors&&Array.isArray(result.errors)
+      ?result.errors
+      :Object.values(result.errors||{}).flat().map(message=>String(message));
+    const successful=Number(result.successful)||0;
+    const skipped=Number(result.skipped)||0;
+    const failed=Number(result.failed)||0;
+    const ok=parsed&&request.status>=200&&request.status<300&&failed===0&&validationErrors.length===0;
+    setProgress(100,ok?'Import complete':'Import stopped');
+    setTimeout(()=>{
+      closeProgress();
+      if(ok){
+        S.dtr.imported=true;
+        updateImportButton();
+        showResult(true,'D.T.R Import Complete',result.message||'The D.T.R records were imported successfully.',successful,skipped,failed,[]);
+      }else{
+        updateImportButton();
+        showResult(false,'D.T.R Import Not Saved',result.message||'No D.T.R records were saved. Review the listed rows and try again.',successful,skipped,failed||rows.length,validationErrors);
+      }
+    },220);
+  };
+  request.send(payload);
+}
 
 /* ── Export helpers ── */
 function toggleDrop(t){
@@ -519,8 +828,8 @@ function getExportData(t,batchId){
   // last update 05-03-26
   const data=S[t].filtered;
   if(!data.length){alert('No records to export.');return null;}
-  const periodId = getQueryParam('period_id') || '';
-  const branchId = getQueryParam('branch_id') || '';
+  const periodId = selectedPeriodId();
+  const branchId = selectedBranchId();
   if(t==='dtr' && (!periodId || !branchId)){
     alert('Please select both payroll period and branch before exporting D.T.R records.');
     return null;
@@ -666,21 +975,6 @@ function dl(blob,name){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-</script>
-
-<script>
-function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-}
-
-const periodId = getQueryParam('period_id');
-const branchId = getQueryParam('branch_id');
-
-console.log('Selected period:', periodId);
-console.log('Selected branch:', branchId);
-
-// Use this to filter/load your attendance data
 </script>
 </body>
 </html>

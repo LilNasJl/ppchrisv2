@@ -60,7 +60,7 @@ class DtrCalculatorHalfDayTest extends TestCase
         $this->assertSame(0, $result['early_clock_in']);
     }
 
-    public function test_early_clock_in_alone_does_not_require_overtime_approval(): void
+    public function test_early_clock_in_of_thirty_minutes_requires_overtime_approval(): void
     {
         $result = app(DtrCalculator::class)->calculate(
             dateIn: '2026-07-21',
@@ -76,7 +76,7 @@ class DtrCalculatorHalfDayTest extends TestCase
 
         $this->assertSame(30, $result['early_clock_in']);
         $this->assertSame(0, $result['overtime']);
-        $this->assertSame('n/a', $result['overtime_status']);
+        $this->assertSame('Pending', $result['overtime_status']);
     }
 
     public function test_actual_overtime_still_requires_approval(): void

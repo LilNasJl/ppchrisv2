@@ -46,11 +46,29 @@ class PayrollByBranch extends Page implements HasForms
 
     public ?string $approved_by = null;
 
+    public ?string $payroll_search = null;
+
+    public int $payroll_page = 1;
+
+    public int $payroll_per_page = 10;
+
+    public string $payroll_preset = 'summary';
+
     public function mount(): void
     {
         $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
         $this->branch_id = $this->resolveBranchId();
         $this->period_display = PayrollPeriod::query()->find($this->period_id)?->title ?? 'No payroll period selected';
+        $this->payroll_search = str(request()->query('payrollSearch', ''))->limit(120)->toString();
+        $this->payroll_page = max(1, request()->integer('payrollPage', 1));
+        $requestedPerPage = request()->integer('payrollPerPage', 10);
+        $this->payroll_per_page = in_array($requestedPerPage, [10, 25, 50, 100], true)
+            ? $requestedPerPage
+            : 10;
+        $requestedPreset = (string) request()->query('payrollPreset', 'summary');
+        $this->payroll_preset = in_array($requestedPreset, ['summary', 'earnings', 'deductions', 'remittances', 'all'], true)
+            ? $requestedPreset
+            : 'summary';
 
         $this->form->fill([
             'period_display' => $this->period_display,

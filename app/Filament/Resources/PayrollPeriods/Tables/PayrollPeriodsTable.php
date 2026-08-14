@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Tables;
 
+use App\Exceptions\PendingOvertimeApprovalsException;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollPeriodLockService;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
@@ -52,7 +54,17 @@ class PayrollPeriodsTable
                     ->onColor('danger')
                     ->offColor('success')
                     ->updateStateUsing(function (PayrollPeriod $record, mixed $state): bool {
-                        app(PayrollPeriodLockService::class)->setLocked($record, (bool) $state);
+                        try {
+                            app(PayrollPeriodLockService::class)->setLocked($record, (bool) $state);
+                        } catch (PendingOvertimeApprovalsException $exception) {
+                            Notification::make()
+                                ->title('Payroll period was not locked')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return false;
+                        }
 
                         return (bool) $state;
                     }),

@@ -12,6 +12,7 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
@@ -35,6 +36,7 @@ class HrPanelProvider extends PanelProvider
             ->brandName('Human Resource Management System')
             ->globalSearch(false)
             ->favicon(asset('ppclogo.png').'?v=20260724')
+            ->maxContentWidth(Width::Full)
             ->databaseNotifications()
             ->login(Login::class)
             ->sidebarCollapsibleOnDesktop()

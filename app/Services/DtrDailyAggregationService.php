@@ -167,7 +167,7 @@ class DtrDailyAggregationService
             'undertime' => $undertime,
             'early_clock_in' => $earlyClockIn,
             'overtime' => $overtime,
-            'overtime_status' => $overtime >= 30 ? 'Pending' : 'n/a',
+            'overtime_status' => ($overtime >= 30 || $earlyClockIn >= 30) ? 'Pending' : 'n/a',
             'representative' => $representative,
             'completed_records' => $completed,
         ];
@@ -290,6 +290,35 @@ class DtrDailyAggregationService
         $representative = $aggregate['representative'];
         $overtimeApproved = $completed->contains(fn (Dtr $record): bool => (bool) $record->overtime_approved);
         $earlyApproved = $completed->contains(fn (Dtr $record): bool => (bool) $record->early_clock_in_approved);
+        $storedCreditedEarlyMinutes = $completed
+            ->filter(fn (Dtr $record): bool => (bool) $record->early_clock_in_approved)
+            ->sum(fn (Dtr $record): int => max(0, (int) $record->credited_early_clock_in));
+        $approvedEarlyMinutes = $earlyApproved
+            ? min((int) $aggregate['early_clock_in'], $storedCreditedEarlyMinutes)
+            : 0;
+
+        $storedCreditedOvertimeMinutes = $completed
+            ->filter(fn (Dtr $record): bool => (bool) $record->overtime_approved)
+            ->sum(fn (Dtr $record): int => max(
+                0,
+                (int) $record->credited_overtime - (int) $record->credited_early_clock_in,
+            ));
+        $approvedOvertimeMinutes = $overtimeApproved
+            ? min(
+                (int) $aggregate['overtime'],
+                $storedCreditedOvertimeMinutes,
+            )
+            : 0;
+
+        $overtimeRejected = $completed->contains(
+            fn (Dtr $record): bool => strtolower(trim((string) $record->overtime_status)) === 'rejected',
+        );
+        $totalCreditedOvertime = $approvedEarlyMinutes + $approvedOvertimeMinutes;
+        $earlyEligible = (int) $aggregate['early_clock_in'] >= 30;
+        $overtimeEligible = (int) $aggregate['overtime'] >= 30;
+        $hasEligibleOvertime = $earlyEligible || $overtimeEligible;
+        $allEligibleOvertimeApproved = (! $earlyEligible || $earlyApproved)
+            && (! $overtimeEligible || $overtimeApproved);
 
         $completed->each(function (Dtr $record): void {
             $record->forceFill([
@@ -297,6 +326,7 @@ class DtrDailyAggregationService
                 'undertime' => 0,
                 'early_clock_in' => 0,
                 'overtime' => 0,
+                'credited_early_clock_in' => 0,
                 'credited_overtime' => 0,
                 'work_hrs' => 0,
                 'credited_work_hrs' => 0,
@@ -316,11 +346,13 @@ class DtrDailyAggregationService
             'undertime' => $aggregate['undertime'],
             'early_clock_in' => $aggregate['early_clock_in'],
             'overtime' => $aggregate['overtime'],
-            'credited_overtime' => $overtimeApproved ? $aggregate['overtime'] : 0,
+            'credited_early_clock_in' => $approvedEarlyMinutes,
+            'credited_overtime' => $totalCreditedOvertime,
             'work_hrs' => $aggregate['credited_work_minutes'] + $aggregate['early_clock_in'] + $aggregate['overtime'],
-            'credited_work_hrs' => $aggregate['credited_work_minutes'],
-            'overtime_status' => $aggregate['overtime'] >= 30
-                ? ($overtimeApproved ? 'Approved' : 'Pending')
+            'credited_work_hrs' => $aggregate['credited_work_minutes']
+                + $totalCreditedOvertime,
+            'overtime_status' => $hasEligibleOvertime
+                ? ($allEligibleOvertimeApproved ? 'Approved' : ($overtimeRejected ? 'Rejected' : 'Pending'))
                 : 'n/a',
             'early_clock_in_approved' => $earlyApproved,
             'overtime_approved' => $overtimeApproved,

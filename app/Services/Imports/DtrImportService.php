@@ -21,7 +21,7 @@ class DtrImportService
 {
     /**
      * @param  array<int, array<string, mixed>>  $rows
-     * @return array{total:int, successful:int, failed:int, batch_id:string, message:string, errors:array<int, array<string, mixed>>}
+     * @return array{total:int, successful:int, failed:int, skipped:int, batch_id:string, message:string, errors:array<int, array<string, mixed>>}
      */
     public function importRows(array $rows, string $importName, ?string $fallbackBatchId = null): array
     {
@@ -31,6 +31,7 @@ class DtrImportService
             'total' => count($rows),
             'successful' => 0,
             'failed' => 0,
+            'skipped' => 0,
             'batch_id' => $fallbackBatchId,
             'message' => 'No rows were imported.',
             'errors' => [],
@@ -74,10 +75,35 @@ class DtrImportService
             return $result;
         }
 
-        $pendingRecords = collect();
+        if ($validatedRows !== []) {
+            $result['batch_id'] = $validatedRows[0]['data']['batch_id'];
+        }
 
-        foreach ($validatedRows as $validatedRow) {
+        $pendingRecords = collect();
+        $rowsToImport = [];
+        $seenSourceRowHashes = [];
+        $sourceRowHashes = array_map(
+            fn (array $validatedRow): string => $this->buildSourceRowHash($validatedRow['data']),
+            $validatedRows,
+        );
+        $existingSourceRowHashes = $this->getExistingSourceRowHashes($sourceRowHashes);
+
+        foreach ($validatedRows as $index => $validatedRow) {
             $data = $validatedRow['data'];
+            $sourceRowHash = $sourceRowHashes[$index];
+
+            if (
+                filled($sourceRowHash)
+                && (
+                    isset($seenSourceRowHashes[$sourceRowHash])
+                    || isset($existingSourceRowHashes[$sourceRowHash])
+                )
+            ) {
+                $result['skipped']++;
+
+                continue;
+            }
+
             $metadata = $this->getImportMetadata($data, $importName);
 
             if ($this->hasConflictingDtr(
@@ -93,6 +119,11 @@ class DtrImportService
             }
 
             $pendingRecords->push($this->makePendingRecord($data, $metadata));
+            $rowsToImport[] = $validatedRow;
+
+            if (filled($sourceRowHash)) {
+                $seenSourceRowHashes[$sourceRowHash] = true;
+            }
         }
 
         if ($result['errors'] !== []) {
@@ -101,26 +132,34 @@ class DtrImportService
             return $result;
         }
 
+        if ($rowsToImport === []) {
+            $result['message'] = 'No new D.T.R records were imported. Every decoded row was already imported.';
+
+            return $result;
+        }
+
         try {
-            DB::transaction(function () use ($validatedRows, $importName, &$result): void {
+            DB::transaction(function () use ($rowsToImport, $importName, &$result): void {
                 $dailyAggregation = app(DtrDailyAggregationService::class);
 
-                $dailyAggregation->withoutAutomaticRecalculation(function () use ($validatedRows, $importName, &$result): void {
-                    foreach ($validatedRows as $validatedRow) {
+                $dailyAggregation->withoutAutomaticRecalculation(function () use ($rowsToImport, $importName, &$result): void {
+                    foreach ($rowsToImport as $validatedRow) {
                         $this->saveValidatedRow($validatedRow['data'], $importName);
                         $result['successful']++;
                     }
                 });
 
-                $dailyAggregation->recalculateRows(array_column($validatedRows, 'data'));
+                $dailyAggregation->recalculateRows(array_column($rowsToImport, 'data'));
             });
 
-            $result['message'] = 'D.T.R import completed successfully.';
+            $result['message'] = $result['skipped'] > 0
+                ? "D.T.R import completed. {$result['successful']} imported and {$result['skipped']} duplicate row(s) skipped."
+                : 'D.T.R import completed successfully.';
         } catch (\Throwable $exception) {
             report($exception);
 
             $result['successful'] = 0;
-            $result['failed'] = count($rows);
+            $result['failed'] = count($rows) - $result['skipped'];
             $result['message'] = 'Import failed. No D.T.R records were saved.';
             $result['errors'][] = [
                 'row' => 0,
@@ -180,6 +219,9 @@ class DtrImportService
             'schedule_start' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
             'schedule_end' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
             'day_part' => ['nullable', 'string', 'max:32'],
+            'source_session_id' => ['nullable', 'string', 'max:191'],
+            'source_filename' => ['nullable', 'string', 'max:191'],
+            'source_file_hash' => ['nullable', 'string', 'size:64', 'regex:/^[a-f0-9]{64}$/i'],
         ], [
             'batch_id.required' => 'Batch ID is required.',
             'payroll_period_id.required' => 'Period ID is required.',
@@ -326,6 +368,9 @@ class DtrImportService
             'schedule_start' => $this->parseTime($this->pick($row, ['schedule_start', 'schedule start', 'sched_start'])),
             'schedule_end' => $this->parseTime($this->pick($row, ['schedule_end', 'schedule end', 'sched_end'])),
             'day_part' => $this->normalizeNullableString($this->pick($row, ['day_part', 'day part'])),
+            'source_session_id' => $this->normalizeNullableString($this->pick($row, ['source_session_id', 'source session id', 'session_id', 'session id'])),
+            'source_filename' => $this->normalizeNullableString($this->pick($row, ['source_filename', 'source filename', 'filename'])),
+            'source_file_hash' => strtolower((string) ($this->normalizeNullableString($this->pick($row, ['source_file_hash', 'source file hash', 'file_hash', 'file hash'])) ?? '')) ?: null,
         ];
     }
 
@@ -338,11 +383,57 @@ class DtrImportService
         return [
             'is_imported' => 1,
             'import_name' => $this->normalizeNullableString($importName),
+            'source_session_id' => $data['source_session_id'] ?? null,
+            'source_filename' => $data['source_filename'] ?? null,
+            'source_file_hash' => $data['source_file_hash'] ?? null,
+            'source_row_hash' => $this->buildSourceRowHash($data),
             'branch_id' => $this->getImportedBranchId($data),
             'daily_rate' => $this->getEmployeeDailyRate($data),
             ...$this->getHolidayData($data),
             ...$this->getImportedCalculationData($data),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function buildSourceRowHash(array $data): string
+    {
+        return hash('sha256', implode('|', [
+            (string) ($data['payroll_period_id'] ?? ''),
+            (string) $this->getImportedBranchId($data),
+            (string) ($data['fingerprint_id'] ?? ''),
+            (string) ($data['date_in'] ?? ''),
+            (string) ($data['time_in'] ?? ''),
+            (string) ($data['date_out'] ?? ''),
+            (string) ($data['time_out'] ?? ''),
+            $this->resolveScheduleType($data),
+            (string) ($data['schedule_start'] ?? ''),
+            (string) ($data['schedule_end'] ?? ''),
+        ]));
+    }
+
+    /**
+     * @param  array<int, string>  $sourceRowHashes
+     * @return array<string, true>
+     */
+    protected function getExistingSourceRowHashes(array $sourceRowHashes): array
+    {
+        $existing = [];
+
+        collect($sourceRowHashes)
+            ->unique()
+            ->chunk(1000)
+            ->each(function ($hashes) use (&$existing): void {
+                Dtr::query()
+                    ->whereIn('source_row_hash', $hashes->all())
+                    ->pluck('source_row_hash')
+                    ->each(function (string $hash) use (&$existing): void {
+                        $existing[$hash] = true;
+                    });
+            });
+
+        return $existing;
     }
 
     /**

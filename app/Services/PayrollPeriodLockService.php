@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\PendingOvertimeApprovalsException;
 use App\Models\Deduction;
 use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
@@ -9,6 +10,7 @@ use App\Models\EmployeeLoanPayment;
 use App\Models\PayrollPeriod;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PayrollPeriodLockService
 {
@@ -29,6 +31,10 @@ class PayrollPeriodLockService
             $period->refresh();
 
             if (! $period->is_locked) {
+                if (app(OvertimeApprovalService::class)->hasPendingForPeriod($period)) {
+                    throw new PendingOvertimeApprovalsException;
+                }
+
                 app(PayrollCalculator::class)->snapshotPeriod($period);
 
                 $period->forceFill([
@@ -80,8 +86,15 @@ class PayrollPeriodLockService
             ->orderBy('date_payout')
             ->get()
             ->each(function (PayrollPeriod $period) use (&$locked): void {
-                $this->lock($period);
-                $locked++;
+                try {
+                    $this->lock($period);
+                    $locked++;
+                } catch (PendingOvertimeApprovalsException $exception) {
+                    Log::warning('Automatic payroll lock skipped because overtime approval is pending.', [
+                        'payroll_period_id' => $period->id,
+                        'message' => $exception->getMessage(),
+                    ]);
+                }
             });
 
         return $locked;

@@ -3,7 +3,6 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Pages\DtrImportBatchEntries;
-use App\Filament\Pages\DtrImportUpload;
 use App\Models\Dtr as ModelsImport;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -29,12 +28,7 @@ class DtrImportTable extends TableWidget
         return $table
             ->heading(false)
             ->query(fn (): Builder => ModelsImport::query()
-                ->where('is_locked', 0)
                 ->where('is_imported', 1)
-                ->whereDoesntHave(
-                    'payrollPeriod',
-                    fn (Builder $query) => $query->where('is_locked', true)
-                )
                 ->selectRaw('MIN(id) as id, batch_id, MAX(import_name) as import_name, COUNT(*) as total, MAX(created_at) as imported_at, MAX(id) as latest_id')
                 ->groupBy('batch_id')
                 ->orderByDesc('imported_at')
@@ -65,12 +59,6 @@ class DtrImportTable extends TableWidget
             ])
             ->filters([
                 //
-            ])
-            ->headerActions([
-                Action::make('importDtr')
-                    ->label('Import D.T.R')
-                    ->icon(Heroicon::ArrowDownTray)
-                    ->url(DtrImportUpload::getUrl()),
             ])
             ->recordActions([
                 ActionGroup::make([

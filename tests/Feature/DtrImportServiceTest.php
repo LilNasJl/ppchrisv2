@@ -412,6 +412,55 @@ class DtrImportServiceTest extends TestCase
         $this->assertDatabaseHas('dtrs', ['fingerprint_id' => '765432']);
     }
 
+    public function test_exact_duplicate_rows_in_one_backup_are_imported_once(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period);
+
+        $result = app(DtrImportService::class)->importRows([$row, $row], 'Duplicate backup rows');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseCount('dtrs', 1);
+    }
+
+    public function test_reimporting_an_exact_row_skips_it_without_creating_a_second_record(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period);
+
+        $first = app(DtrImportService::class)->importRows([$row], 'First backup');
+        $second = app(DtrImportService::class)->importRows([$row], 'Repeated backup');
+
+        $this->assertSame(1, $first['successful']);
+        $this->assertSame(0, $second['successful']);
+        $this->assertSame(1, $second['skipped']);
+        $this->assertSame(0, $second['failed']);
+        $this->assertDatabaseCount('dtrs', 1);
+    }
+
+    public function test_direct_bin_import_stores_source_audit_metadata(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $fileHash = str_repeat('a', 64);
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Source Session ID' => 'session-20260721',
+                'Source Filename' => 'payroll.bin',
+                'Source File Hash' => $fileHash,
+            ]),
+        ], 'Direct BIN import');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'source_session_id' => 'session-20260721',
+            'source_filename' => 'payroll.bin',
+            'source_file_hash' => $fileHash,
+        ]);
+    }
+
     /**
      * @return array{0: Branch, 1: PayrollPeriod}
      */

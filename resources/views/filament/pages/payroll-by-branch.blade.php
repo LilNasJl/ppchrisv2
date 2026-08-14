@@ -97,7 +97,12 @@
                 <livewire:payroll-detail-table
                     :period-id="(int) $this->period_id"
                     :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
-                    :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id"
+                    :enable-search="true"
+                    :initial-search="$this->payroll_search"
+                    :initial-page="$this->payroll_page"
+                    :initial-per-page="$this->payroll_per_page"
+                    :initial-preset="$this->payroll_preset"
+                    :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id.'-'.$this->payroll_page.'-'.$this->payroll_preset"
                 />
             </div>
             <div class="payroll-print-table">

@@ -2,10 +2,14 @@
 
 namespace App\Livewire;
 
+use App\Filament\Pages\OvertimeManagement;
+use App\Models\Branch;
+use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollSnapshot;
+use App\Services\OvertimeApprovalService;
 use App\Services\PayrollCalculator;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -41,18 +45,21 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     public bool $usePagination = true;
 
+    public bool $enableSearch = false;
+
     public string $columnPreset = 'summary';
 
     protected const COLUMN_PRESETS = [
         'summary' => [
             'index', 'bank_id_no', 'name', 'designation', 'branch', 'days_worked',
-            'salary_adjustment', 'gross_pay', 'shortages', 'total_deductions', 'net_pay',
+            'salary_adjustment', 'overtime_hours', 'overtime_amount', 'ot_approval',
+            'gross_pay', 'shortages', 'total_deductions', 'net_pay',
         ],
         'earnings' => [
             'index', 'bank_id_no', 'name', 'designation', 'rate', 'monthly_rate',
             'half_month_pay', 'rate_per_day', 'rate_per_hour', 'days_worked',
             'salary_adjustment', 'allowance', 'overtime_hours', 'overtime_amount',
-            'regular_holiday', 'special_holiday', 'gross_pay',
+            'ot_approval', 'regular_holiday', 'special_holiday', 'gross_pay',
         ],
         'deductions' => [
             'index', 'bank_id_no', 'name', 'gross_pay', 'undertime_minutes',
@@ -68,18 +75,36 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected array $rowCache = [];
 
+    protected array $overtimeSummaryCache = [];
+
+    protected bool $overtimeSummariesLoaded = false;
+
     public function mount(
         ?int $periodId = null,
         ?int $branchId = null,
         ?int $employeeId = null,
         ?string $paymentType = null,
         bool $usePagination = true,
+        bool $enableSearch = false,
+        ?string $initialSearch = null,
+        int $initialPage = 1,
+        int $initialPerPage = 10,
+        string $initialPreset = 'summary',
     ): void {
         $this->periodId = $periodId;
         $this->branchId = $branchId;
         $this->employeeId = $employeeId;
         $this->paymentType = filled($paymentType) ? strtolower($paymentType) : null;
         $this->usePagination = $usePagination;
+        $this->enableSearch = $enableSearch;
+        $this->tableSearch = $initialSearch ?? '';
+        $this->tableRecordsPerPage = in_array($initialPerPage, [10, 25, 50, 100], true)
+            ? $initialPerPage
+            : 10;
+        $this->paginators['page'] = max(1, $initialPage);
+        $this->columnPreset = array_key_exists($initialPreset, self::COLUMN_PRESETS)
+            ? $initialPreset
+            : 'summary';
 
         $this->ensureAdjustmentRows();
     }
@@ -93,6 +118,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     {
         return $table
             ->query(fn (): Builder => $this->query())
+            ->searchPlaceholder('Search ID, employee name, or designation')
             ->paginated($this->usePagination ? [10, 25, 50, 100] : false)
             ->headerActions([
                 ActionGroup::make([
@@ -135,9 +161,22 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     ->label('#')
                     ->rowIndex()
                     ->visible(fn (): bool => $this->isColumnVisible('index')),
-                $this->textColumn('bank_id_no', 'Bank ID No.'),
-                $this->textColumn('name', 'Name'),
-                $this->textColumn('designation', 'Designation')->placeholder('-'),
+                $this->textColumn('bank_id_no', 'Bank ID No.')
+                    ->searchable(
+                        condition: $this->enableSearch,
+                        query: fn (Builder $query, string $search): Builder => $this->searchEmployeeId($query, $search),
+                    ),
+                $this->textColumn('name', 'Name')
+                    ->searchable(
+                        condition: $this->enableSearch,
+                        query: fn (Builder $query, string $search): Builder => $this->searchEmployeeName($query, $search),
+                    ),
+                $this->textColumn('designation', 'Designation')
+                    ->placeholder('-')
+                    ->searchable(
+                        condition: $this->enableSearch,
+                        query: fn (Builder $query, string $search): Builder => $this->searchEmployeeDesignation($query, $search),
+                    ),
                 $this->textColumn('branch', 'Branch')->placeholder('-'),
                 $this->textColumn('rate', 'Rate')->alignCenter(),
                 $this->moneyColumn('monthly_rate', 'Monthly Rate'),
@@ -161,6 +200,14 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('allowance', 'Allowance'),
                 $this->numberColumn('overtime_hours', 'OT Hrs'),
                 $this->moneyColumn('overtime_amount', 'OT Amount'),
+                TextColumn::make('ot_approval')
+                    ->label('OT Approval')
+                    ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => $this->overtimeApprovalLabel($record))
+                    ->badge()
+                    ->icon(Heroicon::Clock)
+                    ->color(fn (PayrollPeriodEmployeeAdjustment $record): string => $this->overtimeApprovalColor($record))
+                    ->url(fn (PayrollPeriodEmployeeAdjustment $record): ?string => $this->overtimeApprovalUrl($record))
+                    ->visible(fn (): bool => $this->isColumnVisible('ot_approval')),
                 $this->moneyColumn('regular_holiday', 'Regular Holiday'),
                 $this->moneyColumn('special_holiday', 'Special Holiday'),
                 $this->moneyColumn('gross_pay', 'Gross Pay'),
@@ -402,6 +449,178 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->label($label)
             ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => (string) $this->rowValue($record, $key))
             ->visible(fn (): bool => $this->isColumnVisible($key));
+    }
+
+    protected function searchEmployeeId(Builder $query, string $search): Builder
+    {
+        $numericSearch = preg_replace('/[^0-9]/', '', $search);
+
+        return $query->whereHas('employee', function (Builder $employeeQuery) use ($numericSearch, $search): void {
+            $employeeQuery->where(function (Builder $idQuery) use ($numericSearch, $search): void {
+                $idQuery->where('bank_id_no', 'like', "%{$search}%");
+
+                if (filled($numericSearch)) {
+                    $idQuery->orWhere('uid', 'like', "%{$numericSearch}%");
+                }
+            });
+        });
+    }
+
+    protected function searchEmployeeName(Builder $query, string $search): Builder
+    {
+        $terms = preg_split('/\s+/', trim(str_replace([',', '.'], ' ', $search))) ?: [];
+
+        return $query->whereHas('employee', function (Builder $employeeQuery) use ($terms): void {
+            foreach (array_filter($terms) as $term) {
+                $employeeQuery->where(function (Builder $nameQuery) use ($term): void {
+                    $nameQuery
+                        ->where('lastname', 'like', "%{$term}%")
+                        ->orWhere('middlename', 'like', "%{$term}%")
+                        ->orWhere('firstname', 'like', "%{$term}%");
+                });
+            }
+        });
+    }
+
+    protected function searchEmployeeDesignation(Builder $query, string $search): Builder
+    {
+        return $query->whereHas(
+            'employee.designation',
+            fn (Builder $designationQuery): Builder => $designationQuery->where('title', 'like', "%{$search}%"),
+        );
+    }
+
+    protected function overtimeApprovalSummary(PayrollPeriodEmployeeAdjustment $record): array
+    {
+        $this->loadOvertimeSummaries();
+
+        return $this->overtimeSummaryCache[(int) $record->employee_id] ?? [
+            'pending' => 0,
+            'approved' => 0,
+            'rejected' => 0,
+            'total' => 0,
+        ];
+    }
+
+    protected function loadOvertimeSummaries(): void
+    {
+        if ($this->overtimeSummariesLoaded) {
+            return;
+        }
+
+        $this->overtimeSummariesLoaded = true;
+        $employees = Employee::query()
+            ->whereIn('id', $this->includedEmployeeIds()->all())
+            ->get(['id', 'uid', 'fingerprint_id']);
+
+        $fingerprintToEmployee = $employees
+            ->mapWithKeys(function (Employee $employee): array {
+                $fingerprintId = trim((string) ($employee->fingerprint_id ?: $employee->uid));
+
+                return filled($fingerprintId) ? [$fingerprintId => (int) $employee->id] : [];
+            });
+
+        $this->overtimeSummaryCache = $employees
+            ->mapWithKeys(fn (Employee $employee): array => [(int) $employee->id => [
+                'pending' => 0,
+                'approved' => 0,
+                'rejected' => 0,
+                'total' => 0,
+            ]])
+            ->all();
+
+        if ($fingerprintToEmployee->isEmpty() || blank($this->periodId) || blank($this->branchId)) {
+            return;
+        }
+
+        Dtr::query()
+            ->where('payroll_period_id', $this->periodId)
+            ->where('branch_id', $this->branchId)
+            ->whereIn('fingerprint_id', $fingerprintToEmployee->keys()->all())
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('overtime', '>=', 30)
+                    ->orWhere('early_clock_in', '>=', 30);
+            })
+            ->get([
+                'fingerprint_id',
+                'overtime',
+                'early_clock_in',
+                'overtime_status',
+                'overtime_approved',
+                'early_clock_in_approved',
+            ])
+            ->each(function (Dtr $dtr) use ($fingerprintToEmployee): void {
+                $employeeId = $fingerprintToEmployee->get(trim((string) $dtr->fingerprint_id));
+
+                if (! $employeeId || ! isset($this->overtimeSummaryCache[$employeeId])) {
+                    return;
+                }
+
+                $approvalService = app(OvertimeApprovalService::class);
+                $this->overtimeSummaryCache[$employeeId]['total']++;
+
+                if ($approvalService->isApproved($dtr)) {
+                    $this->overtimeSummaryCache[$employeeId]['approved']++;
+                } elseif ($approvalService->isRejected($dtr)) {
+                    $this->overtimeSummaryCache[$employeeId]['rejected']++;
+                } else {
+                    $this->overtimeSummaryCache[$employeeId]['pending']++;
+                }
+            });
+    }
+
+    protected function overtimeApprovalLabel(PayrollPeriodEmployeeAdjustment $record): string
+    {
+        $summary = $this->overtimeApprovalSummary($record);
+
+        if ($summary['pending'] > 0) {
+            return "Pending ({$summary['pending']})";
+        }
+
+        if ($summary['approved'] > 0) {
+            return 'Approved';
+        }
+
+        if ($summary['rejected'] > 0) {
+            return 'Rejected';
+        }
+
+        return 'n/a';
+    }
+
+    protected function overtimeApprovalColor(PayrollPeriodEmployeeAdjustment $record): string
+    {
+        $summary = $this->overtimeApprovalSummary($record);
+
+        return match (true) {
+            $summary['pending'] > 0 => 'warning',
+            $summary['approved'] > 0 => 'success',
+            $summary['rejected'] > 0 => 'danger',
+            default => 'gray',
+        };
+    }
+
+    protected function overtimeApprovalUrl(PayrollPeriodEmployeeAdjustment $record): ?string
+    {
+        $summary = $this->overtimeApprovalSummary($record);
+        $employee = $record->employee;
+        $period = $this->period();
+        $branch = filled($this->branchId) ? Branch::query()->find($this->branchId) : null;
+
+        if ($summary['total'] < 1 || ! $employee || ! $period || ! $branch) {
+            return null;
+        }
+
+        return OvertimeManagement::getUrl([
+            'employeeId' => $employee->publicKey(),
+            'periodId' => $period->publicKey(),
+            'branchId' => $branch->publicKey(),
+            'returnSearch' => $this->getTableSearch(),
+            'returnPage' => $this->getTablePage(),
+            'returnPerPage' => $this->getTableRecordsPerPage(),
+            'returnPreset' => $this->columnPreset,
+        ]);
     }
 
     protected function moneyColumn(string $key, string $label): TextColumn

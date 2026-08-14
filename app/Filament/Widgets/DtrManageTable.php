@@ -11,6 +11,7 @@ use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use App\Services\HolidayEntitlementService;
+use App\Services\OvertimeApprovalService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
@@ -22,6 +23,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Group;
@@ -147,8 +149,16 @@ class DtrManageTable extends BaseWidget
                     ->label('OVERTIME')
                     ->numeric(),
 
+                TextColumn::make('early_clock_in')
+                    ->label('EARLY OT')
+                    ->numeric(),
+
+                TextColumn::make('credited_early_clock_in')
+                    ->label('CRED. EARLY')
+                    ->numeric(),
+
                 TextColumn::make('credited_overtime')
-                    ->label('CRED. OT')
+                    ->label('TOTAL CRED. OT')
                     ->numeric(),
 
                 TextColumn::make('work_hrs')
@@ -181,6 +191,7 @@ class DtrManageTable extends BaseWidget
                     ->color(fn (?string $state): string => match ($state) {
                         'Pending' => 'warning',
                         'Approved' => 'success',
+                        'Rejected' => 'danger',
                         default => 'gray',
                     }),
             ])
@@ -303,22 +314,98 @@ class DtrManageTable extends BaseWidget
                 Action::make('approveOvertime')
                     ->label('Approve OT')
                     ->icon('heroicon-m-check-circle')
-                    ->color('warning')
-                    ->requiresConfirmation()
-                    ->modalHeading('Approve overtime?')
-                    ->modalDescription('This will credit the overtime minutes to credited work hours.')
-                    ->visible(fn (ModelsDtr $record): bool => $this->shouldShowOvertimeApproval($record))
-                    ->action(function (ModelsDtr $record): void {
-                        $record->overtime_approved = true;
-                        $this->updateApprovalTotals($record);
+                    ->color('success')
+                    ->modalHeading('Approve overtime')
+                    ->modalDescription(fn (ModelsDtr $record): string => sprintf(
+                        'Calculated early overtime: %d minutes. Calculated after-schedule overtime: %d minutes. Enter the credited minutes for each eligible type.',
+                        (int) $record->early_clock_in,
+                        (int) $record->overtime,
+                    ))
+                    ->schema([
+                        TextInput::make('credited_early_minutes')
+                            ->label('Credited Early Overtime (Minutes)')
+                            ->numeric()
+                            ->integer()
+                            ->required(fn (ModelsDtr $record): bool => app(OvertimeApprovalService::class)
+                                ->hasEligibleEarlyOvertime($record))
+                            ->visible(fn (ModelsDtr $record): bool => app(OvertimeApprovalService::class)
+                                ->hasEligibleEarlyOvertime($record))
+                            ->minValue(0)
+                            ->maxValue(fn (ModelsDtr $record): int => (int) $record->early_clock_in)
+                            ->default(fn (ModelsDtr $record): int => app(OvertimeApprovalService::class)
+                                ->defaultCreditedEarlyOvertime($record))
+                            ->helperText(fn (ModelsDtr $record): string => sprintf(
+                                'Enter 0 for no credit, or a whole number from 30 to %d minutes.',
+                                (int) $record->early_clock_in,
+                            )),
 
-                        Notification::make()
-                            ->title('Overtime approved')
-                            ->success()
-                            ->send();
-                    }),
+                        TextInput::make('credited_overtime_minutes')
+                            ->label('Credited After-Schedule Overtime (Minutes)')
+                            ->numeric()
+                            ->integer()
+                            ->required(fn (ModelsDtr $record): bool => app(OvertimeApprovalService::class)
+                                ->hasEligibleOvertime($record))
+                            ->visible(fn (ModelsDtr $record): bool => app(OvertimeApprovalService::class)
+                                ->hasEligibleOvertime($record))
+                            ->minValue(0)
+                            ->maxValue(fn (ModelsDtr $record): int => (int) $record->overtime)
+                            ->default(fn (ModelsDtr $record): int => app(OvertimeApprovalService::class)
+                                ->defaultCreditedOvertime($record))
+                            ->helperText(fn (ModelsDtr $record): string => sprintf(
+                                'Enter 0 for no credit, or a whole number from 30 to %d minutes.',
+                                (int) $record->overtime,
+                            )),
+                    ])
+                    ->modalSubmitActionLabel('Approve Overtime')
+                    ->visible(fn (ModelsDtr $record): bool => $this->shouldShowOvertimeApproval($record))
+                    ->action(fn (ModelsDtr $record, array $data): mixed => $this->approveOvertimeRecord(
+                        $record,
+                        isset($data['credited_overtime_minutes'])
+                            ? (int) $data['credited_overtime_minutes']
+                            : null,
+                        isset($data['credited_early_minutes'])
+                            ? (int) $data['credited_early_minutes']
+                            : null,
+                    )),
+
+                Action::make('rejectOvertime')
+                    ->label('Reject OT')
+                    ->icon('heroicon-m-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Reject overtime?')
+                    ->modalDescription(fn (ModelsDtr $record): string => sprintf(
+                        'The eligible early overtime (%d minutes) and after-schedule overtime (%d minutes) on this D.T.R entry will not be credited.',
+                        (int) $record->early_clock_in,
+                        (int) $record->overtime,
+                    ))
+                    ->modalSubmitActionLabel('Reject Overtime')
+                    ->visible(fn (ModelsDtr $record): bool => $this->shouldShowOvertimeApproval($record))
+                    ->action(fn (ModelsDtr $record): mixed => $this->rejectOvertimeRecord($record)),
 
                 ActionGroup::make([
+                    Action::make('undoOvertimeApproval')
+                        ->label('Undo OT Approval')
+                        ->icon('heroicon-m-arrow-path')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Undo overtime approval?')
+                        ->modalDescription('The credited early and after-schedule overtime will be removed and returned to pending review.')
+                        ->visible(fn (ModelsDtr $record): bool => ! $this->isRecordLocked($record)
+                            && app(OvertimeApprovalService::class)->isApproved($record))
+                        ->action(fn (ModelsDtr $record): mixed => $this->undoOvertimeRecord($record)),
+
+                    Action::make('reopenRejectedOvertime')
+                        ->label('Reopen Rejected OT')
+                        ->icon('heroicon-m-arrow-path')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->modalHeading('Return overtime to pending?')
+                        ->modalDescription('The rejected early and after-schedule overtime will be available for review again.')
+                        ->visible(fn (ModelsDtr $record): bool => ! $this->isRecordLocked($record)
+                            && app(OvertimeApprovalService::class)->isRejected($record))
+                        ->action(fn (ModelsDtr $record): mixed => $this->undoOvertimeRecord($record)),
+
                     EditAction::make('editDtr')
                         ->label('Edit')
                         ->schema($this->getDtrFormSchema())
@@ -1008,38 +1095,57 @@ class DtrManageTable extends BaseWidget
     protected function shouldShowOvertimeApproval(ModelsDtr $record): bool
     {
         return ! $this->isRecordLocked($record)
-            && $record->overtime_status === 'Pending'
-            && ((int) $record->overtime >= 30)
-            && ! (bool) $record->overtime_approved;
+            && app(OvertimeApprovalService::class)->isPending($record);
     }
 
-    protected function updateApprovalTotals(ModelsDtr $record): void
+    protected function approveOvertimeRecord(
+        ModelsDtr $record,
+        ?int $creditedOvertimeMinutes,
+        ?int $creditedEarlyMinutes,
+    ): void {
+        $this->runOvertimeTransition(
+            fn (): int => app(OvertimeApprovalService::class)->approve(
+                $record,
+                $creditedOvertimeMinutes,
+                $creditedEarlyMinutes,
+            ),
+            'Overtime approved',
+        );
+    }
+
+    protected function rejectOvertimeRecord(ModelsDtr $record): void
     {
-        if ($this->isRecordLocked($record)) {
-            $this->sendLockedNotification();
+        $this->runOvertimeTransition(
+            fn (): int => app(OvertimeApprovalService::class)->reject($record),
+            'Overtime rejected',
+        );
+    }
 
-            return;
+    protected function undoOvertimeRecord(ModelsDtr $record): void
+    {
+        $this->runOvertimeTransition(
+            fn (): int => app(OvertimeApprovalService::class)->undo($record),
+            'Overtime returned to pending',
+        );
+    }
+
+    protected function runOvertimeTransition(callable $transition, string $successTitle): void
+    {
+        try {
+            $transition();
+            $this->flushCachedTableRecords();
+
+            Notification::make()
+                ->title($successTitle)
+                ->success()
+                ->send();
+        } catch (\DomainException $exception) {
+            Notification::make()
+                ->title('Overtime was not updated')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
         }
-
-        $earlyClockIn = (int) $record->early_clock_in;
-        $overtime = (int) $record->overtime;
-        $workMinutes = (int) $record->work_hrs;
-
-        $approvedOvertime = ((bool) $record->overtime_approved && $overtime >= 30) ? $overtime : 0;
-        $creditedOvertime = $approvedOvertime;
-
-        $hasPendingOvertime = $overtime >= 30 && ! (bool) $record->overtime_approved;
-        $hasApprovableOvertime = $overtime >= 30;
-
-        $record->forceFill([
-            'credited_overtime' => $creditedOvertime,
-            'credited_work_hrs' => max(0, $workMinutes - $earlyClockIn - $overtime + $creditedOvertime),
-            'overtime_status' => $hasPendingOvertime
-                ? 'Pending'
-                : ($hasApprovableOvertime ? 'Approved' : 'n/a'),
-        ])->save();
-
-        $this->flushCachedTableRecords();
     }
 
     protected function getScheduleStartOptions(): array

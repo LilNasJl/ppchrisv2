@@ -16,7 +16,7 @@ class DtrImport extends Page
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'D.T.R Importer';
+    protected static ?string $title = 'D.T.R Import History';
 
     public function getHeaderActions(): array
     {

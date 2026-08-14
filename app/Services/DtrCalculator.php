@@ -78,13 +78,14 @@ class DtrCalculator
             ? $baseWorkMinutes
             : max(0, $baseWorkMinutes + $earlyClockIn + $overtime);
         $creditedWorkMinutes = $baseWorkMinutes;
-        $hasPendingOvertime = $overtime >= 30;
+        $hasPendingOvertime = $overtime >= 30 || $earlyClockIn >= 30;
 
         return [
             'late' => $late,
             'undertime' => $undertime,
             'overtime' => $overtime,
             'early_clock_in' => $earlyClockIn,
+            'credited_early_clock_in' => 0,
             'credited_overtime' => 0,
             'work_hrs' => $workMinutes,
             'credited_work_hrs' => $creditedWorkMinutes,
@@ -101,6 +102,7 @@ class DtrCalculator
             'undertime' => 0,
             'early_clock_in' => 0,
             'overtime' => 0,
+            'credited_early_clock_in' => 0,
             'credited_overtime' => 0,
             'work_hrs' => 0,
             'credited_work_hrs' => 0,
@@ -120,6 +122,7 @@ class DtrCalculator
             'undertime' => 0,
             'overtime' => $overtime,
             'early_clock_in' => 0,
+            'credited_early_clock_in' => 0,
             'credited_overtime' => 0,
             'work_hrs' => $overtime,
             'credited_work_hrs' => 0,
