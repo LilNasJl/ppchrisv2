@@ -24,9 +24,19 @@
     }
 
     .fi-panel-hr .fi-page,
-    .fi-panel-hr .fi-main {
+    .fi-panel-hr .fi-main,
+    .fi-panel-hr .fi-main-ctn,
+    .fi-panel-hr .fi-main-content {
         color: var(--hr-text);
+        max-width: none;
         min-width: 0;
+        width: 100%;
+    }
+
+    .fi-panel-hr .fi-main,
+    .fi-panel-hr .fi-main-ctn,
+    .fi-panel-hr .fi-main-content {
+        flex: 1 1 auto;
     }
 
     .fi-panel-hr .fi-page-header-heading {

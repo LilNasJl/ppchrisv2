@@ -10,6 +10,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Model;
 use Override;
@@ -63,11 +64,15 @@ class ViewEmployeeDetails extends Page implements HasForms
     }
 
     #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    #[Override]
     protected function getHeaderActions(): array
     {
         return [
-            $this->employmentTypeHistoryAction(),
-
             Action::make('edit')
                 ->label('Edit')
                 ->icon(Heroicon::PencilSquare)

@@ -1,11 +1,26 @@
 <x-filament-panels::page>
-    <form wire:submit.prevent="save" style="display: grid; gap: 16px; width: min(100%, 1180px);">
-        {{ $this->form }}
+    <style>
+        .fi-panel-hr .fi-page:has(.employee-details-page-shell),
+        .fi-panel-hr .fi-page:has(.employee-details-page-shell) .fi-page-content,
+        .fi-panel-hr .fi-page:has(.employee-details-page-shell) .fi-page-content > *,
+        .fi-panel-hr .employee-details-page-shell,
+        .fi-panel-hr .employee-details-page-shell > *,
+        .fi-panel-hr .employee-details-page-shell form,
+        .fi-panel-hr .employee-details-page-shell .fi-form,
+        .fi-panel-hr .employee-details-page-shell .fi-sc,
+        .fi-panel-hr .employee-details-page-shell .fi-schema,
+        .fi-panel-hr .employee-details-page-shell .fi-tabs {
+            max-width: none !important;
+            min-width: 0;
+            width: 100% !important;
+        }
 
-        <div>
-            <x-filament::button type="submit" icon="heroicon-m-check">
-                Save Employee Details
-            </x-filament::button>
-        </div>
-    </form>
+        .fi-panel-hr .employee-details-page-shell {
+            display: block;
+        }
+    </style>
+
+    <div class="employee-details-page-shell">
+        {{ $this->form }}
+    </div>
 </x-filament-panels::page>
