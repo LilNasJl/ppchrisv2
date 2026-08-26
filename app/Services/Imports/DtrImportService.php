@@ -9,6 +9,7 @@ use App\Models\PayrollPeriod;
 use App\Services\DtrCalculator;
 use App\Services\DtrDailyAggregationService;
 use App\Services\DtrDayPartService;
+use App\Services\DtrOvertimeTransferService;
 use App\Services\HolidayEntitlementService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -196,8 +197,18 @@ class DtrImportService
      */
     protected function validateRow(array $row, string $fallbackBatchId): array
     {
+        $isIncompletePunch = $this->isIncompletePunchRow($row);
         $requiredColumnErrors = $this->getRequiredColumnErrors($row);
         $data = $this->normalizeRow($row, $fallbackBatchId);
+
+        if ($isIncompletePunch) {
+            $data['date_out'] = null;
+            $data['time_out'] = null;
+            $data['schedule_type'] = 'Forgot to Punch';
+            $data['schedule_start'] = null;
+            $data['schedule_end'] = null;
+        }
+
         $isForgotToPunch = $this->resolveScheduleType($data) === 'Forgot to Punch';
 
         if ($requiredColumnErrors !== []) {
@@ -267,6 +278,14 @@ class DtrImportService
             ]);
         }
 
+        try {
+            $this->getImportedCalculationData($data);
+        } catch (\DomainException $exception) {
+            throw ValidationException::withMessages([
+                'overtime_transfer' => $exception->getMessage(),
+            ]);
+        }
+
         return $data;
     }
 
@@ -313,6 +332,7 @@ class DtrImportService
      */
     protected function getRequiredColumnErrors(array $row): array
     {
+        $isIncompletePunch = $this->isIncompletePunchRow($row);
         $scheduleType = $this->normalizeScheduleType(
             $this->normalizeNullableString(
                 $this->pick($row, ['schedule_type', 'schedule type', 'sched', 'schedule']),
@@ -329,7 +349,7 @@ class DtrImportService
             'Schedule Type' => ['schedule_type', 'schedule type', 'sched', 'schedule'],
         ];
 
-        if ($scheduleType !== 'Forgot to Punch') {
+        if (! $isIncompletePunch && $scheduleType !== 'Forgot to Punch') {
             $requiredColumns += [
                 'Date Out' => ['date_out', 'date out'],
                 'Time Out' => ['time_out', 'time out'],
@@ -347,6 +367,20 @@ class DtrImportService
         }
 
         return $errors;
+    }
+
+    /**
+     * A punch is incomplete when either side of its out timestamp is absent.
+     * Non-empty malformed values still reach the normal date/time validator.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function isIncompletePunchRow(array $row): bool
+    {
+        $dateOut = $this->cleanSpreadsheetValue($this->pick($row, ['date_out', 'date out']));
+        $timeOut = $this->cleanSpreadsheetValue($this->pick($row, ['time_out', 'time out']));
+
+        return blank($dateOut) || blank($timeOut);
     }
 
     /**
@@ -371,6 +405,14 @@ class DtrImportService
             'source_session_id' => $this->normalizeNullableString($this->pick($row, ['source_session_id', 'source session id', 'session_id', 'session id'])),
             'source_filename' => $this->normalizeNullableString($this->pick($row, ['source_filename', 'source filename', 'filename'])),
             'source_file_hash' => strtolower((string) ($this->normalizeNullableString($this->pick($row, ['source_file_hash', 'source file hash', 'file_hash', 'file hash'])) ?? '')) ?: null,
+            'hris_transfer_format' => $this->normalizeNullableString($this->pick($row, ['hris_transfer_format', 'hris transfer format'])),
+            'hris_transfer_version' => $this->parseInteger($this->pick($row, ['hris_transfer_version', 'hris transfer version'])),
+            'early_overtime_minutes' => $this->parseInteger($this->pick($row, ['early_overtime_minutes', 'early overtime minutes'])),
+            'overtime_minutes' => $this->parseInteger($this->pick($row, ['overtime_minutes', 'overtime minutes'])),
+            'early_overtime_status' => $this->normalizeNullableString($this->pick($row, ['early_overtime_status', 'early overtime status'])),
+            'after_overtime_status' => $this->normalizeNullableString($this->pick($row, ['after_overtime_status', 'after overtime status'])),
+            'credited_early_overtime_minutes' => $this->parseInteger($this->pick($row, ['credited_early_overtime_minutes', 'credited early overtime minutes'])),
+            'credited_overtime_minutes' => $this->parseInteger($this->pick($row, ['credited_overtime_minutes', 'credited overtime minutes'])),
         ];
     }
 
@@ -507,6 +549,18 @@ class DtrImportService
      */
     protected function getImportedCalculationData(array $data): array
     {
+        return app(DtrOvertimeTransferService::class)->applyImportedPayload(
+            $data,
+            $this->calculateImportedDtrData($data),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function calculateImportedDtrData(array $data): array
+    {
         $scheduleType = $this->resolveScheduleType($data);
 
         if ($scheduleType === 'Forgot to Punch') {
@@ -517,7 +571,7 @@ class DtrImportService
                 'schedule_start' => null,
                 'schedule_end' => null,
                 'absence_minutes' => 0,
-                ...$this->emptyCalculationData(isAbsent: true),
+                ...$this->emptyCalculationData(),
             ];
         }
 
@@ -646,9 +700,14 @@ class DtrImportService
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function hasConflictingDtr(array $data, ?string $dayPart, $additionalRecords = null): bool
-    {
-        $records = $this->getPotentialConflictRecords($data);
+    protected function hasConflictingDtr(
+        array $data,
+        ?string $dayPart,
+        $additionalRecords = null,
+        ?int $ignoreRecordId = null,
+    ): bool {
+        $records = $this->getPotentialConflictRecords($data)
+            ->reject(fn (Dtr $record): bool => $ignoreRecordId !== null && (int) $record->getKey() === $ignoreRecordId);
 
         if ($additionalRecords) {
             $records = $records
@@ -893,16 +952,64 @@ class DtrImportService
     protected function resolveScheduleType(array $data): string
     {
         $scheduleType = $this->normalizeScheduleType($data['schedule_type'] ?? null);
+        $isSaturday = filled($data['date_in'] ?? null)
+            && Carbon::parse($data['date_in'])->isSaturday();
 
         if (
-            $scheduleType === 'Regular'
-            && filled($data['date_in'] ?? null)
-            && Carbon::parse($data['date_in'])->isSaturday()
+            $isSaturday
+            && $this->employeeUsesSaturdaySchedule($data)
+            && ! in_array($scheduleType, ['Overtime', 'Forgot to Punch'], true)
         ) {
             return 'Saturday';
         }
 
+        if ($scheduleType === 'Saturday' && ! $this->employeeUsesSaturdaySchedule($data)) {
+            return $this->inferNonSaturdayScheduleType($data);
+        }
+
         return $scheduleType;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function employeeUsesSaturdaySchedule(array $data): bool
+    {
+        return str($this->getEmployee($data)?->rate_type ?? '')
+            ->lower()
+            ->contains('month');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function inferNonSaturdayScheduleType(array $data): string
+    {
+        $branch = $this->getBranch($data);
+        $scheduleStart = $data['schedule_start'] ?? null;
+
+        if ($branch && filled($scheduleStart)) {
+            try {
+                $normalizedStart = Carbon::parse($scheduleStart)->format('H:i:s');
+
+                foreach ([
+                    'reg_sched_start' => 'Regular',
+                    'shift1_start' => 'Shift1',
+                    'shift2_start' => 'Shift2',
+                    'shift3_start' => 'Shift3',
+                    'broken_shift1_start' => 'Brkn1',
+                    'broken_shift2_start' => 'Brkn2',
+                ] as $column => $type) {
+                    if (filled($branch->{$column}) && Carbon::parse($branch->{$column})->format('H:i:s') === $normalizedStart) {
+                        return $type;
+                    }
+                }
+            } catch (\Throwable) {
+                // The validator will report malformed schedule values.
+            }
+        }
+
+        return $this->normalizeScheduleType($this->getEmployee($data)?->schedule_type ?: 'Regular');
     }
 
     /**

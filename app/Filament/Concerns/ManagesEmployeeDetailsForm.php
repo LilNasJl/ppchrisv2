@@ -11,6 +11,7 @@ use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
 use App\Models\User;
 use App\Services\EmployeeDeductionService;
+use App\Services\EmployeeProfileCompletionService;
 use App\Services\EmploymentTypeChangeService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -581,6 +582,8 @@ trait ManagesEmployeeDetailsForm
 
                     Tabs\Tab::make('Basic Info')
                         ->icon('heroicon-s-user')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('basic'))
+                        ->badgeColor('warning')
                         ->schema([
                             Group::make()
                                 ->schema([
@@ -718,6 +721,8 @@ trait ManagesEmployeeDetailsForm
 
                     Tabs\Tab::make('Designation')
                         ->icon('heroicon-s-briefcase')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('designation'))
+                        ->badgeColor('warning')
                         ->schema([
                             TextInput::make('fingerprint_id')
                                 ->placeholder('e.g., 1234567'),
@@ -765,6 +770,8 @@ trait ManagesEmployeeDetailsForm
 
                     Tabs\Tab::make('Education')
                         ->icon(Heroicon::AcademicCap)
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('education'))
+                        ->badgeColor('warning')
                         ->schema([
                             TextInput::make('school_name')
                                 ->label('School Name')
@@ -846,6 +853,8 @@ trait ManagesEmployeeDetailsForm
 
                     Tabs\Tab::make('Salary')
                         ->icon(Heroicon::Banknotes)
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('salary'))
+                        ->badgeColor('warning')
                         ->schema([
                             Group::make()
                                 ->schema([
@@ -911,6 +920,14 @@ trait ManagesEmployeeDetailsForm
                 ->disabled($isReadOnly)
                 ->columnSpanFull(),
         ];
+    }
+
+    protected function profileCompletionBadge(string $section): ?string
+    {
+        $count = app(EmployeeProfileCompletionService::class)
+            ->section($this->employeeRecord ?? null, $section);
+
+        return $count > 0 ? (string) $count : null;
     }
 
     protected function saveEmployeeDetails(ModelsEmployee $record, array $data): Model

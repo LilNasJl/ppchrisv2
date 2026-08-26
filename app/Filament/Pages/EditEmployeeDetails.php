@@ -93,6 +93,10 @@ class EditEmployeeDetails extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
+            $this->employmentTypeChangeAction(),
+
+            $this->employmentTypeHistoryAction(),
+
             Action::make('view')
                 ->label('View')
                 ->icon(Heroicon::Eye)

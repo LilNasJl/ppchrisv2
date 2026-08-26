@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\Dtr;
 use App\Services\DtrDailyAggregationService;
 use App\Services\DtrDayPartService;
+use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -71,6 +72,30 @@ class DtrDailyAggregationServiceTest extends TestCase
         $this->assertSame(1.0, $result['day_count']);
     }
 
+    public function test_unresolved_forgot_to_punch_is_for_approval_not_absent(): void
+    {
+        $record = (new InMemoryDtr)->forceFill([
+            'date_in' => '2026-08-24',
+            'time_in' => '08:05:00',
+            'schedule_type' => 'Forgot to Punch',
+            'is_absent' => true,
+            'absence_minutes' => 480,
+            'late' => 5,
+            'undertime' => 475,
+            'work_hrs' => 5,
+        ]);
+
+        (new TestableDtrDailyAggregationService(new DtrDayPartService))
+            ->applyRecords(collect([$record]), 8, 2);
+
+        $this->assertFalse($record->is_absent);
+        $this->assertSame(0, $record->absence_minutes);
+        $this->assertSame(0, $record->late);
+        $this->assertSame(0, $record->undertime);
+        $this->assertSame(0, $record->work_hrs);
+        $this->assertTrue($record->requiresAttendanceApproval());
+    }
+
     protected function calculate(array $sessions): array
     {
         return $this->service()->calculate(
@@ -96,5 +121,22 @@ class DtrDailyAggregationServiceTest extends TestCase
             'schedule_start' => '08:00:00',
             'schedule_end' => '18:00:00',
         ]);
+    }
+}
+
+class TestableDtrDailyAggregationService extends DtrDailyAggregationService
+{
+    /** @param Collection<int, Dtr> $records */
+    public function applyRecords(Collection $records, float $workHoursPerDay, int $lateGraceMinutes): void
+    {
+        $this->apply($records, $workHoursPerDay, $lateGraceMinutes);
+    }
+}
+
+class InMemoryDtr extends Dtr
+{
+    public function saveQuietly(array $options = [])
+    {
+        return true;
     }
 }

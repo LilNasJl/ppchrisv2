@@ -73,6 +73,8 @@ class ViewEmployeeDetails extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
+            $this->employmentTypeHistoryAction(),
+
             Action::make('edit')
                 ->label('Edit')
                 ->icon(Heroicon::PencilSquare)

@@ -6,7 +6,6 @@ use App\Filament\Pages\PayrollPeriodBranches;
 use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -25,6 +24,7 @@ class PayrollEmployeeTable extends TableWidget
     {
         return $table
             ->query(fn (): Builder => PayrollPeriod::query()->latest('date_start'))
+            ->description('Payroll periods are listed from newest to oldest.')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -43,14 +43,20 @@ class PayrollEmployeeTable extends TableWidget
                     ->color(fn (bool $state): string => $state ? 'danger' : 'success'),
             ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('viewPayroll')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->url(fn (PayrollPeriod $record): string => PayrollPeriodBranches::getUrl([
-                            'periodId' => $record->publicKey(),
-                        ])),
-                ]),
-            ]);
+                Action::make('viewPayroll')
+                    ->label('View')
+                    ->icon(Heroicon::Eye)
+                    ->iconButton()
+                    ->tooltip('View payroll period')
+                    ->url(fn (PayrollPeriod $record): string => PayrollPeriodBranches::getUrl([
+                        'periodId' => $record->publicKey(),
+                    ])),
+            ])
+            ->striped()
+            ->paginationPageOptions([10, 25, 50])
+            ->defaultPaginationPageOption(10)
+            ->emptyStateHeading('No payroll periods found')
+            ->emptyStateDescription('Payroll periods will appear here after they are generated.')
+            ->emptyStateIcon(Heroicon::CalendarDays);
     }
 }

@@ -60,6 +60,27 @@ class DtrAttendanceUnitServiceTest extends TestCase
         $this->assertSame(2.0, $this->service()->dailyRatePayUnits($records));
     }
 
+    public function test_saturday_schedule_is_half_a_day_across_all_attendance_totals(): void
+    {
+        $record = $this->record('Saturday');
+        $records = collect([$record]);
+
+        $this->assertSame(0.5, $this->service()->recordAttendanceUnits($record));
+        $this->assertSame(0.5, $this->service()->attendanceDays($records));
+        $this->assertSame(0.5, $this->service()->dailyRatePayUnits($records));
+    }
+
+    public function test_duplicate_saturday_rows_on_the_same_date_remain_half_a_day(): void
+    {
+        $records = collect([
+            $this->record('Saturday'),
+            $this->record('SATURDAY'),
+        ]);
+
+        $this->assertSame(0.5, $this->service()->attendanceDays($records));
+        $this->assertSame(0.5, $this->service()->dailyRatePayUnits($records));
+    }
+
     public function test_regular_morning_only_is_half_a_day(): void
     {
         $records = collect([$this->regularRecord('08:00:00', '12:00:00')]);
@@ -104,6 +125,21 @@ class DtrAttendanceUnitServiceTest extends TestCase
 
         $this->assertSame(0.0, $this->service()->attendanceDays($records));
         $this->assertSame(0.0, $this->service()->dailyRatePayUnits($records));
+    }
+
+    public function test_corrected_forgot_to_punch_counts_as_attendance_after_absence_flag_is_cleared(): void
+    {
+        $record = $this->regularRecord('08:02:00', '17:05:00');
+        $record->forceFill(['is_absent' => true]);
+
+        $this->assertSame(0.0, $this->service()->attendanceDays(collect([$record])));
+
+        $record->forceFill([
+            'is_absent' => false,
+            'absence_minutes' => 0,
+        ]);
+
+        $this->assertSame(1.0, $this->service()->attendanceDays(collect([$record])));
     }
 
     private function service(): DtrAttendanceUnitService

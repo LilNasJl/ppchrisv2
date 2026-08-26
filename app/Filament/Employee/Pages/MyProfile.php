@@ -4,6 +4,7 @@ namespace App\Filament\Employee\Pages;
 
 use App\Models\Deduction;
 use App\Models\Employee;
+use App\Services\EmployeeProfileCompletionService;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -55,6 +56,19 @@ class MyProfile extends Page implements HasForms
     ];
 
     public ?array $data = [];
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = app(EmployeeProfileCompletionService::class)
+            ->total(auth()->user()?->employee);
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'warning';
+    }
 
     public function mount(): void
     {
@@ -164,6 +178,8 @@ class MyProfile extends Page implements HasForms
                         ]),
 
                     Tabs\Tab::make('Basic Info')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('basic'))
+                        ->badgeColor('warning')
                         ->schema([
                             Section::make()
                                 ->schema([
@@ -191,6 +207,8 @@ class MyProfile extends Page implements HasForms
                         ]),
 
                     Tabs\Tab::make('Designation')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('designation'))
+                        ->badgeColor('warning')
                         ->schema([
                             Section::make()
                                 ->schema([
@@ -229,6 +247,8 @@ class MyProfile extends Page implements HasForms
                         ]),
 
                     Tabs\Tab::make('Education')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('education'))
+                        ->badgeColor('warning')
                         ->schema([
                             Section::make()
                                 ->schema([
@@ -263,6 +283,8 @@ class MyProfile extends Page implements HasForms
                         ]),
 
                     Tabs\Tab::make('My Salary')
+                        ->badge(fn (): ?string => $this->profileCompletionBadge('salary'))
+                        ->badgeColor('warning')
                         ->schema([
                             Section::make()
                                 ->schema([
@@ -277,6 +299,14 @@ class MyProfile extends Page implements HasForms
                 ->persistTabInQueryString()
                 ->columnSpanFull(),
         ];
+    }
+
+    protected function profileCompletionBadge(string $section): ?string
+    {
+        $count = app(EmployeeProfileCompletionService::class)
+            ->section($this->employee(), $section);
+
+        return $count > 0 ? (string) $count : null;
     }
 
     public function save(): void

@@ -3,8 +3,11 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use App\Services\DtrDayPartService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Dtr extends Model
 {
@@ -13,6 +16,7 @@ class Dtr extends Model
     protected $fillable = [
         'sample',
         'leave_id',
+        'on_field_dtr_submission_id',
         'payroll_period_id',
         'branch_id',
         'fingerprint_id',
@@ -49,6 +53,10 @@ class Dtr extends Model
         'absence_minutes',
         'is_imported',
         'is_locked',
+        'source_session_id',
+        'source_filename',
+        'source_file_hash',
+        'source_row_hash',
     ];
 
     protected $casts = [
@@ -63,6 +71,47 @@ class Dtr extends Model
         'is_locked' => 'boolean',
         'daily_rate' => 'decimal:2',
     ];
+
+    public function requiresAttendanceApproval(): bool
+    {
+        $scheduleType = Str::lower(trim((string) $this->schedule_type));
+
+        if (Str::contains($scheduleType, 'forgot')) {
+            return true;
+        }
+
+        if (! $this->is_imported || in_array($scheduleType, ['absent', 'leave', 'overtime'], true)) {
+            return false;
+        }
+
+        return blank($this->date_in)
+            || blank($this->time_in)
+            || blank($this->date_out)
+            || blank($this->time_out);
+    }
+
+    public function scopeFinalizedAttendance(Builder $query): Builder
+    {
+        return $query
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNull('schedule_type')
+                    ->orWhereRaw("LOWER(schedule_type) NOT LIKE '%forgot%'");
+            })
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNull('is_imported')
+                    ->orWhere('is_imported', false)
+                    ->orWhereRaw("LOWER(COALESCE(schedule_type, '')) IN ('absent', 'leave', 'overtime')")
+                    ->orWhere(function (Builder $query): void {
+                        $query
+                            ->whereNotNull('date_in')
+                            ->whereNotNull('time_in')
+                            ->whereNotNull('date_out')
+                            ->whereNotNull('time_out');
+                    });
+            });
+    }
 
     public function branch()
     {
@@ -87,5 +136,16 @@ class Dtr extends Model
     public function leave()
     {
         return $this->belongsTo(Leave::class);
+    }
+
+    public function onFieldDtrSubmission()
+    {
+        return $this->belongsTo(DtrSubmission::class, 'on_field_dtr_submission_id');
+    }
+
+    public function isControlledOnFieldDtr(): bool
+    {
+        return filled($this->on_field_dtr_submission_id)
+            || $this->entry_source === DtrDayPartService::SOURCE_ON_FIELD_DTR;
     }
 }

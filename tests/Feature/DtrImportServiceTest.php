@@ -36,27 +36,31 @@ class DtrImportServiceTest extends TestCase
             'time_out' => null,
             'schedule_start' => null,
             'schedule_end' => null,
-            'is_absent' => 1,
+            'is_absent' => 0,
             'is_imported' => 1,
         ]);
     }
 
-    public function test_normal_rows_still_require_timeout_and_schedule_fields(): void
+    public function test_missing_timeout_is_inferred_as_forgot_to_punch_even_when_source_label_is_regular(): void
     {
         [$branch, $period] = $this->importContext();
         $row = $this->row($branch, $period, [
             'Date Out' => '',
             'Time Out' => '',
-            'Schedule Start' => '',
-            'Schedule End' => '',
         ]);
 
-        $result = app(DtrImportService::class)->importRows([$row], 'Invalid regular row');
+        $result = app(DtrImportService::class)->importRows([$row], 'Inferred forgot punch');
 
-        $this->assertSame(0, $result['successful']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertCount(4, $result['errors']);
-        $this->assertDatabaseCount('dtrs', 0);
+        $this->assertSame(1, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '999999',
+            'schedule_type' => 'Forgot to Punch',
+            'date_out' => null,
+            'time_out' => null,
+            'schedule_start' => null,
+            'schedule_end' => null,
+        ]);
     }
 
     public function test_date_in_must_belong_to_the_selected_open_period(): void
@@ -459,6 +463,66 @@ class DtrImportServiceTest extends TestCase
             'source_filename' => 'payroll.bin',
             'source_file_hash' => $fileHash,
         ]);
+    }
+
+    public function test_sicrc_bin_transfer_preserves_approved_early_and_after_overtime(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period, [
+            'Time In' => '07:15:00',
+            'Time Out' => '19:00:00',
+            'hris_transfer_format' => 'ppchris-sicrc-dtr',
+            'hris_transfer_version' => 1,
+            'early_overtime_minutes' => 45,
+            'overtime_minutes' => 60,
+            'early_overtime_status' => 'Approved',
+            'after_overtime_status' => 'Approved',
+            'credited_early_overtime_minutes' => 30,
+            'credited_overtime_minutes' => 45,
+        ]);
+
+        $first = app(DtrImportService::class)->importRows([$row], 'SIC/RC approved overtime');
+        $second = app(DtrImportService::class)->importRows([$row], 'Repeated SIC/RC transfer');
+
+        $this->assertSame(1, $first['successful']);
+        $this->assertSame(0, $first['failed']);
+        $this->assertSame(0, $second['successful']);
+        $this->assertSame(1, $second['skipped']);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '999999',
+            'early_clock_in' => 45,
+            'overtime' => 60,
+            'early_clock_in_approved' => 1,
+            'overtime_approved' => 1,
+            'credited_early_clock_in' => 30,
+            'credited_overtime' => 75,
+            'overtime_status' => 'Approved',
+        ]);
+        $this->assertDatabaseCount('dtrs', 1);
+    }
+
+    public function test_invalid_sicrc_approval_metadata_cancels_the_import(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period, [
+            'Time In' => '07:15:00',
+            'Time Out' => '19:00:00',
+            'hris_transfer_format' => 'ppchris-sicrc-dtr',
+            'hris_transfer_version' => 1,
+            'early_overtime_minutes' => 45,
+            'overtime_minutes' => 60,
+            'early_overtime_status' => 'Approved',
+            'after_overtime_status' => 'Confirmed',
+            'credited_early_overtime_minutes' => 30,
+            'credited_overtime_minutes' => 45,
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$row], 'Invalid SIC/RC approval');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertStringContainsString('status is invalid', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
     }
 
     /**

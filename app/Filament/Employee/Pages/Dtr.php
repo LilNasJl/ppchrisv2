@@ -3,7 +3,9 @@
 namespace App\Filament\Employee\Pages;
 
 use App\Models\Dtr as DtrModel;
+use App\Models\DtrChangeRequest;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
@@ -57,9 +59,14 @@ class Dtr extends Page implements HasForms, HasTable
 
         if ($employee && filled($fingerprintId) && filled($employee->branch_id)) {
             $periodId = PayrollPeriod::query()
-                ->whereHas('dtrs', fn (Builder $query): Builder => $query
-                    ->where('fingerprint_id', $fingerprintId)
-                    ->where('branch_id', $employee->branch_id))
+                ->where(function (Builder $query) use ($employee, $fingerprintId): void {
+                    $query
+                        ->whereHas('dtrs', fn (Builder $query): Builder => $query
+                            ->where('fingerprint_id', $fingerprintId)
+                            ->where('branch_id', $employee->branch_id))
+                        ->orWhereHas('employeeVisibleDtrs', fn (Builder $query): Builder => $query
+                            ->forEmployee($employee));
+                })
                 ->newestFirst()
                 ->value('id');
         }
@@ -77,6 +84,16 @@ class Dtr extends Page implements HasForms, HasTable
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('changeRequests')
+                ->label('Change Requests')
+                ->icon(Heroicon::DocumentText)
+                ->badge(fn (): ?string => $this->unseenReviewedRequestBadge())
+                ->badgeColor('danger')
+                ->badgeTooltip('Reviewed change requests you have not opened yet')
+                ->url(fn (): string => DtrChangeRequests::getUrl([
+                    'periodId' => $this->selectedPeriod?->publicKey(),
+                ])),
+
             Action::make('printDtr')
                 ->label('Print / PDF D.T.R')
                 ->icon(Heroicon::Printer)
@@ -84,6 +101,23 @@ class Dtr extends Page implements HasForms, HasTable
                 ->openUrlInNewTab()
                 ->disabled(fn (): bool => ! $this->canPrintDtr()),
         ];
+    }
+
+    protected function unseenReviewedRequestBadge(): ?string
+    {
+        $employeeId = auth()->user()?->employee?->id;
+
+        if (! $employeeId) {
+            return null;
+        }
+
+        $count = DtrChangeRequest::query()
+            ->where('employee_id', $employeeId)
+            ->reviewed()
+            ->unseenByEmployee()
+            ->count();
+
+        return $count > 0 ? (string) $count : null;
     }
 
     protected function getFormSchema(): array
@@ -108,9 +142,9 @@ class Dtr extends Page implements HasForms, HasTable
         return $table
             ->query(fn (): Builder => $this->dtrQuery()
                 ->with(['holiday', 'payrollPeriod'])
-                ->orderBy('date_in')
-                ->orderBy('time_in')
-                ->orderBy('id'))
+                ->orderByDesc('date_in')
+                ->orderByDesc('time_in')
+                ->orderByDesc('id'))
             ->heading(fn (): string => $this->selectedPeriod?->title ?: 'D.T.R Entries')
             ->description('Read-only attendance records for the selected payroll period.')
             ->columns([
@@ -125,6 +159,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->color(fn (string $state): string => match ($state) {
                         'Absent' => 'danger',
                         'Leave' => 'info',
+                        'For Approval' => 'warning',
                         'Overtime' => 'warning',
                         default => 'success',
                     }),
@@ -280,22 +315,28 @@ class Dtr extends Page implements HasForms, HasTable
             return $defaults;
         }
 
-        $summary = $this->baseDtrQuery()
-            ->selectRaw('COUNT(*) as total_entries')
-            ->selectRaw('SUM(CASE WHEN COALESCE(is_absent, 0) = 1 THEN 1 ELSE 0 END) as absent_entries')
-            ->selectRaw("SUM(CASE WHEN leave_id IS NOT NULL OR LOWER(COALESCE(schedule_type, '')) = 'leave' THEN 1 ELSE 0 END) as leave_entries")
-            ->selectRaw('COALESCE(SUM(late), 0) as total_late')
-            ->selectRaw('COALESCE(SUM(undertime), 0) as total_undertime')
-            ->selectRaw('COALESCE(SUM(credited_overtime), 0) as total_credited_overtime')
-            ->selectRaw('COALESCE(SUM(credited_work_hrs), 0) as total_credited_work')
-            ->first();
-
-        $overview = collect($defaults)
-            ->mapWithKeys(fn (int $default, string $key): array => [$key => (int) ($summary?->{$key} ?? $default)])
-            ->all();
+        $records = $this->baseDtrQuery()->get();
+        $finalizedRecords = $records
+            ->reject(fn (DtrModel $record): bool => $record->requiresAttendanceApproval())
+            ->values();
+        $overview = [
+            'total_entries' => $finalizedRecords->count(),
+            'present_entries' => 0,
+            'leave_entries' => $finalizedRecords->filter(
+                fn (DtrModel $record): bool => filled($record->leave_id)
+                    || str($record->schedule_type)->lower()->toString() === 'leave',
+            )->count(),
+            'absent_entries' => $finalizedRecords->filter(
+                fn (DtrModel $record): bool => (bool) $record->is_absent,
+            )->count(),
+            'total_late' => (int) $finalizedRecords->sum('late'),
+            'total_undertime' => (int) $finalizedRecords->sum('undertime'),
+            'total_credited_overtime' => (int) $finalizedRecords->sum('credited_overtime'),
+            'total_credited_work' => (int) $finalizedRecords->sum('credited_work_hrs'),
+        ];
 
         $overview['present_entries'] = app(DtrAttendanceUnitService::class)
-            ->attendanceDays($this->baseDtrQuery()->get());
+            ->attendanceDays($finalizedRecords);
 
         return $overview;
     }
@@ -323,6 +364,10 @@ class Dtr extends Page implements HasForms, HasTable
 
     public function attendanceStatus(DtrModel $record): string
     {
+        if ($record->requiresAttendanceApproval()) {
+            return 'For Approval';
+        }
+
         if ($record->is_absent) {
             return 'Absent';
         }
@@ -347,7 +392,7 @@ class Dtr extends Page implements HasForms, HasTable
             ->newestFirst()
             ->get()
             ->mapWithKeys(fn (PayrollPeriod $period): array => [
-                $period->id => sprintf('%s - %s', $period->title, $period->is_locked ? 'Locked' : 'Open'),
+                $period->id => $period->title,
             ])
             ->all();
     }
@@ -369,11 +414,26 @@ class Dtr extends Page implements HasForms, HasTable
             return DtrModel::query()->whereRaw('1 = 0');
         }
 
+        if ($this->selectedPeriod && ! $this->selectedPeriod->is_locked && $this->hasEmployeeVisibleDtr($employee)) {
+            return EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', (int) $this->period_id)
+                ->forEmployee($employee);
+        }
+
         return app(DtrRecordService::class)->query(
             $employee,
             (int) $employee->branch_id,
             (int) $this->period_id,
         );
+    }
+
+    protected function hasEmployeeVisibleDtr(Employee $employee): bool
+    {
+        return filled($this->period_id)
+            && EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', (int) $this->period_id)
+                ->forEmployee($employee)
+                ->exists();
     }
 
     protected function fingerprintId(?Employee $employee): string|int|null

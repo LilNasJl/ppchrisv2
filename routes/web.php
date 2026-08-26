@@ -3,12 +3,16 @@
 use App\Http\Controllers\DtrPrintController;
 use App\Http\Controllers\Hr\DtrExportController;
 use App\Http\Controllers\Hr\DtrImportController;
+use App\Http\Controllers\Hr\DtrSubmissionDownloadController;
 use App\Http\Controllers\Hr\EmployeeImportController;
 use App\Http\Controllers\Hr\PayrollByBranchPrintController;
 use App\Http\Controllers\Hr\PayrollSummaryPrintController;
 use App\Http\Controllers\Hr\ReportPrintController;
 use App\Http\Controllers\Hr\ThirteenthMonthPayPrintController;
 use App\Http\Controllers\PayrollPayslipPrintController;
+use App\Http\Controllers\SicRc\DtrPreviewImportController;
+use App\Http\Controllers\SicRc\EmployeeVisibleDtrExportController;
+use App\Http\Controllers\SicRc\EmployeeVisibleDtrPrintController;
 use App\Models\Leave;
 use App\Models\Memo;
 use App\Models\Ticket;
@@ -129,6 +133,17 @@ Route::middleware('auth')
         Route::post('/import/employees', EmployeeImportController::class)->name('import.employees');
         Route::post('/import/dtr', DtrImportController::class)->name('import.dtr');
         Route::get('/export/dtr.csv', DtrExportController::class)->name('export.dtr');
+        Route::get('/dtr-submissions/{submission}/download', DtrSubmissionDownloadController::class)->name('dtr_submissions.download');
+        Route::get('/dtr-submissions/{submission}/view', [DtrSubmissionDownloadController::class, 'view'])->name('dtr_submissions.view');
+    });
+
+Route::middleware('auth:sicrc')
+    ->prefix('sicrc-tools')
+    ->name('sicrc_tools.')
+    ->group(function (): void {
+        Route::post('/import/dtr-preview', DtrPreviewImportController::class)->name('import.dtr_preview');
+        Route::get('/export/dtr-preview.bin', EmployeeVisibleDtrExportController::class)->name('export.dtr_preview');
+        Route::get('/dtr/print/{period}/{branch}/{employee}', EmployeeVisibleDtrPrintController::class)->name('dtr.print');
     });
 
 Route::view('/', 'landing')->name('landing');

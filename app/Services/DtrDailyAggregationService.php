@@ -270,13 +270,21 @@ class DtrDailyAggregationService
         $aggregate = $this->calculate($records, $workHoursPerDay, $lateGraceMinutes);
 
         if (! $aggregate) {
-            $forgotten->each(function (Dtr $record) use ($workHoursPerDay): void {
-                $absenceMinutes = Carbon::parse($record->date_in)->isSaturday()
-                    ? 180
-                    : (int) round($workHoursPerDay * 60);
+            $forgotten->each(function (Dtr $record): void {
                 $record->forceFill([
-                    'is_absent' => true,
-                    'absence_minutes' => $absenceMinutes,
+                    'late' => 0,
+                    'undertime' => 0,
+                    'early_clock_in' => 0,
+                    'overtime' => 0,
+                    'credited_early_clock_in' => 0,
+                    'credited_overtime' => 0,
+                    'work_hrs' => 0,
+                    'credited_work_hrs' => 0,
+                    'overtime_status' => 'n/a',
+                    'early_clock_in_approved' => false,
+                    'overtime_approved' => false,
+                    'is_absent' => false,
+                    'absence_minutes' => 0,
                     'day_part' => DtrDayPartService::WHOLE_DAY,
                 ])->saveQuietly();
             });
@@ -362,6 +370,17 @@ class DtrDailyAggregationService
 
         $forgotten->each(function (Dtr $record): void {
             $record->forceFill([
+                'late' => 0,
+                'undertime' => 0,
+                'early_clock_in' => 0,
+                'overtime' => 0,
+                'credited_early_clock_in' => 0,
+                'credited_overtime' => 0,
+                'work_hrs' => 0,
+                'credited_work_hrs' => 0,
+                'overtime_status' => 'n/a',
+                'early_clock_in_approved' => false,
+                'overtime_approved' => false,
                 'is_absent' => false,
                 'absence_minutes' => 0,
             ])->saveQuietly();

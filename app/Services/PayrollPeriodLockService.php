@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Exceptions\PendingOvertimeApprovalsException;
 use App\Models\Deduction;
 use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
@@ -11,13 +10,15 @@ use App\Models\PayrollPeriod;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
+use Throwable;
 
 class PayrollPeriodLockService
 {
     public function setLocked(PayrollPeriod $period, bool $locked): void
     {
         if ($locked) {
-            $this->lock($period);
+            $this->lock($period, manuallyRequested: true);
 
             return;
         }
@@ -25,14 +26,14 @@ class PayrollPeriodLockService
         $this->unlock($period);
     }
 
-    public function lock(PayrollPeriod $period): void
+    public function lock(PayrollPeriod $period, bool $manuallyRequested = false): void
     {
-        DB::transaction(function () use ($period): void {
+        DB::transaction(function () use ($period, $manuallyRequested): void {
             $period->refresh();
 
             if (! $period->is_locked) {
-                if (app(OvertimeApprovalService::class)->hasPendingForPeriod($period)) {
-                    throw new PendingOvertimeApprovalsException;
+                if ($manuallyRequested) {
+                    $this->assertManualLockAllowed($period);
                 }
 
                 app(PayrollCalculator::class)->snapshotPeriod($period);
@@ -40,6 +41,9 @@ class PayrollPeriodLockService
                 $period->forceFill([
                     'is_locked' => true,
                     'locked_at' => $period->locked_at ?: now(),
+                    'unlocked_at' => null,
+                    'auto_lock_blocked_at' => null,
+                    'auto_lock_blocked_reason' => null,
                 ])->save();
             }
 
@@ -70,6 +74,9 @@ class PayrollPeriodLockService
 
             $period->forceFill([
                 'is_locked' => false,
+                'unlocked_at' => now(),
+                'auto_lock_blocked_at' => null,
+                'auto_lock_blocked_reason' => null,
                 'loan_payments_processed_at' => null,
             ])->save();
         });
@@ -77,27 +84,78 @@ class PayrollPeriodLockService
 
     public function lockPastPayoutPeriods(?CarbonInterface $date = null): int
     {
-        $today = ($date ?: now('Asia/Manila'))->copy()->timezone('Asia/Manila')->toDateString();
+        $now = ($date ?: now('Asia/Manila'))->copy()->timezone('Asia/Manila');
+        $today = $now->toDateString();
+        $relockCutoff = $now->copy()->subDay();
         $locked = 0;
 
         PayrollPeriod::query()
             ->where('is_locked', false)
             ->whereDate('date_payout', '<', $today)
+            ->where(function ($query) use ($relockCutoff): void {
+                $query
+                    ->whereNull('unlocked_at')
+                    ->orWhere('unlocked_at', '<=', $relockCutoff);
+            })
             ->orderBy('date_payout')
             ->get()
-            ->each(function (PayrollPeriod $period) use (&$locked): void {
-                try {
-                    $this->lock($period);
+            ->each(function (PayrollPeriod $period) use (&$locked, $now): void {
+                if ($this->retryDuePeriod($period, $now)) {
                     $locked++;
-                } catch (PendingOvertimeApprovalsException $exception) {
-                    Log::warning('Automatic payroll lock skipped because overtime approval is pending.', [
-                        'payroll_period_id' => $period->id,
-                        'message' => $exception->getMessage(),
-                    ]);
                 }
             });
 
         return $locked;
+    }
+
+    public function retryDuePeriod(PayrollPeriod $period, ?CarbonInterface $date = null): bool
+    {
+        $period->refresh();
+
+        if ($period->is_locked) {
+            return true;
+        }
+
+        $now = ($date ?: now('Asia/Manila'))->copy()->timezone('Asia/Manila');
+
+        if (blank($period->date_payout) || ! $period->date_payout->isBefore($now->copy()->startOfDay())) {
+            return false;
+        }
+
+        if ($period->unlocked_at && $period->unlocked_at->greaterThan($now->copy()->subDay())) {
+            return false;
+        }
+
+        try {
+            $this->lock($period);
+
+            return true;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $period->forceFill([
+                'auto_lock_blocked_at' => $now,
+                'auto_lock_blocked_reason' => 'Automatic locking failed. Review the application log before locking this period.',
+            ])->save();
+
+            Log::error('Automatic payroll lock failed.', [
+                'payroll_period_id' => $period->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        return false;
+    }
+
+    protected function assertManualLockAllowed(PayrollPeriod $period, ?CarbonInterface $date = null): void
+    {
+        $today = ($date ?: now('Asia/Manila'))->copy()->timezone('Asia/Manila')->startOfDay();
+
+        if ($period->date_end && $today->isBefore($period->date_end->copy()->startOfDay())) {
+            throw new InvalidArgumentException(
+                'This payroll period cannot be locked before its end date of '.$period->date_end->format('M d, Y').'.',
+            );
+        }
     }
 
     protected function processDeductionTerms(PayrollPeriod $period): void

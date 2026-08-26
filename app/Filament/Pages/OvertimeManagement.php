@@ -295,6 +295,7 @@ class OvertimeManagement extends Page implements HasTable
 
         return app(DtrRecordService::class)
             ->query($employee, $this->branchId, $this->periodId)
+            ->finalizedAttendance()
             ->with('payrollPeriod')
             ->orderBy('date_in')
             ->orderBy('time_in')

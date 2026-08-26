@@ -11,6 +11,7 @@ use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use App\Services\HolidayEntitlementService;
+use App\Services\OnFieldDtrService;
 use App\Services\OvertimeApprovalService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -62,6 +63,10 @@ class DtrManageTable extends BaseWidget
                     ->label('Status')
                     ->badge()
                     ->getStateUsing(function (ModelsDtr $record): string {
+                        if ($record->requiresAttendanceApproval()) {
+                            return 'For Approval';
+                        }
+
                         if ($record->leave_id || $record->schedule_type === 'Leave') {
                             return 'Leave';
                         }
@@ -80,6 +85,7 @@ class DtrManageTable extends BaseWidget
                     ->color(fn (string $state): string => match ($state) {
                         'Leave' => 'info',
                         'Absent' => 'danger',
+                        'For Approval' => 'warning',
                         'Review Required' => 'warning',
                         default => 'success',
                     }),
@@ -302,7 +308,7 @@ class DtrManageTable extends BaseWidget
                         ->color('danger')
                         ->requiresConfirmation()
                         ->modalHeading('Clear D.T.R entries?')
-                        ->modalDescription('This will clear all D.T.R entries for this employee, branch, and selected payroll period.')
+                        ->modalDescription('This clears ordinary D.T.R entries for this employee, branch, and payroll period. Approved On Field DTR records are kept and must be deleted individually by HR.')
                         ->disabled(fn (): bool => $this->isSelectedPayrollPeriodLocked())
                         ->action(fn (): mixed => $this->clearDtr()),
                 ])
@@ -411,14 +417,14 @@ class DtrManageTable extends BaseWidget
                         ->schema($this->getDtrFormSchema())
                         ->modalHeading('Edit D.T.R')
                         ->modalSubmitActionLabel('Save')
-                        ->visible(fn (ModelsDtr $record): bool => ! $record->is_absent && ! $this->isRecordLocked($record))
+                        ->visible(fn (ModelsDtr $record): bool => $this->canEditDtrRecord($record))
                         ->fillForm(fn (ModelsDtr $record): array => $this->getEditFormData($record))
                         ->action(fn (ModelsDtr $record, array $data): mixed => $this->updateDtr($record, $data)),
 
                     DeleteAction::make('deleteDtr')
                         ->label('Delete')
-                        ->visible(fn (ModelsDtr $record): bool => ! $this->isRecordLocked($record))
-                        ->using(fn (ModelsDtr $record): bool => (bool) $record->forceDelete()),
+                        ->visible(fn (ModelsDtr $record): bool => $this->canDeleteDtrRecord($record))
+                        ->using(fn (ModelsDtr $record): bool => $this->deleteDtrRecord($record)),
                 ])
                     ->icon('heroicon-m-ellipsis-vertical')
                     ->tooltip('Actions')
@@ -477,14 +483,14 @@ class DtrManageTable extends BaseWidget
 
                     Select::make('schedule_start')
                         ->label('Schedule Start')
-                        ->options(fn (): array => $this->getScheduleStartOptions())
+                        ->options(fn (?ModelsDtr $record): array => $this->getScheduleStartOptions($record))
                         ->searchable()
                         ->disabled(fn (Get $get): bool => $get('dtr_type') === 'overtime' || $this->usesSaturdaySchedule($get('date_in')))
                         ->required(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && ! $this->usesSaturdaySchedule($get('date_in'))),
 
                     Select::make('schedule_end')
                         ->label('Schedule End')
-                        ->options(fn (): array => $this->getScheduleEndOptions())
+                        ->options(fn (?ModelsDtr $record): array => $this->getScheduleEndOptions($record))
                         ->searchable()
                         ->disabled(fn (Get $get): bool => $get('dtr_type') === 'overtime' || $this->usesSaturdaySchedule($get('date_in')))
                         ->required(fn (Get $get): bool => $get('dtr_type') !== 'overtime' && ! $this->usesSaturdaySchedule($get('date_in'))),
@@ -561,24 +567,24 @@ class DtrManageTable extends BaseWidget
             ->send();
     }
 
-    protected function updateDtr(ModelsDtr $record, array $data): void
+    protected function updateDtr(ModelsDtr $record, array $data): bool
     {
         if ($this->isRecordLocked($record)) {
             $this->sendLockedNotification();
 
-            return;
+            return false;
         }
 
         if (! $this->ensureDtrDatesWithinSelectedPayrollPeriod($data, 'Unable to update D.T.R record')) {
-            return;
+            return false;
         }
 
         if (! $this->validateDtrTypeForDate($data, 'Unable to update D.T.R record')) {
-            return;
+            return false;
         }
 
         if (! $this->validateSchedulePair($data, 'Unable to update D.T.R record')) {
-            return;
+            return false;
         }
 
         $dtrData = $this->buildDtrData($data);
@@ -590,10 +596,14 @@ class DtrManageTable extends BaseWidget
                 ->danger()
                 ->send();
 
-            return;
+            return false;
         }
 
-        $record->update($dtrData);
+        $record->forceFill([
+            ...$dtrData,
+            'is_absent' => false,
+            'absence_minutes' => 0,
+        ])->save();
 
         $this->flushCachedTableRecords();
 
@@ -601,6 +611,8 @@ class DtrManageTable extends BaseWidget
             ->title('D.T.R record updated')
             ->success()
             ->send();
+
+        return true;
     }
 
     protected function addAbsence(array $data): void
@@ -801,7 +813,9 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
-        $deleted = $this->getScopedDtrQuery()->delete();
+        $deleted = $this->getScopedDtrQuery()
+            ->whereNull('on_field_dtr_submission_id')
+            ->delete();
 
         if ($deleted > 0) {
             HrDatabaseNotification::send(
@@ -839,6 +853,16 @@ class DtrManageTable extends BaseWidget
 
         if ($this->isRecordLocked($record)) {
             $this->sendLockedNotification();
+
+            return;
+        }
+
+        if ($record->isControlledOnFieldDtr()) {
+            Notification::make()
+                ->title('Controlled On Field DTR')
+                ->body('The comment is part of an approved On Field DTR record and cannot be changed separately.')
+                ->warning()
+                ->send();
 
             return;
         }
@@ -883,14 +907,17 @@ class DtrManageTable extends BaseWidget
         }
 
         $records = $this->getScopedDtrQuery()->get();
-        $workRecords = $records
+        $finalizedRecords = $records
+            ->reject(fn (ModelsDtr $record): bool => $record->requiresAttendanceApproval())
+            ->values();
+        $workRecords = $finalizedRecords
             ->filter(fn (ModelsDtr $record): bool => ! (bool) $record->is_absent
                 && blank($record->leave_id)
                 && ! in_array($record->schedule_type, ['Absent', 'Leave', 'Overtime'], true)
                 && filled($record->date_in))
             ->values();
         $workDayUnits = app(DtrAttendanceUnitService::class)->attendanceDays($workRecords);
-        $leaveDayCount = $records
+        $leaveDayCount = $finalizedRecords
             ->filter(fn (ModelsDtr $record): bool => filled($record->leave_id)
                 || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
                 || $record->schedule_type === 'Leave')
@@ -900,18 +927,18 @@ class DtrManageTable extends BaseWidget
             'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
             'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
             'total_days_work' => $workDayUnits + $leaveDayCount,
-            'late' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
-            'undertime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
-            'credited_overtime' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
-            'credited_work_hrs' => (int) $records->sum(fn (ModelsDtr $record): int => (int) ($record->credited_work_hrs ?? 0)),
+            'late' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
+            'undertime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
+            'credited_overtime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
+            'credited_work_hrs' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->credited_work_hrs ?? 0)),
         ];
     }
 
     protected function getEditFormData(ModelsDtr $record): array
     {
-        $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true);
+        $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true)
+            && $this->usesSaturdaySchedule($record->date_in);
         $dayPart = app(DtrAttendanceUnitService::class)->dayPartForRecord($record);
-        $usesRegularSchedule = app(DtrDayPartService::class)->isRegularScheduleType($record->schedule_type);
 
         return [
             'dtr_type' => $record->schedule_type === 'Overtime'
@@ -927,10 +954,10 @@ class DtrManageTable extends BaseWidget
             'time_out' => $record->time_out,
             'schedule_start' => $usesSaturdaySchedule
                 ? null
-                : ($usesRegularSchedule ? 'reg_sched_start' : $this->getScheduleColumnByTime($record->schedule_start, $this->getScheduleStartColumns())),
+                : $this->getScheduleColumnForRecord($record, isStart: true),
             'schedule_end' => $usesSaturdaySchedule
                 ? null
-                : ($usesRegularSchedule ? 'reg_sched_end' : $this->getScheduleColumnByTime($record->schedule_end, $this->getScheduleEndColumns())),
+                : $this->getScheduleColumnForRecord($record, isStart: false),
             'saturday_schedule_start' => '08:00:00',
             'saturday_schedule_end' => '11:00:00',
             'comment' => $record->comment,
@@ -1148,9 +1175,9 @@ class DtrManageTable extends BaseWidget
         }
     }
 
-    protected function getScheduleStartOptions(): array
+    protected function getScheduleStartOptions(?ModelsDtr $record = null): array
     {
-        return $this->getScheduleOptions($this->getScheduleStartColumns());
+        return $this->getScheduleOptions($this->getScheduleStartColumns(), $record?->schedule_start);
     }
 
     protected function getDtrTypeOptions(mixed $date = null): array
@@ -1239,6 +1266,10 @@ class DtrManageTable extends BaseWidget
             ? str($scheduleStartColumn)->replaceEnd('_start', '_end')->toString()
             : null;
 
+        if ($this->isLiteralTime($scheduleStartColumn) && $this->isLiteralTime($scheduleEndColumn)) {
+            return true;
+        }
+
         if (filled($expectedEndColumn) && $scheduleEndColumn === $expectedEndColumn) {
             return true;
         }
@@ -1252,9 +1283,9 @@ class DtrManageTable extends BaseWidget
         return false;
     }
 
-    protected function getScheduleEndOptions(): array
+    protected function getScheduleEndOptions(?ModelsDtr $record = null): array
     {
-        return $this->getScheduleOptions($this->getScheduleEndColumns());
+        return $this->getScheduleOptions($this->getScheduleEndColumns(), $record?->schedule_end);
     }
 
     protected function getScheduleStartColumns(): array
@@ -1281,7 +1312,7 @@ class DtrManageTable extends BaseWidget
         ];
     }
 
-    protected function getScheduleOptions(array $columns): array
+    protected function getScheduleOptions(array $columns, ?string $recordedTime = null): array
     {
         $branch = $this->getBranch();
 
@@ -1301,7 +1332,30 @@ class DtrManageTable extends BaseWidget
             $options[$column] = "{$label} - ".Carbon::parse($value)->format('h:i A');
         }
 
+        if (filled($recordedTime) && blank($this->getScheduleColumnByTime($recordedTime, $columns))) {
+            $normalizedTime = $this->normalizeTime($recordedTime);
+            $options[$normalizedTime] = 'Recorded Schedule - '.Carbon::parse($normalizedTime)->format('h:i A');
+        }
+
         return $options;
+    }
+
+    protected function getScheduleColumnForRecord(ModelsDtr $record, bool $isStart): ?string
+    {
+        $time = $isStart ? $record->schedule_start : $record->schedule_end;
+        $columns = $isStart ? $this->getScheduleStartColumns() : $this->getScheduleEndColumns();
+        $matchedColumn = $this->getScheduleColumnByTime($time, $columns);
+
+        if (filled($matchedColumn)) {
+            return $matchedColumn;
+        }
+
+        return filled($time) ? $this->normalizeTime($time) : null;
+    }
+
+    protected function isLiteralTime(mixed $value): bool
+    {
+        return is_string($value) && preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $value) === 1;
     }
 
     protected function getScheduleTime(?string $scheduleColumn): ?string
@@ -1350,7 +1404,9 @@ class DtrManageTable extends BaseWidget
 
         return match ($scheduleStartColumn) {
             'reg_sched_start' => 'Regular',
-            'shift1_start', 'shift2_start', 'shift3_start' => 'Shifting',
+            'shift1_start' => 'Shift1',
+            'shift2_start' => 'Shift2',
+            'shift3_start' => 'Shift3',
             'broken_shift1_start' => 'Brkn1',
             'broken_shift2_start' => 'Brkn2',
             default => 'Manual',
@@ -1385,7 +1441,7 @@ class DtrManageTable extends BaseWidget
             return false;
         }
 
-        return Carbon::parse($date)->isSaturday();
+        return $this->isMonthlyRateEmployee() && Carbon::parse($date)->isSaturday();
     }
 
     protected function canUseRegularFill(): bool
@@ -1420,6 +1476,55 @@ class DtrManageTable extends BaseWidget
         $comment = trim((string) ($comment ?? ''));
 
         return $comment === '' ? null : $comment;
+    }
+
+    protected function canEditDtrRecord(ModelsDtr $record): bool
+    {
+        return ! $record->isControlledOnFieldDtr()
+            && (! $record->is_absent || $record->schedule_type === 'Forgot to Punch')
+            && ! $this->isRecordLocked($record);
+    }
+
+    protected function canDeleteDtrRecord(ModelsDtr $record): bool
+    {
+        if ($this->isRecordLocked($record)) {
+            return false;
+        }
+
+        if (! $record->isControlledOnFieldDtr()) {
+            return true;
+        }
+
+        $user = auth()->user();
+
+        return $user !== null && in_array($user->role, ['hr', 'admin'], true);
+    }
+
+    protected function deleteDtrRecord(ModelsDtr $record): bool
+    {
+        try {
+            if ($record->isControlledOnFieldDtr()) {
+                $user = auth()->user();
+
+                if (! $user) {
+                    throw new \DomainException('Only an authorized HR or admin account can delete this controlled D.T.R record.');
+                }
+
+                app(OnFieldDtrService::class)->deleteGeneratedDtr($record, $user);
+
+                return true;
+            }
+
+            return (bool) $record->forceDelete();
+        } catch (\DomainException $exception) {
+            Notification::make()
+                ->title('D.T.R was not deleted')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            return false;
+        }
     }
 
     protected function ensureDatesWithinSelectedPayrollPeriod(array $dates, string $title): bool

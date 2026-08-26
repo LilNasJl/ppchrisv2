@@ -7,5 +7,5 @@ test('the application displays the landing page', function () {
         ->assertOk()
         ->assertSee('Human Resource Information System')
         ->assertSee('HR Portal')
-        ->assertSee('Employee Self-Service');
+        ->assertSee('Self-Service');
 });

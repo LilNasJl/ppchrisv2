@@ -20,6 +20,10 @@
         <span>Use the file exported from D.T.R Viewer</span>
         <input id="file" type="file" accept=".csv,.xlsx,.xls">
       </div>
+      <div class="field" id="scopeField" style="display:none">
+        <label for="scopeLabel">Destination</label>
+        <input id="scopeLabel" readonly>
+      </div>
       <div class="field">
         <label for="importName">Import Name</label>
         <input id="importName" maxlength="191" placeholder="e.g. May 2026 payroll D.T.R">
@@ -47,9 +51,13 @@
 const params=new URLSearchParams(location.search);
 const endpoint=params.get('endpoint')||'/hr-tools/import/dtr';
 const csrf=params.get('csrf')||'';
+const forcedPeriodId=params.get('period_id')||'';
+const forcedBranchId=params.get('branch_id')||'';
+const scopeLabel=params.get('scope_label')||'';
 let rows=[];
 let fallbackBatch=genBatchId();
 const el=id=>document.getElementById(id);
+if(scopeLabel){el('scopeLabel').value=scopeLabel;el('scopeField').style.display='block';}
 
 el('choose').onclick=()=>el('file').click();
 el('file').onchange=e=>loadFile(e.target.files[0]);
@@ -121,13 +129,21 @@ async function postRows(chunk,importName){
   const res=await fetch(endpoint,{
     method:'POST',
     headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':csrf},
-    body:JSON.stringify({rows:chunk,import_name:importName,batch_id:fallbackBatch})
+    body:JSON.stringify({rows:applyScope(chunk),import_name:importName,batch_id:fallbackBatch,period_id:forcedPeriodId,branch_id:forcedBranchId})
   });
   const json=await res.json().catch(()=>({message:'Invalid server response.'}));
   if(!res.ok)throw new Error(json.message||'Import request failed.');
   return json;
 }
 
+function applyScope(chunk){
+  if(!forcedPeriodId&&!forcedBranchId)return chunk;
+  return chunk.map(row=>({
+    ...row,
+    ...(forcedPeriodId?{'payroll_period_id':forcedPeriodId,'Period ID':forcedPeriodId}:{}),
+    ...(forcedBranchId?{'branch_id':forcedBranchId,'Branch ID':forcedBranchId}:{}),
+  }));
+}
 function detectBatch(data){
   for(const row of data){
     for(const key of Object.keys(row)){

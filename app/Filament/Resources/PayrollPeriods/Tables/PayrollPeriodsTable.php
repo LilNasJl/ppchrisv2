@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Tables;
 
-use App\Exceptions\PendingOvertimeApprovalsException;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollPeriodLockService;
 use Filament\Actions\ActionGroup;
@@ -12,6 +11,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Throwable;
 
 class PayrollPeriodsTable
 {
@@ -49,6 +49,24 @@ class PayrollPeriodsTable
                     ->date()
                     ->tooltip('Automatic lock runs after the payout date.'),
 
+                TextColumn::make('auto_lock_status')
+                    ->label('Auto Lock Status')
+                    ->getStateUsing(fn (PayrollPeriod $record): string => match (true) {
+                        $record->is_locked => 'Locked',
+                        filled($record->auto_lock_blocked_reason) => 'Blocked',
+                        $record->unlocked_at?->greaterThan(now('Asia/Manila')->subDay()) => 'Manual Grace Period',
+                        $record->date_payout?->isBefore(now('Asia/Manila')->startOfDay()) => 'Due',
+                        default => 'Scheduled',
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Locked' => 'success',
+                        'Blocked' => 'danger',
+                        'Due', 'Manual Grace Period' => 'warning',
+                        default => 'gray',
+                    })
+                    ->tooltip(fn (PayrollPeriod $record): ?string => $record->auto_lock_blocked_reason),
+
                 ToggleColumn::make('is_locked')
                     ->label('Locked')
                     ->onColor('danger')
@@ -56,7 +74,7 @@ class PayrollPeriodsTable
                     ->updateStateUsing(function (PayrollPeriod $record, mixed $state): bool {
                         try {
                             app(PayrollPeriodLockService::class)->setLocked($record, (bool) $state);
-                        } catch (PendingOvertimeApprovalsException $exception) {
+                        } catch (Throwable $exception) {
                             Notification::make()
                                 ->title('Payroll period was not locked')
                                 ->body($exception->getMessage())

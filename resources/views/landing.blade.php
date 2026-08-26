@@ -660,17 +660,20 @@
 
                     <p class="portal-heading">Choose your secure portal</p>
                     <nav class="portal-actions" aria-label="Login portals">
-                        <a href="{{ route('filament.hr.auth.login') }}" class="portal-link portal-link-primary">
+                        <a href="{{ route('filament.hr.auth.login') }}" class="portal-link portal-link-primary" data-portal="hr">
                             HR Portal
                         </a>
-                        <a href="{{ route('filament.employee.auth.login') }}" class="portal-link portal-link-secondary">
-                            Employee Self-Service
+                        <a href="{{ route('filament.employee.auth.login') }}" class="portal-link portal-link-secondary" data-portal="employee">
+                            Self-Service
                         </a>
-                        <a href="{{ route('filament.kpi.auth.login') }}" class="portal-link portal-link-secondary">
+                        <a href="{{ route('filament.kpi.auth.login') }}" class="portal-link portal-link-secondary" data-portal="kpi">
                             KPI Portal
                         </a>
+                        <a href="{{ route('filament.sicrc.auth.login') }}" class="portal-link portal-link-secondary" data-portal="sicrc">
+                            SIC / RC Portal
+                        </a>
                     </nav>
-                    <p class="access-note">Authorized access for Philfumes HR teams, employees, and assigned KPI raters.</p>
+                    <p class="access-note">Authorized access for Philfumes HR teams, employees, assigned KPI raters, and SIC / RC users.</p>
                 </div>
             </main>
         </section>

@@ -89,7 +89,7 @@ class DtrCsvExportService
                         $record->work_hrs,
                         $record->credited_work_hrs,
                         $record->overtime_status,
-                        $record->is_absent ? 'Yes' : 'No',
+                        $record->requiresAttendanceApproval() ? 'No' : ($record->is_absent ? 'Yes' : 'No'),
                         $record->holiday_type,
                         $record->holiday_rate,
                         $record->holiday_excluded ? 'Yes' : 'No',

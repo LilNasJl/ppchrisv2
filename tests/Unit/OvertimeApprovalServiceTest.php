@@ -5,11 +5,43 @@ namespace Tests\Unit;
 use App\Models\Dtr;
 use App\Services\OvertimeApprovalService;
 use DomainException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class OvertimeApprovalServiceTest extends TestCase
 {
+    #[DataProvider('transitionActions')]
+    public function test_approval_actions_resolve_the_selected_record_inside_the_transaction(string $action): void
+    {
+        $record = \Mockery::mock(Dtr::class)->makePartial();
+        $query = \Mockery::mock(Builder::class);
+
+        $record->shouldReceive('getKey')->once()->andReturn(387);
+        $record->shouldReceive('newQuery')->once()->andReturn($query);
+        $query->shouldReceive('with')->once()->with('payrollPeriod')->andReturnSelf();
+        $query->shouldReceive('whereKey')->once()->with(387)->andReturnSelf();
+        $query->shouldReceive('lockForUpdate')->once()->andReturnSelf();
+        $query->shouldReceive('first')->once()->andReturnNull();
+        DB::shouldReceive('transaction')->once()->andReturnUsing(
+            static fn (callable $callback): mixed => $callback(),
+        );
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('The selected overtime record no longer exists.');
+
+        app(OvertimeApprovalService::class)->{$action}($record);
+    }
+
+    public static function transitionActions(): array
+    {
+        return [
+            'approve' => ['approve'],
+            'reject' => ['reject'],
+        ];
+    }
+
     #[DataProvider('statusScenarios')]
     public function test_it_identifies_overtime_approval_states(
         int $minutes,
@@ -57,6 +89,23 @@ class OvertimeApprovalServiceTest extends TestCase
         app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 30, null);
 
         $this->addToAssertionCount(1);
+    }
+
+    public function test_for_approval_attendance_cannot_enter_overtime_approval(): void
+    {
+        $record = new Dtr([
+            'schedule_type' => 'Forgot to Punch',
+            'is_imported' => true,
+            'overtime' => 60,
+            'early_clock_in' => 45,
+            'overtime_status' => 'Pending',
+        ]);
+        $service = app(OvertimeApprovalService::class);
+
+        $this->assertFalse($service->hasApprovableOvertime($record));
+        $this->assertFalse($service->isPending($record));
+        $this->assertFalse($service->isApproved($record));
+        $this->assertFalse($service->isRejected($record));
     }
 
     public function test_it_accepts_zero_for_no_credited_early_or_after_overtime(): void

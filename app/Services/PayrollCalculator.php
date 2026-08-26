@@ -188,7 +188,7 @@ class PayrollCalculator
         $employee->loadMissing(['designation', 'department', 'branch', 'employeeDeductions.deduction']);
 
         $settings = PayrollCalculationSetting::forPeriod($period);
-        $dtrs = $this->dtrs($employee, $period);
+        $dtrs = $this->finalizedDtrs($this->dtrs($employee, $period));
         $rateType = $this->rateType($employee);
         $isDaily = $rateType === 'Daily';
         $workDaysPerMonth = $settings->divisor('regular_work_days_per_month');
@@ -442,6 +442,13 @@ class PayrollCalculator
             ->where('branch_id', $employee->branch_id)
             ->where('fingerprint_id', $fingerprintId)
             ->get();
+    }
+
+    protected function finalizedDtrs(Collection $dtrs): Collection
+    {
+        return $dtrs
+            ->reject(fn (Dtr $dtr): bool => $dtr->requiresAttendanceApproval())
+            ->values();
     }
 
     protected function rateType(Employee $employee): string

@@ -11,6 +11,8 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -27,8 +29,11 @@ class EmployeePanelProvider extends PanelProvider
             ->path('employee')
             // ->brandLogo(asset('ppclogo.png'))
             // ->brandLogoHeight('48px')
+            // ->collapsedSidebarWidth(true)
+            ->sidebarCollapsibleOnDesktop(true)
             ->brandName('HRMS: SELF SERVICE')
             ->globalSearch(false)
+            ->maxContentWidth(Width::Full)
             ->databaseNotifications()
             ->favicon(asset('ppclogo.png').'?v=20260724')
             ->login(EmployeeLogin::class)
@@ -40,6 +45,10 @@ class EmployeePanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Blue,
             ])
+            ->renderHook(
+                PanelsRenderHook::STYLES_AFTER,
+                fn () => view('filament.employee-panel-styles'),
+            )
             ->discoverPages(in: app_path('Filament/Employee/Pages'), for: 'App\Filament\Employee\Pages')
             ->middleware([
                 EncryptCookies::class,

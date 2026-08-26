@@ -11,6 +11,7 @@ use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
 use App\Models\User;
+use App\Services\EmployeeProfileCompletionService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -598,6 +599,18 @@ class EmployeeDetailsTable extends TableWidget
                     ->getStateUsing(fn (User $record): ?string => $record->profile_photo_url)
                     ->defaultImageUrl(fn (): string => asset('image/ppc-circle-white.png'))
                     ->circular(),
+
+                TextColumn::make('profile_completion')
+                    ->label('User Profile')
+                    ->getStateUsing(function (User $record): ?int {
+                        $count = app(EmployeeProfileCompletionService::class)->total($record->employee);
+
+                        return $count > 0 ? $count : null;
+                    })
+                    ->badge()
+                    ->color('warning')
+                    ->placeholder('Complete')
+                    ->tooltip('Number of incomplete required fields across Basic Information, Designation, Education, and Salary.'),
 
                 TextColumn::make('employee.uid')
                     ->label('ID No.')

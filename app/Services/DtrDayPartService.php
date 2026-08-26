@@ -25,6 +25,8 @@ class DtrDayPartService
 
     public const SOURCE_ABSENCE = 'absence';
 
+    public const SOURCE_ON_FIELD_DTR = 'on_field_dtr';
+
     /**
      * @return array<string, string>
      */

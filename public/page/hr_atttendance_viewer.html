@@ -313,6 +313,7 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
 <script>
 const XOR=0xA5,PAGE=50;
 const PARAMS=new URLSearchParams(window.location.search);
+const DTR_ONLY=PARAMS.get('dtr_only')==='1';
 const IMPORT_ENDPOINT=PARAMS.get('endpoint')||'/hr-tools/import/dtr';
 const CSRF_TOKEN=(()=>{try{return window.parent.document.querySelector('meta[name="csrf-token"]')?.content||'';}catch(error){return'';}})();
 const MAX_BIN_BYTES=5*1024*1024;
@@ -356,6 +357,13 @@ function selectedBranchId(){return document.getElementById('dtr-branch-id')?.val
 
 populateDestinationOptions();
 
+if(DTR_ONLY){
+  const tabs=document.querySelector('.tabs');
+  const employeePanel=document.getElementById('panel-emp');
+  if(tabs)tabs.style.display='none';
+  if(employeePanel)employeePanel.remove();
+}
+
 function sw(t){
   ['dtr','emp'].forEach((v,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('active',v===t);
@@ -365,13 +373,16 @@ function sw(t){
 
 function decode(ab){
   const b=new Uint8Array(ab),rec=[],err=[];
+  const utf8=new TextDecoder('utf-8',{fatal:true});
   let p=0;
   while(p+2<=b.length){
     const len=(b[p]<<8)|b[p+1];p+=2;
     if(!len)break;
     if(p+len>b.length){err.push(`Record ${rec.length+1} is truncated.`);break;}
-    let j='';for(let i=0;i<len;i++)j+=String.fromCharCode(b[p+i]^XOR);p+=len;
-    try{rec.push(JSON.parse(j));}catch(e){err.push(`Record ${rec.length+1} contains invalid data.`);}
+    const decoded=new Uint8Array(len);
+    for(let i=0;i<len;i++)decoded[i]=b[p+i]^XOR;
+    p+=len;
+    try{rec.push(JSON.parse(utf8.decode(decoded)));}catch(e){err.push(`Record ${rec.length+1} contains invalid UTF-8 data.`);}
   }
   return{rec,err};
 }
@@ -739,7 +750,15 @@ function buildImportRows(){
       schedule_end:forgot?'':(r.sched_end||''),
       source_session_id:r.session_id||'',
       source_filename:S.dtr.fileName,
-      source_file_hash:S.dtr.fileHash
+      source_file_hash:S.dtr.fileHash,
+      hris_transfer_format:r.hris_transfer_format||'',
+      hris_transfer_version:r.hris_transfer_version??null,
+      early_overtime_minutes:r.early_overtime_minutes??null,
+      overtime_minutes:r.overtime_minutes??null,
+      early_overtime_status:r.early_overtime_status||'',
+      after_overtime_status:r.after_overtime_status||'',
+      credited_early_overtime_minutes:r.credited_early_overtime_minutes??null,
+      credited_overtime_minutes:r.credited_overtime_minutes??null
     };
   });
 }
@@ -755,7 +774,13 @@ function importDtr(){
   if(!name||!S.dtr.raw.length)return;
 
   const rows=buildImportRows();
-  const payload=JSON.stringify({import_name:name,batch_id:S.dtr.batchId,rows});
+  const payload=JSON.stringify({
+    import_name:name,
+    batch_id:S.dtr.batchId,
+    period_id:Number(periodId),
+    branch_id:Number(branchId),
+    rows
+  });
   const request=new XMLHttpRequest();
   let serverProgress;
 

@@ -203,7 +203,7 @@
         }
     </style>
 
-    <div class="employee-dtr-page employee-blue-page">
+    <div wire:poll.15s class="employee-dtr-page employee-blue-page">
         <section class="employee-dtr-toolbar">
             <div class="employee-dtr-heading">
                 <span class="employee-dtr-heading-icon">

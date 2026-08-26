@@ -86,7 +86,7 @@ class DtrPrintController extends Controller
 
         $status = match (true) {
             $isLeave => 'Leave',
-            $isForgotToPunch => 'Forgot to Punch',
+            $record->requiresAttendanceApproval() => 'For Approval',
             $isAbsent => 'Absent',
             str($record->schedule_type)->lower()->toString() === 'overtime' => 'Overtime',
             default => 'Present',

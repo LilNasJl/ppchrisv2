@@ -20,7 +20,18 @@
         }
     </style>
 
-    <div class="employee-details-page-shell">
+    <form wire:submit="save" class="employee-details-page-shell">
         {{ $this->form }}
-    </div>
+
+        <div class="mt-6 flex justify-end">
+            <x-filament::button
+                type="submit"
+                icon="heroicon-o-check"
+                wire:loading.attr="disabled"
+                wire:target="save"
+            >
+                Save Changes
+            </x-filament::button>
+        </div>
+    </form>
 </x-filament-panels::page>

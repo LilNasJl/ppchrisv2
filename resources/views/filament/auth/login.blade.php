@@ -3,6 +3,7 @@
     $brandTitle = match ($panelId) {
         'employee' => 'HRIS: SELF SERVICE',
         'kpi' => 'KPI PORTAL',
+        'sicrc' => 'SIC / RC PORTAL',
         default => 'HRIS',
     };
     $brandSubtitle = 'Human Resource Information System';

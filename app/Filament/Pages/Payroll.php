@@ -3,18 +3,22 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
-use App\Filament\Widgets\PayrollEmployeeTable;
+use App\Models\PayrollPeriod;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Override;
 use UnitEnum;
 
-class Payroll extends Page
+class Payroll extends Page implements HasForms
 {
     use HasPageShield;
+    use InteractsWithForms;
 
     protected string $view = 'filament.pages.payroll';
 
@@ -26,27 +30,56 @@ class Payroll extends Page
 
     protected static ?string $navigationLabel = 'Payroll Processing';
 
+    public ?int $periodId = null;
+
     #[Override]
-    protected function getHeaderActions(): array
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    public function mount(): void
+    {
+        $this->form->fill(['periodId' => null]);
+    }
+
+    protected function getFormSchema(): array
     {
         return [
-            Action::make('managePayrollPeriods')
-                ->label('Manage Payroll Periods')
-                ->icon(Heroicon::CalendarDays)
-                ->url(PayrollPeriodResource::getUrl()),
+            Select::make('periodId')
+                ->label('Search Payroll Period')
+                ->options(fn (): array => PayrollPeriod::query()
+                    ->newestFirst()
+                    ->get()
+                    ->mapWithKeys(fn (PayrollPeriod $period): array => [
+                        $period->id => trim($period->title.' - '.($period->is_locked ? 'Locked' : 'Open')),
+                    ])
+                    ->all())
+                ->searchable()
+                ->preload()
+                ->placeholder('Select payroll period')
+                ->live()
+                ->afterStateUpdated(function ($state): void {
+                    $period = filled($state) ? PayrollPeriod::query()->find((int) $state) : null;
 
-            Action::make('payrollVisibility')
-                ->label('Payroll Visibility')
-                ->icon(Heroicon::Eye)
-                ->url(PayrollVisibility::getUrl()),
+                    if (! $period) {
+                        return;
+                    }
+
+                    $this->redirect(PayrollPeriodBranches::getUrl([
+                        'periodId' => $period->publicKey(),
+                    ]));
+                }),
         ];
     }
 
-    #[Override]
-    protected function getHeaderWidgets(): array
+    public function managePayrollPeriodsUrl(): string
     {
-        return [
-            PayrollEmployeeTable::class,
-        ];
+        return PayrollPeriodResource::getUrl();
+    }
+
+    public function payrollVisibilityUrl(): string
+    {
+        return PayrollVisibility::getUrl();
     }
 }

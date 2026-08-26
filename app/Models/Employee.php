@@ -264,6 +264,21 @@ class Employee extends Model
         return $this->hasMany(Leave::class, 'employee_id');
     }
 
+    public function dtrChangeRequests()
+    {
+        return $this->hasMany(DtrChangeRequest::class, 'employee_id');
+    }
+
+    public function sicRcAccount()
+    {
+        return $this->hasOne(SicRcAccount::class);
+    }
+
+    public function onFieldDtrSubmissions()
+    {
+        return $this->hasMany(DtrSubmission::class);
+    }
+
     public function holidayExclusions()
     {
         return $this->hasMany(HolidayEmployeeExclusion::class, 'employee_id');

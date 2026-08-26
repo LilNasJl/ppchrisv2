@@ -20,12 +20,19 @@ class DtrAttendanceUnitService
             ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
             ->sum(function (Collection $dateRecords): float {
                 $hasOtherFullDayRecord = $dateRecords->contains(
-                    fn (Dtr $record): bool => ! $this->isRegular($record) && $this->brokenSegment($record) === null,
+                    fn (Dtr $record): bool => ! $this->isRegular($record)
+                        && ! $this->isSaturday($record)
+                        && $this->brokenSegment($record) === null,
                 );
 
                 return $hasOtherFullDayRecord
                     ? 1.0
-                    : min(1.0, $this->regularUnits($dateRecords) + $this->brokenUnits($dateRecords));
+                    : min(
+                        1.0,
+                        $this->regularUnits($dateRecords)
+                            + $this->brokenUnits($dateRecords)
+                            + $this->saturdayUnits($dateRecords),
+                    );
             });
     }
 
@@ -41,10 +48,15 @@ class DtrAttendanceUnitService
             ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
             ->sum(function (Collection $dateRecords): float {
                 $fullDayEntries = $dateRecords
-                    ->filter(fn (Dtr $record): bool => ! $this->isRegular($record) && $this->brokenSegment($record) === null)
+                    ->filter(fn (Dtr $record): bool => ! $this->isRegular($record)
+                        && ! $this->isSaturday($record)
+                        && $this->brokenSegment($record) === null)
                     ->count();
 
-                return $fullDayEntries + $this->regularUnits($dateRecords) + $this->brokenUnits($dateRecords);
+                return $fullDayEntries
+                    + $this->regularUnits($dateRecords)
+                    + $this->brokenUnits($dateRecords)
+                    + $this->saturdayUnits($dateRecords);
             });
     }
 
@@ -81,6 +93,10 @@ class DtrAttendanceUnitService
                 DtrDayPartService::UNCLASSIFIED => 0.0,
                 default => 1.0,
             };
+        }
+
+        if ($this->isSaturday($record)) {
+            return 0.5;
         }
 
         return $this->brokenSegment($record) === null ? 1.0 : 0.5;
@@ -121,6 +137,19 @@ class DtrAttendanceUnitService
         return min(1.0, $segments * 0.5);
     }
 
+    /**
+     * A Saturday schedule represents the company's three-hour half day.
+     * Duplicate rows on the same date must not add another half day.
+     *
+     * @param  Collection<int, Dtr>  $records
+     */
+    protected function saturdayUnits(Collection $records): float
+    {
+        return $records->contains(fn (Dtr $record): bool => $this->isSaturday($record))
+            ? 0.5
+            : 0.0;
+    }
+
     protected function regularUnits(Collection $records): float
     {
         $parts = $records
@@ -144,6 +173,16 @@ class DtrAttendanceUnitService
     protected function isRegular(Dtr $record): bool
     {
         return app(DtrDayPartService::class)->isRegularScheduleType($record->schedule_type);
+    }
+
+    protected function isSaturday(Dtr $record): bool
+    {
+        $scheduleType = Str::of((string) $record->schedule_type)
+            ->lower()
+            ->replace([' ', '_', '-'], '')
+            ->toString();
+
+        return $scheduleType === 'saturday';
     }
 
     protected function brokenSegment(Dtr $record): ?string

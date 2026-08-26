@@ -31,7 +31,7 @@ test('forgot to punch rows keep available punch times in the printed DTR', funct
         'date_out' => '-',
         'time_out' => '-',
         'schedule' => 'Forgot to Punch',
-        'status' => 'Forgot to Punch',
+        'status' => 'For Approval',
     ]);
 });
 

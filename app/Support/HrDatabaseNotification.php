@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\ActionHistory;
 use App\Models\Dtr;
+use App\Models\SicRcAccount;
 use App\Models\SystemAccount;
 use App\Models\User;
 use BackedEnum;
@@ -109,7 +110,7 @@ class HrDatabaseNotification
         LaravelNotification::sendNow($recipients, $notification->toDatabase());
     }
 
-    protected static function logRecordAction(Model $record, string $action, User $actor): void
+    protected static function logRecordAction(Model $record, string $action, User|SicRcAccount $actor): void
     {
         if ($record instanceof ActionHistory) {
             return;
@@ -128,9 +129,9 @@ class HrDatabaseNotification
         }
 
         ActionHistory::create([
-            'actor_id' => $actor->id,
+            'actor_id' => $actor instanceof User ? $actor->id : null,
             'actor_name' => self::actorName($actor),
-            'actor_role' => $actor->role,
+            'actor_role' => self::actorRole($actor),
             'action' => $action,
             'model_type' => $record::class,
             'model_id' => $record->getKey(),
@@ -143,12 +144,12 @@ class HrDatabaseNotification
         ]);
     }
 
-    protected static function logCustomAction(string $title, ?string $body, string $status, User $actor): void
+    protected static function logCustomAction(string $title, ?string $body, string $status, User|SicRcAccount $actor): void
     {
         ActionHistory::create([
-            'actor_id' => $actor->id,
+            'actor_id' => $actor instanceof User ? $actor->id : null,
             'actor_name' => self::actorName($actor),
-            'actor_role' => $actor->role,
+            'actor_role' => self::actorRole($actor),
             'action' => $status,
             'model_label' => 'system action',
             'record_label' => $title,
@@ -256,7 +257,7 @@ class HrDatabaseNotification
         return Str::headline(self::modelLabel($record)).' '.$action;
     }
 
-    protected static function bodyFor(Model $record, User $actor): string
+    protected static function bodyFor(Model $record, User|SicRcAccount $actor): string
     {
         $recordName = self::recordName($record);
         $actorName = self::actorName($actor);
@@ -266,9 +267,18 @@ class HrDatabaseNotification
             : "Record #{$record->getKey()} by {$actorName}";
     }
 
-    protected static function actorName(User $actor): string
+    protected static function actorName(User|SicRcAccount $actor): string
     {
+        if ($actor instanceof SicRcAccount) {
+            return $actor->username ?: 'SIC/RC account';
+        }
+
         return $actor->username ?: $actor->name ?: $actor->email ?: 'System user';
+    }
+
+    protected static function actorRole(User|SicRcAccount $actor): string
+    {
+        return $actor instanceof SicRcAccount ? 'sic/rc' : (string) ($actor->role ?: 'user');
     }
 
     protected static function modelLabel(Model $record): string

@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\DB;
 
 class OvertimeApprovalService
 {
+    public const MINIMUM_MINUTES = 30;
+
+    public const STATUS_NOT_APPLICABLE = 'n/a';
+
     public const STATUS_PENDING = 'Pending';
 
     public const STATUS_APPROVED = 'Approved';
@@ -64,6 +68,7 @@ class OvertimeApprovalService
     {
         return Dtr::query()
             ->where('payroll_period_id', $period->id)
+            ->finalizedAttendance()
             ->where(function ($query): void {
                 $query
                     ->where(function ($query): void {
@@ -123,7 +128,8 @@ class OvertimeApprovalService
 
     public function hasApprovableOvertime(Dtr $record): bool
     {
-        return $this->hasEligibleOvertime($record) || $this->hasEligibleEarlyOvertime($record);
+        return ! $record->requiresAttendanceApproval()
+            && ($this->hasEligibleOvertime($record) || $this->hasEligibleEarlyOvertime($record));
     }
 
     public function defaultCreditedOvertime(Dtr $record): int
@@ -161,13 +167,14 @@ class OvertimeApprovalService
             throw new DomainException('The selected overtime record does not exist.');
         }
 
-        return DB::transaction(function () use (
+        $result = DB::transaction(function () use (
+            $record,
             $recordId,
             $targetStatus,
             $creditedOvertimeMinutes,
             $creditedEarlyMinutes,
         ): int {
-            $record = Dtr::query()
+            $record = $record->newQuery()
                 ->with('payrollPeriod')
                 ->whereKey($recordId)
                 ->lockForUpdate()
@@ -212,6 +219,20 @@ class OvertimeApprovalService
 
             return 1;
         });
+
+        if (
+            $targetStatus !== self::STATUS_PENDING
+            && $record->getTable() === (new Dtr)->getTable()
+            && filled($record->payroll_period_id)
+        ) {
+            $period = PayrollPeriod::query()->find($record->payroll_period_id);
+
+            if ($period) {
+                app(PayrollPeriodLockService::class)->retryDuePeriod($period);
+            }
+        }
+
+        return $result;
     }
 
     protected function assertTransitionAllowed(Dtr $record, string $targetStatus): void

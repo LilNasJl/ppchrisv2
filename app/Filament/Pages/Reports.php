@@ -433,6 +433,7 @@ class Reports extends Page implements HasForms
                 fn (Builder $query): Builder => $query->where('branch_id', $this->branch_id),
             )
             ->get()
+            ->reject(fn (Dtr $dtr): bool => $dtr->requiresAttendanceApproval())
             ->groupBy(fn (Dtr $dtr): string => "{$dtr->branch_id}-{$dtr->fingerprint_id}")
             ->map(function (Collection $dtrs) use ($metric): array {
                 $first = $dtrs->first();

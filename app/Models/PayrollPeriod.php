@@ -21,6 +21,9 @@ class PayrollPeriod extends Model
         'description',
         'is_locked',
         'locked_at',
+        'unlocked_at',
+        'auto_lock_blocked_at',
+        'auto_lock_blocked_reason',
         'deductions_processed_at',
         'loan_payments_processed_at',
     ];
@@ -31,6 +34,8 @@ class PayrollPeriod extends Model
         'date_payout' => 'date',
         'is_locked' => 'boolean',
         'locked_at' => 'datetime',
+        'unlocked_at' => 'datetime',
+        'auto_lock_blocked_at' => 'datetime',
         'deductions_processed_at' => 'datetime',
         'loan_payments_processed_at' => 'datetime',
     ];
@@ -41,23 +46,35 @@ class PayrollPeriod extends Model
             Dtr::query()
                 ->where('payroll_period_id', $payrollPeriod->id)
                 ->update(['is_locked' => $payrollPeriod->is_locked]);
+
+            EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', $payrollPeriod->id)
+                ->update(['is_locked' => $payrollPeriod->is_locked]);
         });
 
         static::deleting(function (PayrollPeriod $payrollPeriod): void {
             $query = Dtr::withTrashed()
                 ->where('payroll_period_id', $payrollPeriod->id);
+            $previewQuery = EmployeeVisibleDtr::withTrashed()
+                ->where('payroll_period_id', $payrollPeriod->id);
 
             if ($payrollPeriod->isForceDeleting()) {
                 $query->forceDelete();
+                $previewQuery->forceDelete();
 
                 return;
             }
 
             $query->delete();
+            $previewQuery->delete();
         });
 
         static::restoring(function (PayrollPeriod $payrollPeriod): void {
             Dtr::withTrashed()
+                ->where('payroll_period_id', $payrollPeriod->id)
+                ->restore();
+
+            EmployeeVisibleDtr::withTrashed()
                 ->where('payroll_period_id', $payrollPeriod->id)
                 ->restore();
         });
@@ -74,6 +91,11 @@ class PayrollPeriod extends Model
     public function dtrs(): HasMany
     {
         return $this->hasMany(Dtr::class);
+    }
+
+    public function employeeVisibleDtrs(): HasMany
+    {
+        return $this->hasMany(EmployeeVisibleDtr::class);
     }
 
     public function employeeExclusions(): HasMany
