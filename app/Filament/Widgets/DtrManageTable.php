@@ -13,6 +13,7 @@ use App\Services\DtrRecordService;
 use App\Services\HolidayEntitlementService;
 use App\Services\OnFieldDtrService;
 use App\Services\OvertimeApprovalService;
+use App\Services\Shift3PremiumService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
@@ -126,6 +127,13 @@ class DtrManageTable extends BaseWidget
                         'Forgot to Punch', 'Absent' => 'danger',
                         default => 'gray',
                     }),
+
+                TextColumn::make('shift3_premium_eligible')
+                    ->label('10%')
+                    ->getStateUsing(fn (ModelsDtr $record): string => app(Shift3PremiumService::class)->qualifies($record) ? 'Yes' : '-')
+                    ->badge(fn (string $state): bool => $state === 'Yes')
+                    ->color('success')
+                    ->alignCenter(),
 
                 TextColumn::make('day_part')
                     ->label('DAY PART')

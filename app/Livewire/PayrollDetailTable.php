@@ -52,14 +52,14 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     protected const COLUMN_PRESETS = [
         'summary' => [
             'index', 'bank_id_no', 'name', 'designation', 'branch', 'days_worked',
-            'salary_adjustment', 'overtime_hours', 'overtime_amount', 'ot_approval',
+            'salary_adjustment', 'overtime_hours', 'overtime_amount', 'shift3_premium', 'ot_approval',
             'gross_pay', 'shortages', 'total_deductions', 'net_pay',
         ],
         'earnings' => [
             'index', 'bank_id_no', 'name', 'designation', 'rate', 'monthly_rate',
             'half_month_pay', 'rate_per_day', 'rate_per_hour', 'days_worked',
             'salary_adjustment', 'allowance', 'overtime_hours', 'overtime_amount',
-            'ot_approval', 'regular_holiday', 'special_holiday', 'gross_pay',
+            'shift3_premium', 'ot_approval', 'regular_holiday', 'special_holiday', 'gross_pay',
         ],
         'deductions' => [
             'index', 'bank_id_no', 'name', 'gross_pay', 'undertime_minutes',
@@ -200,6 +200,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('allowance', 'Allowance'),
                 $this->numberColumn('overtime_hours', 'OT Hrs'),
                 $this->moneyColumn('overtime_amount', 'OT Amount'),
+                $this->moneyColumn('shift3_premium', '10%'),
                 TextColumn::make('ot_approval')
                     ->label('OT Approval')
                     ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => $this->overtimeApprovalLabel($record))
@@ -417,11 +418,11 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 ->first();
 
             if ($snapshot) {
-                return $this->rowCache[$record->id] = $snapshot->data ?? [];
+                return $this->rowCache[$record->id] = app(PayrollCalculator::class)->snapshotData($snapshot);
             }
         }
 
-        return $this->rowCache[$record->id] = app(PayrollCalculator::class)->row($record->employee, $period);
+        return $this->rowCache[$record->id] = app(PayrollCalculator::class)->employeeRow($record->employee, $period);
     }
 
     protected function rowValue(PayrollPeriodEmployeeAdjustment $record, string $key): mixed

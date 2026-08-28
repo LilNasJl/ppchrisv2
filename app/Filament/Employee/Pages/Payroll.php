@@ -113,7 +113,7 @@ class Payroll extends Page implements HasForms
             return null;
         }
 
-        return $calculator->row($this->employee, $this->selectedPeriod);
+        return $calculator->employeeRow($this->employee, $this->selectedPeriod);
     }
 
     protected function availablePayrollPeriodsQuery(?Employee $employee = null): Builder

@@ -30,6 +30,12 @@ class ViewOnFieldDtrSubmission extends Page
         return $user !== null && in_array($user->role, ['hr', 'admin'], true);
     }
 
+    #[Override]
+    public function getMaxContentWidth(): string
+    {
+        return 'full';
+    }
+
     public function mount(): void
     {
         $this->submissionId = (string) request()->query('submissionId', '');

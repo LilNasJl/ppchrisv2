@@ -30,6 +30,11 @@ class SicRcAccount extends Authenticatable implements FilamentUser, HasName
         return $this->username;
     }
 
+    public function canBeImpersonated(): bool
+    {
+        return $this->is_active && ! $this->trashed();
+    }
+
     public function branchAssignments(): array
     {
         return collect($this->biometric_devices ?: [])

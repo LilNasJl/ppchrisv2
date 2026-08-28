@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Override;
+use STS\FilamentImpersonate\Actions\Impersonate;
 use UnitEnum;
 
 class SicRcAccounts extends Page implements HasTable
@@ -163,8 +164,17 @@ class SicRcAccounts extends Page implements HasTable
                         ->modalSubmitActionLabel('Save Changes')
                         ->action(fn (SicRcAccount $record, array $data): SicRcAccount => $this->saveAccount($data, $record)),
 
+                    Impersonate::make('impersonateSicRc')
+                        ->label('Impersonate')
+                        ->guard('sicrc')
+                        ->redirectTo(url('/sicrc'))
+                        ->backTo(static::getUrl())
+                        ->withoutSpa()
+                        ->hidden(fn (SicRcAccount $record): bool => ! $record->canBeImpersonated()),
+
                     Action::make('delete')
                         ->label('Delete')
+                        ->icon(Heroicon::Trash)
                         ->color('danger')
                         ->requiresConfirmation()
                         ->modalHeading('Permanently delete SIC/RC account')
@@ -406,7 +416,7 @@ class SicRcAccounts extends Page implements HasTable
                 $query->whereDoesntHave('sicRcAccount');
 
                 if ($account?->employee_id) {
-                    $query->orWhereKey($account->employee_id);
+                    $query->orWhere('employees.id', $account->employee_id);
                 }
             })
             ->orderBy('lastname')

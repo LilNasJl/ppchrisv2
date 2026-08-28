@@ -451,6 +451,7 @@
                     <tr><td>Salary Adjustment</td><td class="basis">-</td><td>{{ $money($row['salary_adjustment'] ?? 0) }}</td></tr>
                     <tr><td>Allowance</td><td class="basis">-</td><td>{{ $money($row['allowance'] ?? 0) }}</td></tr>
                     <tr><td>Overtime Pay</td><td class="basis">{{ $number($row['overtime_hours'] ?? 0) }} hour/s</td><td>{{ $money($row['overtime_amount'] ?? 0) }}</td></tr>
+                    <tr><td>Shift 3 Additional Pay</td><td class="basis">10% of regular Shift 3 pay</td><td>{{ $money($row['shift3_premium'] ?? 0) }}</td></tr>
                     <tr><td>Regular Holiday Pay</td><td class="basis">-</td><td>{{ $money($row['regular_holiday'] ?? 0) }}</td></tr>
                     <tr><td>Special Holiday Pay</td><td class="basis">-</td><td>{{ $money($row['special_holiday'] ?? 0) }}</td></tr>
                     <tr class="table-total"><td colspan="2">Gross Pay</td><td>{{ $money($row['gross_pay'] ?? 0) }}</td></tr>

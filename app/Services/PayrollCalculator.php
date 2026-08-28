@@ -180,7 +180,31 @@ class PayrollCalculator
             ->when($branchId, fn (Builder $query) => $query->where('branch_id', $branchId))
             ->orderBy('row_number')
             ->get()
-            ->map(fn (PayrollSnapshot $snapshot): array => $snapshot->data);
+            ->map(fn (PayrollSnapshot $snapshot): array => $this->snapshotData($snapshot));
+    }
+
+    public function employeeRow(Employee $employee, PayrollPeriod $period, int $number = 1): array
+    {
+        if ((bool) $period->is_locked) {
+            $snapshot = PayrollSnapshot::query()
+                ->where('payroll_period_id', $period->id)
+                ->where('employee_id', $employee->id)
+                ->first();
+
+            if ($snapshot) {
+                return $this->snapshotData($snapshot);
+            }
+        }
+
+        return $this->row($employee, $period, $number);
+    }
+
+    public function snapshotData(PayrollSnapshot $snapshot): array
+    {
+        return [
+            'shift3_premium' => 0.0,
+            ...(array) $snapshot->data,
+        ];
     }
 
     public function row(Employee $employee, PayrollPeriod $period, int $number = 1): array
@@ -231,6 +255,7 @@ class PayrollCalculator
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
         $overtimeAmount = $this->money($overtimeHours * $ratePerHour * $overtimeMultiplier);
+        $shift3Premium = app(Shift3PremiumService::class)->total($dtrs, $ratePerDay, $workHoursPerDay);
         $regularHolidayAmount = $this->money(
             $this->holidayAmount($employee, $dtrs, $ratePerDay, 'regular', $settings)
             + $this->unworkedRegularHolidayAmount($employee, $period, $dtrs, $ratePerDay, $settings)
@@ -253,6 +278,7 @@ class PayrollCalculator
             + $salaryAdjustment
             + $allowance
             + $overtimeAmount
+            + $shift3Premium
             + $regularHolidayAmount
             + $specialHolidayAmount
         );
@@ -295,6 +321,7 @@ class PayrollCalculator
             'overtime_minutes' => $overtimeMinutes,
             'overtime_hours' => $overtimeHours,
             'overtime_amount' => $overtimeAmount,
+            'shift3_premium' => $shift3Premium,
             'regular_holiday' => $regularHolidayAmount,
             'special_holiday' => $specialHolidayAmount,
             'gross_pay' => $grossPay,
@@ -370,6 +397,7 @@ class PayrollCalculator
             'allowance' => 'ALLOWANCE',
             'overtime_hours' => 'OVERTIME HRS',
             'overtime_amount' => 'OVERTIME AMOUNT',
+            'shift3_premium' => '10%',
             'regular_holiday' => 'REGULAR HOLIDAY',
             'special_holiday' => 'SPECIAL HOLIDAY',
             'gross_pay' => 'GROSS PAY',

@@ -278,6 +278,7 @@
                             <div class="employee-payroll-metric"><dt>Allowance</dt><dd>{{ $money($payrollRow['allowance'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Overtime Hours</dt><dd>{{ $number($payrollRow['overtime_hours'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Overtime Amount</dt><dd>{{ $money($payrollRow['overtime_amount'] ?? null) }}</dd></div>
+                            <div class="employee-payroll-metric"><dt>Shift 3 (10%)</dt><dd>{{ $money($payrollRow['shift3_premium'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Regular Holiday</dt><dd>{{ $money($payrollRow['regular_holiday'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Special Holiday</dt><dd>{{ $money($payrollRow['special_holiday'] ?? null) }}</dd></div>
                         </dl>

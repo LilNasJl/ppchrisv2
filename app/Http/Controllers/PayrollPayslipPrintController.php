@@ -51,7 +51,7 @@ class PayrollPayslipPrintController extends Controller
         return view('payroll.payslip', [
             'employee' => $payrollEmployee,
             'period' => $payrollPeriod,
-            'row' => $calculator->row($payrollEmployee, $payrollPeriod),
+            'row' => $calculator->employeeRow($payrollEmployee, $payrollPeriod),
         ]);
     }
 }

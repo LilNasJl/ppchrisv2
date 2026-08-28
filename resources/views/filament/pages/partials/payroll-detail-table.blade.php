@@ -14,7 +14,7 @@
 
     .payroll-table {
         width: 100%;
-        min-width: 2220px;
+        min-width: 2280px;
         border-collapse: collapse;
         font-size: 12px;
     }
@@ -161,6 +161,7 @@
                 <th rowspan="2">Salary Adjustment</th>
                 <th rowspan="2">Allowance</th>
                 <th colspan="2">Overtime</th>
+                <th rowspan="2">10%</th>
                 <th rowspan="2">Regular Holiday</th>
                 <th rowspan="2">Special Holiday</th>
                 <th rowspan="2">Gross Pay</th>
@@ -207,6 +208,7 @@
                     <td class="text-right">{{ $money($row['allowance']) }}</td>
                     <td class="text-right">{{ $plainNumber($row['overtime_hours']) }}</td>
                     <td class="text-right">{{ $money($row['overtime_amount']) }}</td>
+                    <td class="text-right">{{ $money($row['shift3_premium'] ?? 0) }}</td>
                     <td class="text-right">{{ $money($row['regular_holiday']) }}</td>
                     <td class="text-right">{{ $money($row['special_holiday']) }}</td>
                     <td class="text-right">{{ $money($row['gross_pay']) }}</td>
@@ -230,7 +232,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="35" class="text-center">No payroll data available.</td>
+                    <td colspan="36" class="text-center">No payroll data available.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -244,6 +246,7 @@
                     <td class="text-right">{{ $sum('allowance') }}</td>
                     <td class="text-right">{{ $plainNumber($rows->sum('overtime_hours')) }}</td>
                     <td class="text-right">{{ $sum('overtime_amount') }}</td>
+                    <td class="text-right">{{ $sum('shift3_premium') }}</td>
                     <td class="text-right">{{ $sum('regular_holiday') }}</td>
                     <td class="text-right">{{ $sum('special_holiday') }}</td>
                     <td class="text-right">{{ $sum('gross_pay') }}</td>

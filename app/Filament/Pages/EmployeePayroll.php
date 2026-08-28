@@ -118,7 +118,7 @@ class EmployeePayroll extends Page implements HasForms
             return null;
         }
 
-        return $calculator->row($this->employee, $this->selectedPeriod);
+        return $calculator->employeeRow($this->employee, $this->selectedPeriod);
     }
 
     public function saveAdjustment(string $field, mixed $state): void
@@ -181,15 +181,18 @@ class EmployeePayroll extends Page implements HasForms
             return null;
         }
 
-        $query = PayrollPeriodEmployeeAdjustment::query()
-            ->where('payroll_period_id', $this->selectedPeriod->id)
-            ->where('employee_id', $this->employee->id);
+        $attributes = [
+            'payroll_period_id' => $this->selectedPeriod->id,
+            'employee_id' => $this->employee->id,
+        ];
+
+        $query = PayrollPeriodEmployeeAdjustment::query()->where($attributes);
 
         if ($this->isLocked()) {
             return $query->first();
         }
 
-        return $query->firstOrCreate([], [
+        return PayrollPeriodEmployeeAdjustment::query()->firstOrCreate($attributes, [
             'salary_adjustment' => 0,
             'shortages' => 0,
         ]);
