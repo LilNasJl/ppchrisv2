@@ -3,8 +3,8 @@
     $brandTitle = match ($panelId) {
         'employee' => 'HRIS: SELF SERVICE',
         'kpi' => 'KPI PORTAL',
-        'sicrc' => 'SIC / RC PORTAL',
-        default => 'HRIS',
+        'hr', 'sicrc' => 'HRIS Portal',
+        default => 'HRIS Portal',
     };
     $brandSubtitle = 'Human Resource Information System';
     $logoCandidates = [

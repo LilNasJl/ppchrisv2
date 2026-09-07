@@ -6,14 +6,15 @@ use Tests\TestCase;
 
 class PortalRoutingTest extends TestCase
 {
-    public function test_landing_page_links_to_each_distinct_portal_login(): void
+    public function test_landing_page_uses_one_hris_login_for_hr_and_sicrc_accounts(): void
     {
         $this->get('/')
             ->assertOk()
             ->assertSee('href="'.route('filament.hr.auth.login').'"', false)
             ->assertSee('href="'.route('filament.employee.auth.login').'"', false)
             ->assertSee('href="'.route('filament.kpi.auth.login').'"', false)
-            ->assertSee('href="'.route('filament.sicrc.auth.login').'"', false);
+            ->assertSee('HRIS Portal')
+            ->assertDontSee('href="'.route('filament.sicrc.auth.login').'"', false);
     }
 
     public function test_all_portal_login_routes_are_distinct(): void
@@ -30,11 +31,16 @@ class PortalRoutingTest extends TestCase
             ->assertRedirect(route('filament.sicrc.auth.login'));
     }
 
-    public function test_each_portal_login_page_is_reachable(): void
+    public function test_hris_login_page_is_canonical_for_hr_and_sicrc(): void
     {
-        $this->get(route('filament.hr.auth.login'))->assertOk();
+        $this->get(route('filament.hr.auth.login'))
+            ->assertOk()
+            ->assertSee('HRIS Portal');
+
+        $this->get(route('filament.sicrc.auth.login'))
+            ->assertRedirect(route('filament.hr.auth.login'));
+
         $this->get(route('filament.employee.auth.login'))->assertOk();
         $this->get(route('filament.kpi.auth.login'))->assertOk();
-        $this->get(route('filament.sicrc.auth.login'))->assertOk();
     }
 }

@@ -6,9 +6,11 @@ use App\Filament\Resources\SystemAccounts\Pages\CreateSystemAccount;
 use App\Filament\Resources\SystemAccounts\Pages\EditSystemAccount;
 use App\Filament\Resources\SystemAccounts\Pages\ListSystemAccounts;
 use App\Filament\Resources\SystemAccounts\Pages\ViewSystemAccount;
+use App\Models\SicRcAccount;
 use App\Models\SystemAccount;
 use App\Models\User;
 use BackedEnum;
+use Closure;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -70,6 +72,15 @@ class SystemAccountResource extends Resource
                                 column: 'username',
                                 ignoreRecord: true,
                             )
+                            ->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                                $username = trim((string) $value);
+
+                                if (SicRcAccount::query()
+                                    ->whereRaw('LOWER(username) = ?', [mb_strtolower($username)])
+                                    ->exists()) {
+                                    $fail('This username belongs to a SIC / RC account. Use a different system account username.');
+                                }
+                            })
                             ->validationMessages([
                                 'regex' => 'The username must not contain spaces.',
                                 'unique' => 'This username is already registered.',

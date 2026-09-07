@@ -2,7 +2,7 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Auth\SicRcLogin;
+use App\Filament\Auth\Login;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -30,7 +30,7 @@ class SicRcPanelProvider extends PanelProvider
             ->brandName('SIC / RC Portal')
             ->globalSearch(false)
             ->favicon(asset('ppclogo.png').'?v=20260818')
-            ->login(SicRcLogin::class)
+            ->login(Login::class)
             ->sidebarCollapsibleOnDesktop()
             ->maxContentWidth(Width::Full)
             ->colors([

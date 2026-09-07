@@ -233,7 +233,7 @@ class SicRcAccounts extends Page implements HasTable
                 ]),
 
             Section::make('Sign-in Details')
-                ->description('SIC/RC credentials are isolated from HR Portal, Self-Service, and KPI Portal accounts.')
+                ->description('SIC/RC accounts remain managed separately and sign in through the shared HRIS Portal.')
                 ->schema([
                     TextInput::make('username')
                         ->label('Username')
