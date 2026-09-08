@@ -12,7 +12,7 @@ class PortalRoutingTest extends TestCase
             ->assertOk()
             ->assertSee('href="'.route('filament.hr.auth.login').'"', false)
             ->assertSee('href="'.route('filament.employee.auth.login').'"', false)
-            ->assertSee('href="'.route('filament.kpi.auth.login').'"', false)
+            ->assertDontSee('href="'.route('filament.kpi.auth.login').'"', false)
             ->assertSee('HRIS Portal')
             ->assertDontSee('href="'.route('filament.sicrc.auth.login').'"', false);
     }
