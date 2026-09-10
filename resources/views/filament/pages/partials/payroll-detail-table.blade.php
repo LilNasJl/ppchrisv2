@@ -80,13 +80,15 @@
     }
 
     .payroll-table tfoot td {
-        background: rgb(241, 245, 249);
+        background: rgb(219, 234, 254);
+        border-top: 2px solid rgb(37, 99, 235);
         color: rgb(15, 23, 42);
         font-weight: 700;
     }
 
     .dark .payroll-table tfoot td {
-        background: rgb(30, 41, 59);
+        background: rgb(30, 58, 138);
+        border-top-color: rgb(96, 165, 250);
         color: #f8fafc;
     }
 
@@ -240,7 +242,16 @@
         @if ($rows->isNotEmpty())
             <tfoot>
                 <tr>
-                    <td colspan="10">TOTAL</td>
+                    <td class="text-center">TOTAL</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td class="text-right">{{ $sum('monthly_rate') }}</td>
+                    <td class="text-right">{{ $sum('half_month_pay') }}</td>
+                    <td class="text-right">{{ $sum('rate_per_day') }}</td>
+                    <td class="text-right">{{ $sum('rate_per_hour') }}</td>
                     <td class="text-right">{{ $plainNumber($rows->sum('days_worked')) }}</td>
                     <td class="text-right">{{ $sum('salary_adjustment') }}</td>
                     <td class="text-right">{{ $sum('allowance') }}</td>

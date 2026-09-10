@@ -68,6 +68,25 @@
             background: var(--payroll-row-hover) !important;
         }
 
+        .payroll-inline-table table tbody tr.fi-ta-summary-row {
+            background: rgb(219, 234, 254) !important;
+            border-top: 2px solid rgb(37, 99, 235);
+        }
+
+        .payroll-inline-table table tbody tr.fi-ta-summary-row .fi-ta-cell {
+            color: rgb(15, 23, 42) !important;
+            font-weight: 800;
+        }
+
+        .dark .payroll-inline-table table tbody tr.fi-ta-summary-row {
+            background: rgb(30, 58, 138) !important;
+            border-top-color: rgb(96, 165, 250);
+        }
+
+        .dark .payroll-inline-table table tbody tr.fi-ta-summary-row .fi-ta-cell {
+            color: #f8fafc !important;
+        }
+
         .payroll-inline-table input[type="number"] {
             font-size: .75rem;
             height: 1.9rem;

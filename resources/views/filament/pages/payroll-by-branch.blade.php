@@ -102,6 +102,7 @@
                     :initial-page="$this->payroll_page"
                     :initial-per-page="$this->payroll_per_page"
                     :initial-preset="$this->payroll_preset"
+                    :show-totals="true"
                     :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id.'-'.$this->payroll_page.'-'.$this->payroll_preset"
                 />
             </div>

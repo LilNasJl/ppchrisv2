@@ -19,6 +19,8 @@ use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Support\Contracts\TranslatableContentDriver;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Column;
+use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -46,6 +48,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     public bool $usePagination = true;
 
     public bool $enableSearch = false;
+
+    public bool $showTotals = false;
 
     public string $columnPreset = 'summary';
 
@@ -75,6 +79,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected array $rowCache = [];
 
+    protected array $totalsCache = [];
+
     protected array $overtimeSummaryCache = [];
 
     protected bool $overtimeSummariesLoaded = false;
@@ -90,6 +96,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         int $initialPage = 1,
         int $initialPerPage = 10,
         string $initialPreset = 'summary',
+        bool $showTotals = false,
     ): void {
         $this->periodId = $periodId;
         $this->branchId = $branchId;
@@ -97,6 +104,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         $this->paymentType = filled($paymentType) ? strtolower($paymentType) : null;
         $this->usePagination = $usePagination;
         $this->enableSearch = $enableSearch;
+        $this->showTotals = $showTotals;
         $this->tableSearch = $initialSearch ?? '';
         $this->tableRecordsPerPage = in_array($initialPerPage, [10, 25, 50, 100], true)
             ? $initialPerPage
@@ -120,6 +128,10 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->query(fn (): Builder => $this->query())
             ->searchPlaceholder('Search ID, employee name, or designation')
             ->paginated($this->usePagination ? [10, 25, 50, 100] : false)
+            ->summaries(
+                pageCondition: false,
+                allTableCondition: fn (): bool => $this->showTotals,
+            )
             ->headerActions([
                 ActionGroup::make([
                     Action::make('showSummaryColumns')
@@ -185,17 +197,18 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('rate_per_hour', 'Rate Per Hour'),
                 $this->numberColumn('days_worked', 'Days Work'),
 
-                TextInputColumn::make('salary_adjustment')
+                $this->totalizeColumn(TextInputColumn::make('salary_adjustment')
                     ->label('Salary Adjustment')
                     ->type('number')
                     ->rules(['nullable', 'numeric', 'min:0'])
                     ->disabled(fn (): bool => $this->isLocked())
                     ->afterStateUpdated(function (): void {
                         $this->rowCache = [];
+                        $this->totalsCache = [];
                         $this->dispatch('payroll-adjustment-updated');
                     })
                     ->alignEnd()
-                    ->visible(fn (): bool => $this->isColumnVisible('salary_adjustment')),
+                    ->visible(fn (): bool => $this->isColumnVisible('salary_adjustment')), 'salary_adjustment'),
 
                 $this->moneyColumn('allowance', 'Allowance'),
                 $this->numberColumn('overtime_hours', 'OT Hrs'),
@@ -218,17 +231,18 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('absent', 'Absent'),
                 $this->moneyColumn('late', 'Late'),
 
-                TextInputColumn::make('shortages')
+                $this->totalizeColumn(TextInputColumn::make('shortages')
                     ->label('Shortages')
                     ->type('number')
                     ->rules(['nullable', 'numeric', 'min:0'])
                     ->disabled(fn (): bool => $this->isLocked())
                     ->afterStateUpdated(function (): void {
                         $this->rowCache = [];
+                        $this->totalsCache = [];
                         $this->dispatch('payroll-adjustment-updated');
                     })
                     ->alignEnd()
-                    ->visible(fn (): bool => $this->isColumnVisible('shortages')),
+                    ->visible(fn (): bool => $this->isColumnVisible('shortages')), 'shortages'),
 
                 $this->moneyColumn('uniform', 'Uniform'),
                 $this->moneyColumn('other_deductions', 'Other Deductions'),
@@ -252,6 +266,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         }
 
         $this->columnPreset = $preset;
+        $this->totalsCache = [];
         $this->resetTable();
         $this->dispatch('payroll-column-preset-changed', preset: $preset);
     }
@@ -264,7 +279,13 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         }
 
         $this->columnPreset = $preset;
+        $this->totalsCache = [];
         $this->resetTable();
+    }
+
+    public function updatedTableSearch(): void
+    {
+        $this->totalsCache = [];
     }
 
     public function render()
@@ -626,22 +647,61 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function moneyColumn(string $key, string $label): TextColumn
     {
-        return TextColumn::make($key)
+        return $this->totalizeColumn(TextColumn::make($key)
             ->label($label)
             ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): mixed => $this->rowValue($record, $key))
             ->formatStateUsing(fn (mixed $state): string => $this->money($state))
             ->alignEnd()
-            ->visible(fn (): bool => $this->isColumnVisible($key));
+            ->visible(fn (): bool => $this->isColumnVisible($key)), $key);
     }
 
     protected function numberColumn(string $key, string $label): TextColumn
     {
-        return TextColumn::make($key)
+        return $this->totalizeColumn(TextColumn::make($key)
             ->label($label)
             ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): mixed => $this->rowValue($record, $key))
             ->formatStateUsing(fn (mixed $state): string => $this->plainNumber($state))
             ->alignEnd()
-            ->visible(fn (): bool => $this->isColumnVisible($key));
+            ->visible(fn (): bool => $this->isColumnVisible($key)), $key, false);
+    }
+
+    protected function totalizeColumn(Column $column, string $key, bool $money = true): Column
+    {
+        if ($this->showTotals) {
+            $column->summarize(
+                Summarizer::make("payroll-total-{$key}")
+                    ->hiddenLabel()
+                    ->using(fn (): float => $this->payrollTotal($key))
+                    ->formatStateUsing(fn (mixed $state): string => $money
+                        ? $this->money($state)
+                        : $this->plainNumber($state)),
+            );
+        }
+
+        return $column;
+    }
+
+    protected function payrollTotal(string $key): float
+    {
+        $cacheKey = $this->tableSearch.'|'.$key;
+
+        if (array_key_exists($cacheKey, $this->totalsCache)) {
+            return $this->totalsCache[$cacheKey];
+        }
+
+        $query = $this->getAllTableSummaryQuery();
+
+        if (! $query) {
+            return $this->totalsCache[$cacheKey] = 0.0;
+        }
+
+        $total = 0.0;
+
+        foreach ($query->get() as $record) {
+            $total += (float) ($this->rowValue($record, $key) ?? 0);
+        }
+
+        return $this->totalsCache[$cacheKey] = $total;
     }
 
     protected function isColumnVisible(string $key): bool
