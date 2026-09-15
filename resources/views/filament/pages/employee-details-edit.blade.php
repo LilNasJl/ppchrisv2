@@ -18,12 +18,31 @@
         .fi-panel-hr .employee-details-page-shell {
             display: block;
         }
+
+        .employee-details-save-actions {
+            align-items: center;
+            border-top: 1px solid rgba(148, 163, 184, .25);
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding-top: 1.25rem;
+        }
+
+        .employee-details-save-actions button {
+            min-width: 10rem;
+        }
+
+        @media (max-width: 640px) {
+            .employee-details-save-actions button {
+                width: 100%;
+            }
+        }
     </style>
 
     <form wire:submit="save" class="employee-details-page-shell">
         {{ $this->form }}
 
-        <div class="mt-6 flex justify-end">
+        <div class="employee-details-save-actions">
             <x-filament::button
                 type="submit"
                 icon="heroicon-o-check"
