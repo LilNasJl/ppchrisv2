@@ -2,9 +2,6 @@
 
 namespace App\Filament\Concerns;
 
-use App\Filament\Pages\EmployeeDetails;
-use App\Filament\Pages\EmployeeLeaveHistory;
-use App\Filament\Pages\ViewEmployeeDetails;
 use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
@@ -454,60 +451,6 @@ trait ManagesEmployeeDetailsForm
         );
     }
 
-    protected function leaveHistoryButton(?ModelsEmployee $record): HtmlString
-    {
-        if (! $record?->exists) {
-            return new HtmlString('<div style="color:#64748b;">Save the employee first to view leave history.</div>');
-        }
-
-        $returnUrl = $this->employeeDetailsCurrentUrl($record);
-
-        $url = EmployeeLeaveHistory::getUrl([
-            'employeeId' => $record->publicKey(),
-            'returnUrl' => $returnUrl,
-        ]);
-
-        return new HtmlString(
-            '<a href="'.e($url).'" style="display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;padding:10px 14px;text-decoration:none;">Leave History</a>'
-        );
-    }
-
-    protected function employeeDetailsCurrentUrl(ModelsEmployee $record): string
-    {
-        $referer = request()->headers->get('referer');
-
-        if ($this->isSafeEmployeeDetailsReturnUrl($referer)) {
-            return $referer;
-        }
-
-        $currentUrl = request()->fullUrl();
-
-        if ($this->isSafeEmployeeDetailsReturnUrl($currentUrl)) {
-            return $currentUrl;
-        }
-
-        return ViewEmployeeDetails::getUrl([
-            'employeeId' => $record->publicKey(),
-            'returnUrl' => EmployeeDetails::getUrl(),
-        ]);
-    }
-
-    protected function isSafeEmployeeDetailsReturnUrl(mixed $url): bool
-    {
-        if (! is_string($url) || blank($url)) {
-            return false;
-        }
-
-        $appUrl = url('/');
-        $path = parse_url($url, PHP_URL_PATH);
-
-        if (is_string($path) && preg_match('#^/livewire(?:-[A-Za-z0-9]+)?/update$#', $path)) {
-            return false;
-        }
-
-        return str_starts_with($url, $appUrl) || str_starts_with($url, '/');
-    }
-
     protected function getEmployeeDetailsFormData(ModelsEmployee $record): array
     {
         $record->resetLeaveCreditsIfNeeded();
@@ -825,15 +768,15 @@ trait ManagesEmployeeDetailsForm
                                         ->label('Leave Count')
                                         ->numeric()
                                         ->minValue(0)
-                                        ->disabled()
-                                        ->dehydrated(false),
+                                        ->step(0.01)
+                                        ->required(),
 
                                     TextInput::make('birthday_leave_credits')
                                         ->label('Birthday Leave Count')
                                         ->numeric()
                                         ->minValue(0)
-                                        ->disabled()
-                                        ->dehydrated(false),
+                                        ->step(0.01)
+                                        ->required(),
 
                                     TextInput::make('leave_credits_year')
                                         ->label('Leave Year')
@@ -845,10 +788,6 @@ trait ManagesEmployeeDetailsForm
                                     'md' => 3,
                                 ]),
 
-                            Placeholder::make('leave_history_button')
-                                ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->leaveHistoryButton($record ?? ($this->employeeRecord ?? null)))
-                                ->columnSpanFull(),
                         ]),
 
                     Tabs\Tab::make('Salary')
