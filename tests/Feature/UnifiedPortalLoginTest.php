@@ -3,25 +3,42 @@
 namespace Tests\Feature;
 
 use App\Filament\Auth\Login;
-use App\Models\SicRcAccount;
 use App\Models\User;
 use Filament\Facades\Filament;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
-use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use Tests\TestCase;
 
-#[RequiresPhpExtension('pdo_sqlite')]
 class UnifiedPortalLoginTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();
 
+        $this->createTestTables();
         Filament::setCurrentPanel(Filament::getPanel('hr'));
+    }
+
+    protected function createTestTables(): void
+    {
+        Schema::dropAllTables();
+
+        Schema::create('users', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name')->default('Test User');
+            $table->string('email')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('username')->nullable();
+            $table->string('password')->default('secret');
+            $table->string('remember_token', 100)->nullable();
+            $table->string('role', 30)->default('employee');
+            $table->unsignedBigInteger('employee_id')->nullable();
+            $table->boolean('is_disabled')->default(false);
+            $table->softDeletes();
+            $table->timestamps();
+        });
     }
 
     public function test_hr_account_can_sign_in_through_the_hris_portal(): void
@@ -42,30 +59,9 @@ class UnifiedPortalLoginTest extends TestCase
             ->assertRedirect(url('/hr'));
 
         $this->assertAuthenticatedAs($user, 'web');
-        $this->assertGuest('sicrc');
     }
 
-    public function test_sicrc_account_can_sign_in_through_the_same_hris_portal(): void
-    {
-        $account = SicRcAccount::query()->create([
-            'username' => 'shared-sicrc-user',
-            'password' => 'secret-pass',
-            'is_active' => true,
-        ]);
-
-        Livewire::test(Login::class)
-            ->fillForm([
-                'username' => 'shared-sicrc-user',
-                'password' => 'secret-pass',
-            ])
-            ->call('authenticate')
-            ->assertRedirect(url('/sicrc'));
-
-        $this->assertGuest('web');
-        $this->assertAuthenticatedAs($account, 'sicrc');
-    }
-
-    public function test_employee_and_disabled_sicrc_accounts_are_rejected(): void
+    public function test_employee_and_disabled_accounts_are_rejected_from_hr_portal(): void
     {
         User::factory()->create([
             'username' => 'employee-only-user',
@@ -73,10 +69,12 @@ class UnifiedPortalLoginTest extends TestCase
             'role' => 'employee',
             'is_disabled' => false,
         ]);
-        SicRcAccount::query()->create([
-            'username' => 'disabled-sicrc-user',
-            'password' => 'secret-pass',
-            'is_active' => false,
+
+        User::factory()->create([
+            'username' => 'disabled-hr-user',
+            'password' => Hash::make('secret-pass'),
+            'role' => 'hr',
+            'is_disabled' => true,
         ]);
 
         Livewire::test(Login::class)
@@ -89,13 +87,12 @@ class UnifiedPortalLoginTest extends TestCase
 
         Livewire::test(Login::class)
             ->fillForm([
-                'username' => 'disabled-sicrc-user',
+                'username' => 'disabled-hr-user',
                 'password' => 'secret-pass',
             ])
             ->call('authenticate')
             ->assertHasErrors(['data.username']);
 
         $this->assertGuest('web');
-        $this->assertGuest('sicrc');
     }
 }

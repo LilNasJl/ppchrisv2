@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Filament\SicRc\Pages;
+namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\Branch;
 use App\Models\DtrSubmission;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
+use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -24,25 +24,42 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class DtrSubmissions extends Page implements HasTable
+class StationSubmissions extends Page implements HasTable
 {
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
 
+    protected static ?string $slug = 'station/submissions';
+
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Submit D.T.R';
+    protected static ?string $title = 'Submit Station D.T.R';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowUpTray;
 
+    public static function canAccess(): bool
+    {
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
+    }
+
+    public function mount(): void
+    {
+        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
+            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        }
+    }
+
     public function table(Table $table): Table
     {
+        $employeeId = auth()->user()?->employee?->id;
+
         return $table
             ->query(fn (): Builder => DtrSubmission::query()
                 ->with(['payrollPeriod', 'branch'])
-                ->where('sic_rc_account_id', $this->account()?->id)
+                ->where('submitted_by_employee_id', $employeeId)
                 ->where('submission_type', DtrSubmission::TYPE_DTR)
                 ->latest())
             ->columns([
@@ -56,7 +73,7 @@ class DtrSubmissions extends Page implements HasTable
                     ->sortable(),
 
                 TextColumn::make('branch.branch_name')
-                    ->label('Branch')
+                    ->label('Station / Branch')
                     ->searchable()
                     ->sortable(),
 
@@ -105,12 +122,12 @@ class DtrSubmissions extends Page implements HasTable
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(Branches::getUrl()),
+                ->url(ManageStationDtr::getUrl()),
 
             Action::make('submitDtr')
-                ->label('Submit D.T.R')
+                ->label('Submit D.T.R File')
                 ->icon(Heroicon::ArrowUpTray)
-                ->modalHeading('Submit D.T.R File')
+                ->modalHeading('Submit Station D.T.R File')
                 ->modalSubmitActionLabel('Submit')
                 ->schema([
                     Select::make('payroll_period_id')
@@ -125,7 +142,7 @@ class DtrSubmissions extends Page implements HasTable
                         ->required(),
 
                     Select::make('branch_id')
-                        ->label('Branch')
+                        ->label('Station / Branch')
                         ->options(fn (): array => Branch::query()
                             ->whereIn('id', $this->assignedBranchIds())
                             ->orderBy('branch_name')
@@ -152,45 +169,46 @@ class DtrSubmissions extends Page implements HasTable
 
                     Textarea::make('comments')
                         ->label('Comments')
-                        ->rows(4)
-                        ->maxLength(2000)
-                        ->columnSpanFull(),
+                        ->rows(3)
+                        ->maxLength(2000),
                 ])
                 ->action(function (array $data): void {
-                    $path = (string) $data['dtr_file'];
+                    $employee = auth()->user()?->employee;
+                    abort_unless($employee, 403);
+
+                    $filePath = (string) ($data['dtr_file'] ?? '');
+                    $fileName = basename($filePath);
+                    $fileSize = null;
+                    $mimeType = null;
+
+                    if ($filePath && Storage::disk('local')->exists($filePath)) {
+                        $fileSize = Storage::disk('local')->size($filePath);
+                        $mimeType = Storage::disk('local')->mimeType($filePath) ?: 'application/octet-stream';
+                    }
 
                     DtrSubmission::query()->create([
-                        'sic_rc_account_id' => $this->account()?->id,
-                        'payroll_period_id' => $data['payroll_period_id'],
-                        'branch_id' => $data['branch_id'],
-                        'file_path' => $path,
-                        'file_name' => basename($path),
-                        'file_size' => Storage::disk('local')->exists($path) ? Storage::disk('local')->size($path) : 0,
-                        'mime_type' => Storage::disk('local')->exists($path) ? Storage::disk('local')->mimeType($path) : null,
-                        'file_hash' => Storage::disk('local')->exists($path) ? hash_file('sha256', Storage::disk('local')->path($path)) : null,
-                        'comments' => $data['comments'] ?? null,
-                        'is_new' => true,
+                        'submitted_by_employee_id' => $employee->id,
+                        'payroll_period_id' => (int) $data['payroll_period_id'],
+                        'branch_id' => (int) $data['branch_id'],
                         'submission_type' => DtrSubmission::TYPE_DTR,
+                        'file_path' => $filePath,
+                        'file_name' => $fileName,
+                        'mime_type' => $mimeType,
+                        'file_size' => $fileSize,
+                        'status' => DtrSubmission::STATUS_PENDING,
+                        'comments' => $data['comments'] ?? null,
                     ]);
 
                     Notification::make()
-                        ->title('D.T.R submitted')
-                        ->body('The submitted file is now available in the HR D.T.R Submission inbox.')
+                        ->title('D.T.R file submitted successfully')
                         ->success()
                         ->send();
                 }),
         ];
     }
 
-    protected function account(): ?SicRcAccount
-    {
-        $account = auth('sicrc')->user();
-
-        return $account instanceof SicRcAccount ? $account : null;
-    }
-
     protected function assignedBranchIds(): array
     {
-        return $this->account()?->assignedBranchIds() ?? [];
+        return StationManagementAccess::getManagedBranchIds(auth()->user());
     }
 }

@@ -38,8 +38,8 @@ class DtrChangeRequest extends Model
         'employee_id',
         'branch_id',
         'payroll_period_id',
-        'assigned_sic_rc_account_id',
-        'reviewed_by_sic_rc_account_id',
+        'assigned_employee_id',
+        'reviewed_by_employee_id',
         'employee_name_snapshot',
         'employee_company_id_snapshot',
         'branch_name_snapshot',
@@ -111,13 +111,18 @@ class DtrChangeRequest extends Model
         return $this->belongsTo(PayrollPeriod::class)->withTrashed();
     }
 
-    public function assignedSicRcAccount()
+    public function assignedEmployee()
     {
-        return $this->belongsTo(SicRcAccount::class, 'assigned_sic_rc_account_id')->withTrashed();
+        return $this->belongsTo(Employee::class, 'assigned_employee_id')->withTrashed();
     }
 
-    public function reviewedBySicRcAccount()
+    public function reviewedByEmployee()
     {
-        return $this->belongsTo(SicRcAccount::class, 'reviewed_by_sic_rc_account_id')->withTrashed();
+        return $this->belongsTo(Employee::class, 'reviewed_by_employee_id')->withTrashed();
+    }
+
+    public function getReviewerNameAttribute(): string
+    {
+        return $this->reviewedByEmployee?->full_name ?? 'Not reviewed yet';
     }
 }

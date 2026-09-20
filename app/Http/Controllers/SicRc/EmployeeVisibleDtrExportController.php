@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers\SicRc;
 
+use App\Filament\Employee\Pages\Station\StationEmployees;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Services\Biometrics\BiometricDtrBinCodec;
 use App\Services\DtrOvertimeTransferService;
+use App\Services\StationManagementAccess;
+use Filament\Notifications\Notification;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EmployeeVisibleDtrExportController extends Controller
@@ -19,16 +23,19 @@ class EmployeeVisibleDtrExportController extends Controller
         Request $request,
         BiometricDtrBinCodec $codec,
         DtrOvertimeTransferService $overtimeTransfer,
-    ): StreamedResponse {
-        $account = auth('sicrc')->user();
+    ): Response {
+        $manager = auth()->user()?->employee;
 
-        abort_unless($account instanceof SicRcAccount, 403);
+        abort_unless($manager instanceof Employee, 403, 'Unauthorized manager.');
 
-        $periodId = PayrollPeriod::resolvePublicId($request->query('period_id'));
-        $branchId = Branch::resolvePublicId($request->query('branch_id'));
+        $periodKey = $request->query('period_id') ?? $request->query('periodId');
+        $branchKey = $request->query('branch_id') ?? $request->query('branchId');
 
-        abort_if(blank($periodId) || blank($branchId), 404);
-        abort_unless(in_array((int) $branchId, $account->assignedBranchIds(), true), 403);
+        $periodId = PayrollPeriod::resolvePublicId($periodKey);
+        $branchId = Branch::resolvePublicId($branchKey);
+
+        abort_if(blank($periodId) || blank($branchId), 404, 'Branch or payroll period not found.');
+        abort_unless(StationManagementAccess::canManageBranch($manager, (int) $branchId), 403, 'Branch not assigned.');
 
         $period = PayrollPeriod::query()->findOrFail($periodId);
         $branch = Branch::query()->findOrFail($branchId);
@@ -41,9 +48,35 @@ class EmployeeVisibleDtrExportController extends Controller
             ->orderBy('date_in')
             ->orderBy('time_in');
 
-        abort_if(! (clone $query)->exists(), 404, 'No D.T.R records are available for this branch and payroll period.');
+        // Fallback to official DTR table if employee_visible_dtrs has no records
+        if (! (clone $query)->exists()) {
+            $fallbackQuery = Dtr::query()
+                ->with('employee:id,fingerprint_id,lastname,middlename,firstname')
+                ->where('payroll_period_id', $period->id)
+                ->where('branch_id', $branch->id)
+                ->orderBy('fingerprint_id')
+                ->orderBy('date_in')
+                ->orderBy('time_in');
 
-        $filename = 'sicrc-dtr-'.str($branch->branch_name)->slug().'-'.now()->format('Ymd-His').'.bin';
+            if ((clone $fallbackQuery)->exists()) {
+                $query = $fallbackQuery;
+            }
+        }
+
+        if (! (clone $query)->exists()) {
+            Notification::make()
+                ->title('No D.T.R Records Available')
+                ->warning()
+                ->body("There are no D.T.R records available to download for {$branch->branch_name} in {$period->title}. Please import D.T.R first.")
+                ->send();
+
+            return redirect()->to(StationEmployees::getUrl([
+                'branchId' => $branch->publicKey(),
+                'periodId' => $period->publicKey(),
+            ]));
+        }
+
+        $filename = 'station-dtr-'.str($branch->branch_name)->slug().'-'.now()->format('Ymd-His').'.bin';
 
         return response()->streamDownload(function () use ($query, $codec, $overtimeTransfer): void {
             $query->chunk(500, function ($records) use ($codec, $overtimeTransfer): void {

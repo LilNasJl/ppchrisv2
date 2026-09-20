@@ -137,7 +137,7 @@ Route::middleware('auth')
         Route::get('/dtr-submissions/{submission}/view', [DtrSubmissionDownloadController::class, 'view'])->name('dtr_submissions.view');
     });
 
-Route::middleware('auth:sicrc')
+Route::middleware(['web', 'auth'])
     ->prefix('sicrc-tools')
     ->name('sicrc_tools.')
     ->group(function (): void {

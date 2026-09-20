@@ -39,6 +39,7 @@ class EmployeePanelProvider extends PanelProvider
             ->login(EmployeeLogin::class)
             ->navigationGroups([
                 NavigationGroup::make('My Workspace'),
+                NavigationGroup::make('Station Management'),
                 NavigationGroup::make('My Profile'),
                 NavigationGroup::make('Reports & Updates'),
             ])

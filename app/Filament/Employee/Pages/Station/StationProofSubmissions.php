@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Filament\SicRc\Pages;
+namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\DtrSubmission;
+use App\Models\Employee;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Services\OnFieldDtrService;
+use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -27,12 +28,15 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class DtrProofSubmissions extends Page implements HasTable
+class StationProofSubmissions extends Page implements HasTable
 {
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
+
+    protected static ?string $slug = 'station/proof-submissions';
 
     protected static bool $shouldRegisterNavigation = false;
 
@@ -40,12 +44,26 @@ class DtrProofSubmissions extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentCheck;
 
+    public static function canAccess(): bool
+    {
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
+    }
+
+    public function mount(): void
+    {
+        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
+            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        }
+    }
+
     public function table(Table $table): Table
     {
+        $employeeId = auth()->user()?->employee?->id;
+
         return $table
             ->query(fn (): Builder => DtrSubmission::query()
                 ->with(['payrollPeriod', 'branch'])
-                ->where('sic_rc_account_id', $this->account()?->id)
+                ->where('submitted_by_employee_id', $employeeId)
                 ->where('submission_type', DtrSubmission::TYPE_PROOF)
                 ->latest())
             ->heading('On Field DTR Requests')
@@ -58,7 +76,7 @@ class DtrProofSubmissions extends Page implements HasTable
                 TextColumn::make('date_out')->label('Date Out')->date('M d, Y')->sortable(),
                 TextColumn::make('time_out')->label('Time Out')->time('h:i A'),
                 TextColumn::make('branch_name_snapshot')
-                    ->label('Branch')
+                    ->label('Station / Branch')
                     ->getStateUsing(fn (DtrSubmission $record): string => $record->submittedBranchName())
                     ->searchable()
                     ->wrap(),
@@ -110,9 +128,9 @@ class DtrProofSubmissions extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(Branches::getUrl()),
+            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(ManageStationDtr::getUrl()),
             Action::make('submitDtr')
-                ->label('Submit DTR')
+                ->label('Submit On Field DTR')
                 ->icon(Heroicon::ArrowUpTray)
                 ->modalHeading('Submit On Field DTR')
                 ->modalDescription(fn (): string => $this->identityDescription())
@@ -157,15 +175,15 @@ class DtrProofSubmissions extends Page implements HasTable
                         ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
-                    $account = $this->account();
+                    $employee = $this->employee();
 
-                    if (! $account) {
-                        Notification::make()->title('SIC/RC account not found')->danger()->send();
+                    if (! $employee) {
+                        Notification::make()->title('Employee record not found')->danger()->send();
 
                         return;
                     }
 
-                    app(OnFieldDtrService::class)->submit($account, $data);
+                    app(OnFieldDtrService::class)->submit($employee, $data);
 
                     Notification::make()
                         ->title('On Field DTR submitted')
@@ -176,31 +194,28 @@ class DtrProofSubmissions extends Page implements HasTable
         ];
     }
 
-    protected function account(): ?SicRcAccount
+    protected function employee(): ?Employee
     {
-        $account = auth('sicrc')->user();
-
-        return $account instanceof SicRcAccount ? $account : null;
+        return auth()->user()?->employee;
     }
 
     protected function hasValidEmployeeBinding(): bool
     {
-        return (bool) $this->account()?->employee()->whereNotNull('branch_id')->exists();
+        $employee = $this->employee();
+
+        return (bool) ($employee && ! $employee->trashed() && $employee->branch && ! $employee->branch->trashed());
     }
 
     protected function identityDescription(): string
     {
-        $employee = $this->account()?->employee?->loadMissing('branch');
+        $employee = $this->employee();
 
         if (! $employee) {
-            return 'This account has no bound employee. Ask HR to configure the employee binding first.';
+            return 'No bound employee record was found.';
         }
 
-        return trim(sprintf(
-            'Submitting for %s (%s), %s.',
-            $employee->full_name,
-            $employee->company_id ?? 'No employee ID',
-            $employee->branch?->branch_name ?? 'No branch',
-        ));
+        $branchName = $employee->branch?->branch_name ?? 'No Branch';
+
+        return "Submitting as: {$employee->full_name} ({$employee->company_id}) - {$branchName}";
     }
 }

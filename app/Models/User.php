@@ -188,6 +188,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasOne(Employee::class, 'user_id')->withTrashed();
     }
 
+    public function isStationManager(): bool
+    {
+        return \App\Services\StationManagementAccess::canAccessStationManagement($this);
+    }
+
     public function accountStatusHistories()
     {
         return $this->hasMany(AccountStatusHistory::class)->latest();

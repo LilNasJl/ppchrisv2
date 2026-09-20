@@ -17,7 +17,7 @@ class SicRcDtrImport extends Model
     public const STATUS_NO_CHANGES = 'no_changes';
 
     protected $fillable = [
-        'sic_rc_account_id',
+        'imported_by_employee_id',
         'branch_id',
         'payroll_period_id',
         'batch_id',
@@ -46,9 +46,9 @@ class SicRcDtrImport extends Model
         ];
     }
 
-    public function account(): BelongsTo
+    public function importedByEmployee(): BelongsTo
     {
-        return $this->belongsTo(SicRcAccount::class, 'sic_rc_account_id');
+        return $this->belongsTo(Employee::class, 'imported_by_employee_id')->withTrashed();
     }
 
     public function branch(): BelongsTo

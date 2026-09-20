@@ -4,7 +4,7 @@ namespace App\Support;
 
 use App\Models\ActionHistory;
 use App\Models\Dtr;
-use App\Models\SicRcAccount;
+use App\Models\Employee;
 use App\Models\SystemAccount;
 use App\Models\User;
 use BackedEnum;
@@ -110,7 +110,7 @@ class HrDatabaseNotification
         LaravelNotification::sendNow($recipients, $notification->toDatabase());
     }
 
-    protected static function logRecordAction(Model $record, string $action, User|SicRcAccount $actor): void
+    protected static function logRecordAction(Model $record, string $action, User|Employee $actor): void
     {
         if ($record instanceof ActionHistory) {
             return;
@@ -144,7 +144,7 @@ class HrDatabaseNotification
         ]);
     }
 
-    protected static function logCustomAction(string $title, ?string $body, string $status, User|SicRcAccount $actor): void
+    protected static function logCustomAction(string $title, ?string $body, string $status, User|Employee $actor): void
     {
         ActionHistory::create([
             'actor_id' => $actor instanceof User ? $actor->id : null,
@@ -257,7 +257,7 @@ class HrDatabaseNotification
         return Str::headline(self::modelLabel($record)).' '.$action;
     }
 
-    protected static function bodyFor(Model $record, User|SicRcAccount $actor): string
+    protected static function bodyFor(Model $record, User|Employee $actor): string
     {
         $recordName = self::recordName($record);
         $actorName = self::actorName($actor);
@@ -267,18 +267,26 @@ class HrDatabaseNotification
             : "Record #{$record->getKey()} by {$actorName}";
     }
 
-    protected static function actorName(User|SicRcAccount $actor): string
+    protected static function actorName(User|Employee $actor): string
     {
-        if ($actor instanceof SicRcAccount) {
-            return $actor->username ?: 'SIC/RC account';
+        if ($actor instanceof Employee) {
+            return $actor->full_name ?: ($actor->company_id ?: 'Employee');
         }
 
         return $actor->username ?: $actor->name ?: $actor->email ?: 'System user';
     }
 
-    protected static function actorRole(User|SicRcAccount $actor): string
+    protected static function actorRole(User|Employee $actor): string
     {
-        return $actor instanceof SicRcAccount ? 'sic/rc' : (string) ($actor->role ?: 'user');
+        if ($actor instanceof Employee) {
+            return $actor->isStationManager() ? 'station_manager' : 'employee';
+        }
+
+        if ($actor->employee?->isStationManager()) {
+            return 'station_manager';
+        }
+
+        return (string) ($actor->role ?: 'user');
     }
 
     protected static function modelLabel(Model $record): string

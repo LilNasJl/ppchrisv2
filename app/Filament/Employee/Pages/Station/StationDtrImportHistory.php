@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Filament\SicRc\Pages;
+namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\Branch;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Models\SicRcDtrImport;
 use App\Services\SicRcDtrImportDeletionService;
+use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -23,7 +23,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class DtrImportHistory extends Page implements HasTable
+class StationDtrImportHistory extends Page implements HasTable
 {
     use InteractsWithTable;
 
@@ -31,9 +31,9 @@ class DtrImportHistory extends Page implements HasTable
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $slug = 'dtr-import-history';
+    protected static ?string $slug = 'station/dtr-import-history';
 
-    protected static ?string $title = 'D.T.R Import History';
+    protected static ?string $title = 'Station D.T.R Import History';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Clock;
 
@@ -45,6 +45,11 @@ class DtrImportHistory extends Page implements HasTable
 
     public ?PayrollPeriod $period = null;
 
+    public static function canAccess(): bool
+    {
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
+    }
+
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;
@@ -52,14 +57,18 @@ class DtrImportHistory extends Page implements HasTable
 
     public function mount(): void
     {
+        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
+            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        }
+
         $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
         $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
 
         $this->branch = $this->branchId ? Branch::query()->find($this->branchId) : null;
         $this->period = $this->periodId ? PayrollPeriod::query()->find($this->periodId) : null;
 
-        if (! $this->branch || ! in_array($this->branch->id, $this->assignedBranchIds(), true)) {
-            throw new HttpException(403, 'This branch is not attached to your SIC/RC account.');
+        if (! $this->branch || ! StationManagementAccess::canManageBranch(auth()->user(), $this->branch->id)) {
+            throw new HttpException(403, 'This station branch is not assigned to your management profile.');
         }
 
         if (! $this->period) {
@@ -83,13 +92,13 @@ class DtrImportHistory extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => SicRcDtrImport::query()
-                ->with('account')
+                ->with(['importedByEmployee.user'])
                 ->where('branch_id', $this->branchId)
                 ->where('payroll_period_id', $this->periodId)
                 ->latest('imported_at')
                 ->latest('id'))
             ->heading($this->period?->title ?: 'Selected Payroll Period')
-            ->description('Imports for the selected branch and payroll period only.')
+            ->description('Imports for the selected station branch and payroll period.')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -137,7 +146,7 @@ class DtrImportHistory extends Page implements HasTable
                         default => 'danger',
                     }),
 
-                TextColumn::make('account.username')
+                TextColumn::make('importedByEmployee.full_name')
                     ->label('Imported By')
                     ->placeholder('-'),
 
@@ -149,68 +158,40 @@ class DtrImportHistory extends Page implements HasTable
             ->recordActions([
                 ActionGroup::make([
                     Action::make('deleteImport')
-                        ->label('Delete Permanently')
-                        ->icon(Heroicon::Trash)
+                        ->label('Delete Batch')
+                        ->icon('heroicon-m-trash')
                         ->color('danger')
                         ->requiresConfirmation()
-                        ->modalHeading('Delete D.T.R import permanently?')
-                        ->modalDescription(fn (SicRcDtrImport $record): string => $record->status === SicRcDtrImport::STATUS_COMPLETED && $record->imported_rows > 0
-                            ? "This permanently deletes the imported D.T.R data for batch {$record->batch_id} and its matching history records. This cannot be undone."
-                            : 'This permanently deletes this import-history record. No D.T.R data was created by this attempt.')
-                        ->modalSubmitActionLabel('Delete Permanently')
-                        ->action(fn (SicRcDtrImport $record) => $this->deleteImport($record)),
+                        ->modalHeading('Delete D.T.R Import Batch')
+                        ->modalDescription('Deleting this import removes the preview D.T.R records and the import history entry for this batch. This action cannot be undone.')
+                        ->modalSubmitActionLabel('Delete Import Batch')
+                        ->action(function (SicRcDtrImport $record): void {
+                            $result = app(SicRcDtrImportDeletionService::class)->delete($record);
+
+                            Notification::make()
+                                ->title('Import Batch Deleted')
+                                ->body("Deleted {$result['entries']} preview D.T.R record(s) and {$result['histories']} history row(s).")
+                                ->success()
+                                ->send();
+                        }),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal)
                     ->tooltip('Actions'),
             ])
             ->striped()
-            ->paginationPageOptions([10, 25, 50])
-            ->defaultPaginationPageOption(10)
-            ->emptyStateHeading('No imports yet')
-            ->emptyStateDescription('Completed and failed import attempts for this branch and period will appear here.')
-            ->emptyStateIcon(Heroicon::Clock);
+            ->defaultPaginationPageOption(10);
     }
 
     protected function getHeaderActions(): array
     {
         return [
             Action::make('return')
-                ->label('Return to Import D.T.R')
+                ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => DtrImportUpload::getUrl([
+                ->url(fn (): string => StationEmployees::getUrl([
                     'branchId' => $this->branch?->publicKey(),
                     'periodId' => $this->period?->publicKey(),
-                ], panel: 'sicrc')),
+                ])),
         ];
-    }
-
-    protected function deleteImport(SicRcDtrImport $record): void
-    {
-        abort_unless(
-            $record->branch_id === $this->branchId
-            && $record->payroll_period_id === $this->periodId,
-            403,
-        );
-
-        $deleted = app(SicRcDtrImportDeletionService::class)->delete($record);
-
-        Notification::make()
-            ->title('D.T.R import deleted permanently')
-            ->body("Deleted {$deleted['entries']} imported D.T.R entr".($deleted['entries'] === 1 ? 'y' : 'ies')." and {$deleted['histories']} history record".($deleted['histories'] === 1 ? '' : 's').'.')
-            ->success()
-            ->send();
-    }
-
-    protected function account(): ?SicRcAccount
-    {
-        $account = auth('sicrc')->user();
-
-        return $account instanceof SicRcAccount ? $account : null;
-    }
-
-    /** @return array<int, int> */
-    protected function assignedBranchIds(): array
-    {
-        return $this->account()?->assignedBranchIds() ?? [];
     }
 }

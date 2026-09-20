@@ -8,7 +8,6 @@ use App\Models\DtrSubmission;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,32 +22,25 @@ class OnFieldDtrService
         'image/png',
     ];
 
-    public function submit(SicRcAccount $account, array $data): DtrSubmission
+    public function submit(Employee $employee, array $data): DtrSubmission
     {
-        return DB::transaction(function () use ($account, $data): DtrSubmission {
-            $account = SicRcAccount::query()
-                ->with(['employee.branch'])
+        return DB::transaction(function () use ($employee, $data): DtrSubmission {
+            $employee = Employee::query()
+                ->with(['branch'])
                 ->lockForUpdate()
-                ->find($account->getKey());
+                ->find($employee->getKey());
 
-            if (! $account || ! $account->is_active || $account->trashed()) {
+            if (! $employee || $employee->trashed()) {
                 throw ValidationException::withMessages([
-                    'employee_id' => 'This SIC/RC account is not active.',
+                    'employee_id' => 'Employee is not active or available.',
                 ]);
             }
 
-            $employee = $account->employee;
-            $branch = $employee?->branch;
+            $branch = $employee->branch;
 
-            if (! $employee || $employee->trashed() || ! $branch || $branch->trashed()) {
+            if (! $branch || $branch->trashed()) {
                 throw ValidationException::withMessages([
-                    'employee_id' => 'A valid employee with an assigned branch must be bound to this SIC/RC account.',
-                ]);
-            }
-
-            if (! in_array((int) $branch->getKey(), $account->assignedBranchIds(), true)) {
-                throw ValidationException::withMessages([
-                    'employee_id' => 'The bound employee\'s branch is not assigned to this SIC/RC account.',
+                    'employee_id' => 'The employee must have an assigned branch to submit On Field DTR.',
                 ]);
             }
 
@@ -110,7 +102,7 @@ class OnFieldDtrService
             $description = trim((string) ($data['description'] ?? ''));
 
             return DtrSubmission::query()->create([
-                'sic_rc_account_id' => $account->getKey(),
+                'submitted_by_employee_id' => $employee->getKey(),
                 'employee_id' => $employee->getKey(),
                 'employee_name_snapshot' => trim($employee->lastname.', '.$employee->firstname),
                 'employee_company_id_snapshot' => $employee->company_id,
@@ -141,31 +133,27 @@ class OnFieldDtrService
 
         return DB::transaction(function () use ($submission, $reviewer, $remarks): DtrSubmission {
             $submission = DtrSubmission::query()
-                ->with(['sicRcAccount.employee.branch', 'payrollPeriod'])
+                ->with(['submittedByEmployee.branch', 'employee.branch', 'payrollPeriod'])
                 ->lockForUpdate()
                 ->findOrFail($submission->getKey());
 
             $this->assertPendingProof($submission);
 
-            $account = $submission->sicRcAccount;
-            $employee = $account?->employee;
+            $submitter = $submission->submittedByEmployee;
+            $employee = $submission->employee;
             $branch = $employee?->branch;
             $period = $submission->payrollPeriod;
 
-            if (! $account || ! $account->is_active || $account->trashed()) {
-                throw new \DomainException('The submitting SIC/RC account is no longer active.');
+            if (! $submitter || $submitter->trashed()) {
+                throw new \DomainException('The submitting employee is no longer active.');
             }
 
             if (! $employee || $employee->trashed() || (int) $employee->getKey() !== (int) $submission->employee_id) {
-                throw new \DomainException('The SIC/RC account employee binding changed. Review or reject this request instead.');
+                throw new \DomainException('The employee binding changed. Review or reject this request instead.');
             }
 
             if (! $branch || (int) $branch->getKey() !== (int) $submission->branch_id) {
                 throw new \DomainException('The bound employee branch changed after submission. Review or reject this request instead.');
-            }
-
-            if (! in_array((int) $branch->getKey(), $account->assignedBranchIds(), true)) {
-                throw new \DomainException('The employee branch is no longer assigned to the submitting SIC/RC account.');
             }
 
             if (! $period || $period->is_locked) {

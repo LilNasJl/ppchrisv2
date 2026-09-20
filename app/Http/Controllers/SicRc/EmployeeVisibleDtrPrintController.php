@@ -8,8 +8,8 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Services\DtrRecordService;
+use App\Services\StationManagementAccess;
 use App\Support\CompanyExportHeader;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -23,16 +23,16 @@ class EmployeeVisibleDtrPrintController extends DtrPrintController
         string $employee,
         DtrRecordService $dtrRecords,
     ): View {
-        $account = auth('sicrc')->user();
+        $manager = auth()->user()?->employee;
 
-        abort_unless($account instanceof SicRcAccount, 403);
+        abort_unless($manager instanceof Employee, 403, 'Unauthorized manager.');
 
         $periodId = PayrollPeriod::resolvePublicId($period);
         $branchId = Branch::resolvePublicId($branch);
         $employeeId = Employee::resolvePublicId($employee);
 
         abort_unless($periodId && $branchId && $employeeId, 404);
-        abort_unless(in_array((int) $branchId, $account->assignedBranchIds(), true), 403);
+        abort_unless(StationManagementAccess::canManageBranch($manager, (int) $branchId), 403, 'Branch not assigned.');
 
         $payrollPeriod = PayrollPeriod::query()->findOrFail($periodId);
         $selectedBranch = Branch::query()->findOrFail($branchId);

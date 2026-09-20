@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\KpiAccount;
-use App\Models\SicRcAccount;
 use App\Models\User;
 
 return [
@@ -48,10 +47,6 @@ return [
             'driver' => 'session',
             'provider' => 'kpi_accounts',
         ],
-        'sicrc' => [
-            'driver' => 'session',
-            'provider' => 'sic_rc_accounts',
-        ],
     ],
 
     /*
@@ -79,10 +74,6 @@ return [
         'kpi_accounts' => [
             'driver' => 'eloquent',
             'model' => KpiAccount::class,
-        ],
-        'sic_rc_accounts' => [
-            'driver' => 'eloquent',
-            'model' => SicRcAccount::class,
         ],
 
         // 'users' => [

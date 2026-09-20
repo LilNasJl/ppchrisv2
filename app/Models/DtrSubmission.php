@@ -23,7 +23,7 @@ class DtrSubmission extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'sic_rc_account_id',
+        'submitted_by_employee_id',
         'employee_id',
         'employee_name_snapshot',
         'employee_company_id_snapshot',
@@ -64,9 +64,9 @@ class DtrSubmission extends Model
         'generated_dtr_deleted_at' => 'datetime',
     ];
 
-    public function sicRcAccount(): BelongsTo
+    public function submittedByEmployee(): BelongsTo
     {
-        return $this->belongsTo(SicRcAccount::class);
+        return $this->belongsTo(Employee::class, 'submitted_by_employee_id')->withTrashed();
     }
 
     public function payrollPeriod(): BelongsTo
@@ -129,7 +129,7 @@ class DtrSubmission extends Model
             return trim($this->employee->lastname.', '.$this->employee->firstname);
         }
 
-        return $this->sicRcAccount?->username ?? 'Unknown';
+        return $this->submittedByEmployee?->full_name ?? 'Unknown';
     }
 
     public function submittedBranchName(): string

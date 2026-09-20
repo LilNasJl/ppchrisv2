@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Filament\SicRc\Widgets;
+namespace App\Filament\Employee\Widgets;
 
 use App\Models\Branch;
 use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
+use App\Services\StationManagementAccess;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Collection;
 
-class SicRcBranchAttendanceChart extends ChartWidget
+class StationBranchAttendanceChart extends ChartWidget
 {
     protected ?string $heading = 'Branch Attendance Statistics';
 
@@ -21,7 +21,7 @@ class SicRcBranchAttendanceChart extends ChartWidget
 
     public static function canView(): bool
     {
-        return auth('sicrc')->check();
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
     }
 
     public function mount(): void
@@ -100,9 +100,7 @@ class SicRcBranchAttendanceChart extends ChartWidget
 
     protected function assignedBranchIds(): array
     {
-        $account = auth('sicrc')->user();
-
-        return $account instanceof SicRcAccount ? $account->assignedBranchIds() : [];
+        return StationManagementAccess::getManagedBranchIds(auth()->user());
     }
 
     protected function attendanceTotals(array $branchIds, ?int $periodId): Collection
@@ -116,26 +114,19 @@ class SicRcBranchAttendanceChart extends ChartWidget
             ->whereIn('branch_id', $branchIds)
             ->finalizedAttendance()
             ->select('branch_id')
-            ->selectRaw('COALESCE(SUM(CASE WHEN overtime_approved = 1 THEN credited_overtime ELSE 0 END), 0) as approved_overtime')
+            ->selectRaw('COALESCE(SUM(CASE WHEN overtime_approved = 1 THEN (CASE WHEN credited_overtime > COALESCE(credited_early_clock_in, 0) THEN credited_overtime - COALESCE(credited_early_clock_in, 0) ELSE 0 END) ELSE 0 END), 0) as approved_overtime')
             ->selectRaw('COALESCE(SUM(undertime), 0) as undertime')
             ->selectRaw('COALESCE(SUM(late), 0) as late')
-            ->selectRaw('COALESCE(SUM(CASE WHEN early_clock_in_approved = 1 THEN credited_early_clock_in ELSE 0 END), 0) as approved_early_overtime')
+            ->selectRaw('COALESCE(SUM(CASE WHEN early_clock_in_approved = 1 THEN (CASE WHEN credited_early_clock_in > 0 THEN credited_early_clock_in ELSE COALESCE(early_clock_in, 0) END) ELSE 0 END), 0) as approved_early_overtime')
             ->groupBy('branch_id')
             ->get();
     }
 
-    protected function dataset(
-        string $label,
-        string $color,
-        Collection $branches,
-        Collection $totals,
-        string $column,
-    ): array {
+    protected function dataset(string $label, string $color, Collection $branches, Collection $totals, string $field): array
+    {
         return [
             'label' => $label,
-            'data' => $branches
-                ->map(fn (Branch $branch): int => (int) ($totals->get($branch->id)?->{$column} ?? 0))
-                ->all(),
+            'data' => $branches->map(fn (Branch $branch): int => (int) ($totals->get($branch->id)?->{$field} ?? 0))->all(),
             'backgroundColor' => $color,
             'borderColor' => $color,
             'borderWidth' => 1,

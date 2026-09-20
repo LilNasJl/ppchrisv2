@@ -7,14 +7,91 @@ use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Models\SicRcDtrImport;
 use App\Services\SicRcDtrImportDeletionService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\RequiresPhpExtension;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
-#[RequiresPhpExtension('pdo_sqlite')]
 class SicRcDtrImportDeletionServiceTest extends TestCase
 {
-    use RefreshDatabase;
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->createTestTables();
+    }
+
+    protected function createTestTables(): void
+    {
+        Schema::dropAllTables();
+
+        Schema::create('branches', function (Blueprint $table): void {
+            $table->id();
+            $table->string('branch_name');
+            $table->string('branch_address')->nullable();
+            $table->string('mobile_no')->nullable();
+            $table->unsignedBigInteger('employee_id')->default(0);
+            $table->unsignedInteger('no_of_shifts')->default(1);
+            $table->time('reg_sched_start')->nullable();
+            $table->time('reg_sched_end')->nullable();
+            $table->boolean('is_24hrs')->default(false);
+            $table->boolean('has_broken_time')->default(false);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_periods', function (Blueprint $table): void {
+            $table->id();
+            $table->string('title');
+            $table->date('date_start');
+            $table->date('date_end');
+            $table->date('date_payout');
+            $table->text('description')->nullable();
+            $table->boolean('is_locked')->default(false);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('dtrs', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id')->nullable();
+            $table->boolean('is_locked')->default(false);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('employee_visible_dtrs', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id');
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('employee_id')->nullable();
+            $table->string('fingerprint_id')->nullable();
+            $table->string('batch_id')->nullable();
+            $table->boolean('is_locked')->default(false);
+            $table->date('date_in')->nullable();
+            $table->time('time_in')->nullable();
+            $table->date('date_out')->nullable();
+            $table->time('time_out')->nullable();
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('sic_rc_dtr_imports', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('payroll_period_id');
+            $table->unsignedBigInteger('imported_by_employee_id')->nullable();
+            $table->string('batch_id')->nullable();
+            $table->string('import_name')->nullable();
+            $table->string('source_filename')->nullable();
+            $table->integer('total_rows')->default(0);
+            $table->integer('imported_rows')->default(0);
+            $table->integer('skipped_rows')->default(0);
+            $table->integer('failed_rows')->default(0);
+            $table->string('status')->default('completed');
+            $table->timestamp('imported_at')->nullable();
+            $table->timestamps();
+        });
+    }
 
     public function test_completed_batch_is_permanently_deleted_with_all_matching_history_records(): void
     {

@@ -14,9 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn (Request $request): string => match (true) {
-            $request->is('sicrc', 'sicrc/*', 'sicrc-tools/*') => route('filament.sicrc.auth.login'),
+            $request->is('employee', 'employee/*', 'sicrc-tools/*', 'station-tools/*') => route('filament.employee.auth.login'),
             $request->is('kpi', 'kpi/*') => route('filament.kpi.auth.login'),
-            $request->is('employee', 'employee/*') => route('filament.employee.auth.login'),
             default => route('filament.hr.auth.login'),
         });
     })

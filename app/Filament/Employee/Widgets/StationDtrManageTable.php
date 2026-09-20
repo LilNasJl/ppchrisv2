@@ -1,21 +1,22 @@
 <?php
 
-namespace App\Filament\SicRc\Widgets;
+namespace App\Filament\Employee\Widgets;
 
 use App\Filament\Widgets\DtrManageTable;
 use App\Models\Dtr;
 use App\Models\EmployeeVisibleDtr;
+use App\Services\StationManagementAccess;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class SicRcDtrManageTable extends DtrManageTable
+class StationDtrManageTable extends DtrManageTable
 {
     public static function canView(): bool
     {
-        return auth('sicrc')->check();
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
     }
 
     public function table(Table $table): Table
@@ -61,7 +62,7 @@ class SicRcDtrManageTable extends DtrManageTable
                     ->icon('heroicon-m-chevron-down')
                     ->button(),
             ])
-            ->description('Employee-visible D.T.R preview records imported by SIC/RC. These records do not affect HR payroll until HR performs the official import/process.');
+            ->description('Employee-visible D.T.R preview records managed by Station Manager. These records do not affect HR payroll until HR performs the official import/process.');
     }
 
     protected function getDtrQuery(): Builder
@@ -102,13 +103,13 @@ class SicRcDtrManageTable extends DtrManageTable
         $record->forceFill([
             'is_manually_edited' => true,
             'manual_edited_at' => now(),
-            'manual_edited_by_sicrc_account_id' => auth('sicrc')->id(),
+            'manual_edited_by_employee_id' => auth()->user()?->employee?->id,
             'needs_review' => false,
             'review_reason' => null,
         ])->saveQuietly();
 
         Notification::make()
-            ->title('SIC/RC D.T.R preview updated')
+            ->title('Station D.T.R preview updated')
             ->success()
             ->send();
 

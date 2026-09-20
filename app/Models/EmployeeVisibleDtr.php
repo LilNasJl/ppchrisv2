@@ -57,7 +57,7 @@ class EmployeeVisibleDtr extends Dtr
         'latest_source_payload',
         'is_manually_edited',
         'manual_edited_at',
-        'manual_edited_by_sicrc_account_id',
+        'manual_edited_by_employee_id',
         'needs_review',
         'review_reason',
     ];
@@ -102,5 +102,10 @@ class EmployeeVisibleDtr extends Dtr
                     });
                 }
             });
+    }
+
+    public function manualEditedByEmployee()
+    {
+        return $this->belongsTo(Employee::class, 'manual_edited_by_employee_id')->withTrashed();
     }
 }

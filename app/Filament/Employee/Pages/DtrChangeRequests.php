@@ -61,10 +61,10 @@ class DtrChangeRequests extends Page implements HasTable
         return $table
             ->query(fn (): Builder => DtrChangeRequest::query()
                 ->where('employee_id', $this->employee()->id)
-                ->with(['payrollPeriod', 'reviewedBySicRcAccount'])
+                ->with(['payrollPeriod', 'reviewedByEmployee.user'])
                 ->latest('created_at'))
             ->heading('My D.T.R Change Requests')
-            ->description('Requests are reviewed by the SIC/RC account assigned to your branch. Submitting a request does not change your D.T.R directly.')
+            ->description('Requests are reviewed by the Station Manager assigned to your branch. Submitting a request does not change your D.T.R directly.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
 
@@ -225,7 +225,7 @@ class DtrChangeRequests extends Page implements HasTable
             'request_type' => $request->request_type_label,
             'description' => $request->description,
             'reviewer_remarks' => $request->reviewer_remarks ?: 'No remarks yet.',
-            'reviewed_by' => $request->reviewedBySicRcAccount?->username ?: 'Not reviewed yet',
+            'reviewed_by' => $request->reviewer_name ?: 'Not reviewed yet',
             'reviewed_at' => $request->reviewed_at?->format('M d, Y h:i A') ?: 'Not reviewed yet',
         ];
     }

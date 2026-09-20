@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Filament\SicRc\Pages;
+namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\DtrChangeRequest;
-use App\Models\SicRcAccount;
+use App\Models\Employee;
 use App\Services\DtrChangeRequestService;
+use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -22,20 +23,31 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use UnitEnum;
 
-class DtrChangeRequests extends Page implements HasTable
+class ReviewDtrChangeRequests extends Page implements HasTable
 {
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
 
-    protected static ?string $title = 'Change Requests';
+    protected static ?string $slug = 'station/change-requests';
+
+    protected static ?string $title = 'Station Change Requests';
 
     protected static ?string $navigationLabel = 'Change Requests';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Station Management';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
     protected static ?int $navigationSort = 3;
+
+    public static function canAccess(): bool
+    {
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
+    }
 
     public static function getNavigationBadge(): ?string
     {
@@ -43,13 +55,18 @@ class DtrChangeRequests extends Page implements HasTable
             return null;
         }
 
-        $account = auth('sicrc')->user();
-        if (! $account instanceof SicRcAccount) {
+        $user = auth()->user();
+        if (! StationManagementAccess::canAccessStationManagement($user)) {
+            return null;
+        }
+
+        $branchIds = StationManagementAccess::getManagedBranchIds($user);
+        if ($branchIds === []) {
             return null;
         }
 
         $count = DtrChangeRequest::query()
-            ->whereIn('branch_id', $account->assignedBranchIds())
+            ->whereIn('branch_id', $branchIds)
             ->pending()
             ->count();
 
@@ -63,7 +80,14 @@ class DtrChangeRequests extends Page implements HasTable
 
     public static function getNavigationBadgeTooltip(): ?string
     {
-        return 'Pending D.T.R change requests';
+        return 'Pending station D.T.R change requests';
+    }
+
+    public function mount(): void
+    {
+        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
+            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        }
     }
 
     public function table(Table $table): Table
@@ -71,10 +95,10 @@ class DtrChangeRequests extends Page implements HasTable
         return $table
             ->query(fn (): Builder => DtrChangeRequest::query()
                 ->whereIn('branch_id', $this->assignedBranchIds())
-                ->with(['employee', 'branch', 'payrollPeriod', 'assignedSicRcAccount', 'reviewedBySicRcAccount'])
+                ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user'])
                 ->latest('created_at'))
             ->heading('Employee D.T.R Change Requests')
-            ->description('Approving a request records the decision only. Use Open Employee D.T.R when a correction is required.')
+            ->description('Approving a request records the decision. Use Open Employee D.T.R when a correction is required.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
 
@@ -84,12 +108,12 @@ class DtrChangeRequests extends Page implements HasTable
                     ->wrap(),
 
                 TextColumn::make('employee_company_id_snapshot')
-                    ->label('Employee ID')
+                    ->label('Company ID')
                     ->searchable()
                     ->badge(),
 
                 TextColumn::make('branch_name_snapshot')
-                    ->label('Branch')
+                    ->label('Station / Branch')
                     ->searchable()
                     ->sortable(),
 
@@ -138,7 +162,7 @@ class DtrChangeRequests extends Page implements HasTable
                         ->label('Open Employee D.T.R')
                         ->icon(Heroicon::Clock)
                         ->visible(fn (DtrChangeRequest $record): bool => filled($record->employee) && filled($record->branch) && filled($record->payrollPeriod))
-                        ->url(fn (DtrChangeRequest $record): string => ManageDtr::getUrl([
+                        ->url(fn (DtrChangeRequest $record): string => ManageEmployeeDtr::getUrl([
                             'branchId' => $record->branch?->publicKey(),
                             'employeeId' => $record->employee?->publicKey(),
                             'periodId' => $record->payrollPeriod?->publicKey(),
@@ -150,18 +174,19 @@ class DtrChangeRequests extends Page implements HasTable
                         ->color('success')
                         ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING)
                         ->modalHeading('Approve D.T.R Change Request')
-                        ->modalDescription('This approves the request only. It will not automatically change the employee D.T.R.')
+                        ->modalDescription('This approves the request record. It will not automatically alter biometric punches.')
                         ->modalSubmitActionLabel('Approve Request')
                         ->schema([
                             Textarea::make('reviewer_remarks')
-                                ->label('SIC/RC Remarks')
+                                ->label('Station Manager Remarks')
                                 ->rows(4)
                                 ->maxLength(2000),
                         ])
                         ->action(function (DtrChangeRequest $record, array $data): void {
+                            $reviewer = $this->managerEmployee();
                             $record = app(DtrChangeRequestService::class)->approve(
                                 $record,
-                                $this->account(),
+                                $reviewer,
                                 $data['reviewer_remarks'] ?? null,
                             );
 
@@ -175,7 +200,7 @@ class DtrChangeRequests extends Page implements HasTable
                         ->color('danger')
                         ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING)
                         ->modalHeading('Reject D.T.R Change Request')
-                        ->modalDescription('Explain why the request cannot be approved.')
+                        ->modalDescription('Explain why the change request cannot be approved.')
                         ->modalSubmitActionLabel('Reject Request')
                         ->schema([
                             Textarea::make('reviewer_remarks')
@@ -185,9 +210,10 @@ class DtrChangeRequests extends Page implements HasTable
                                 ->required(),
                         ])
                         ->action(function (DtrChangeRequest $record, array $data): void {
+                            $reviewer = $this->managerEmployee();
                             $record = app(DtrChangeRequestService::class)->reject(
                                 $record,
-                                $this->account(),
+                                $reviewer,
                                 (string) $data['reviewer_remarks'],
                             );
 
@@ -216,14 +242,14 @@ class DtrChangeRequests extends Page implements HasTable
             Section::make()
                 ->schema([
                     TextInput::make('employee')->disabled()->dehydrated(false),
-                    TextInput::make('employee_id')->label('Employee ID')->disabled()->dehydrated(false),
-                    TextInput::make('branch')->disabled()->dehydrated(false),
+                    TextInput::make('employee_id')->label('Company ID')->disabled()->dehydrated(false),
+                    TextInput::make('branch')->label('Station Branch')->disabled()->dehydrated(false),
                     TextInput::make('date_submitted')->label('Date Submitted')->disabled()->dehydrated(false),
                     TextInput::make('payroll_period')->disabled()->dehydrated(false)->columnSpanFull(),
                     TextInput::make('date_range')->disabled()->dehydrated(false),
                     TextInput::make('request_type')->disabled()->dehydrated(false),
                     Textarea::make('description')->rows(5)->disabled()->dehydrated(false)->columnSpanFull(),
-                    Textarea::make('reviewer_remarks')->label('SIC/RC Remarks')->rows(4)->disabled()->dehydrated(false)->columnSpanFull(),
+                    Textarea::make('reviewer_remarks')->label('Manager Remarks')->rows(4)->disabled()->dehydrated(false)->columnSpanFull(),
                     TextInput::make('status')->disabled()->dehydrated(false),
                     TextInput::make('reviewed_by')->label('Reviewed By')->disabled()->dehydrated(false),
                     TextInput::make('reviewed_at')->label('Reviewed At')->disabled()->dehydrated(false),
@@ -245,23 +271,22 @@ class DtrChangeRequests extends Page implements HasTable
             'description' => $request->description,
             'reviewer_remarks' => $request->reviewer_remarks ?: 'No remarks yet.',
             'status' => $request->status,
-            'reviewed_by' => $request->reviewedBySicRcAccount?->username ?: 'Not reviewed yet',
+            'reviewed_by' => $request->reviewer_name ?: 'Not reviewed yet',
             'reviewed_at' => $request->reviewed_at?->format('M d, Y h:i A') ?: 'Not reviewed yet',
         ];
     }
 
-    protected function account(): SicRcAccount
+    protected function managerEmployee(): Employee
     {
-        $account = auth('sicrc')->user();
+        $employee = auth()->user()?->employee;
+        abort_unless($employee instanceof Employee, 403);
 
-        abort_unless($account instanceof SicRcAccount, 403);
-
-        return $account;
+        return $employee;
     }
 
     protected function assignedBranchIds(): array
     {
-        return $this->account()->assignedBranchIds();
+        return StationManagementAccess::getManagedBranchIds(auth()->user());
     }
 
     protected function notifyEmployee(DtrChangeRequest $request): void

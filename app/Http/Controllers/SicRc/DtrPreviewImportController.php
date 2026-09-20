@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\SicRc;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use App\Models\SicRcDtrImport;
 use App\Services\Imports\EmployeeVisibleDtrImportService;
+use App\Services\StationManagementAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,9 +15,9 @@ class DtrPreviewImportController extends Controller
 {
     public function __invoke(Request $request, EmployeeVisibleDtrImportService $importer): JsonResponse
     {
-        $account = auth('sicrc')->user();
+        $employee = auth()->user()?->employee;
 
-        abort_unless($account instanceof SicRcAccount, 403);
+        abort_unless($employee instanceof Employee, 403, 'Unauthorized employee.');
 
         $validated = $request->validate([
             'rows' => ['required', 'array', 'min:1'],
@@ -27,7 +28,7 @@ class DtrPreviewImportController extends Controller
             'branch_id' => ['required', 'integer', 'exists:branches,id'],
         ]);
 
-        abort_unless(in_array((int) $validated['branch_id'], $account->assignedBranchIds(), true), 403);
+        abort_unless(StationManagementAccess::canManageBranch($employee, (int) $validated['branch_id']), 403, 'Branch not assigned.');
 
         $period = PayrollPeriod::query()->findOrFail($validated['period_id']);
 
@@ -38,13 +39,13 @@ class DtrPreviewImportController extends Controller
                 'failed' => count($validated['rows']),
                 'skipped' => 0,
                 'batch_id' => $validated['batch_id'] ?? null,
-                'message' => 'The selected payroll period is locked and cannot accept SIC/RC preview D.T.R imports.',
+                'message' => 'The selected payroll period is locked and cannot accept station preview D.T.R imports.',
                 'errors' => [
                     ['row' => 0, 'message' => 'Selected payroll period is locked.'],
                 ],
             ];
 
-            $this->recordImport($account, $validated, $result);
+            $this->recordImport($employee, $validated, $result);
 
             return response()->json($result, 422);
         }
@@ -60,19 +61,19 @@ class DtrPreviewImportController extends Controller
 
         $result = $importer->importRows($rows, $validated['import_name'], $validated['batch_id'] ?? null);
 
-        $this->recordImport($account, $validated, $result);
+        $this->recordImport($employee, $validated, $result);
 
         return response()->json($result);
     }
 
-    protected function recordImport(SicRcAccount $account, array $validated, array $result): void
+    protected function recordImport(Employee $employee, array $validated, array $result): void
     {
         $firstRow = collect($validated['rows'])->first(fn (mixed $row): bool => is_array($row)) ?: [];
         $successful = (int) ($result['successful'] ?? 0);
         $failed = (int) ($result['failed'] ?? 0);
 
         SicRcDtrImport::query()->create([
-            'sic_rc_account_id' => $account->getKey(),
+            'imported_by_employee_id' => $employee->getKey(),
             'branch_id' => (int) $validated['branch_id'],
             'payroll_period_id' => (int) $validated['period_id'],
             'batch_id' => (string) ($result['batch_id'] ?? $validated['batch_id'] ?? ''),

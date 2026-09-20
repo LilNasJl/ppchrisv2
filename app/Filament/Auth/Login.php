@@ -33,36 +33,9 @@ class Login extends BaseLogin
     {
         /** @var SessionGuard $hrGuard */
         $hrGuard = Auth::guard('web');
-        /** @var SessionGuard $sicRcGuard */
-        $sicRcGuard = Auth::guard('sicrc');
-        $currentPanelId = Filament::getCurrentOrDefaultPanel()->getId();
-
-        if (($currentPanelId === 'hr') && $hrGuard->check()) {
-            redirect()->to(Filament::getPanel('hr')->getUrl());
-
-            return;
-        }
-
-        if (($currentPanelId === 'sicrc') && $sicRcGuard->check()) {
-            redirect()->to(Filament::getPanel('sicrc')->getUrl());
-
-            return;
-        }
 
         if ($hrGuard->check()) {
             redirect()->to(Filament::getPanel('hr')->getUrl());
-
-            return;
-        }
-
-        if ($sicRcGuard->check()) {
-            redirect()->to(Filament::getPanel('sicrc')->getUrl());
-
-            return;
-        }
-
-        if ($currentPanelId === 'sicrc') {
-            redirect()->route('filament.hr.auth.login');
 
             return;
         }
@@ -101,47 +74,24 @@ class Login extends BaseLogin
 
         /** @var SessionGuard $hrGuard */
         $hrGuard = Auth::guard('web');
-        /** @var SessionGuard $sicRcGuard */
-        $sicRcGuard = Auth::guard('sicrc');
 
         $hrCredentials = [
             'username' => $username,
             'password' => $password,
         ];
-        $sicRcCredentials = [
-            'username' => $username,
-            'password' => $password,
-            'is_active' => true,
-        ];
 
         $hrUser = $this->retrieveAuthorizedAccount($hrGuard, $hrCredentials, 'hr');
-        $sicRcUser = $this->retrieveAuthorizedAccount($sicRcGuard, $sicRcCredentials, 'sicrc');
 
-        if ($hrUser && $sicRcUser) {
-            throw ValidationException::withMessages([
-                'data.username' => 'This username is assigned to both HR and SIC / RC accounts. Contact an administrator to resolve the duplicate username.',
-            ]);
-        }
-
-        if (! $hrUser && ! $sicRcUser) {
+        if (! $hrUser) {
             $this->fireFailedEvent($hrGuard, null, $hrCredentials);
             $this->throwFailureValidationException();
         }
 
-        if ($hrUser) {
-            $sicRcGuard->logout();
-            $hrGuard->login($hrUser, $remember);
-            session()->regenerate();
-            $this->closeOtherHrSessions($hrGuard, $hrUser, $password);
-
-            return new PortalLoginResponse(Filament::getPanel('hr')->getUrl());
-        }
-
-        $hrGuard->logout();
-        $sicRcGuard->login($sicRcUser, $remember);
+        $hrGuard->login($hrUser, $remember);
         session()->regenerate();
+        $this->closeOtherHrSessions($hrGuard, $hrUser, $password);
 
-        return new PortalLoginResponse(Filament::getPanel('sicrc')->getUrl());
+        return new PortalLoginResponse(Filament::getPanel('hr')->getUrl());
     }
 
     /**

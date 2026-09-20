@@ -93,6 +93,8 @@ class Employee extends Model
         'pagibig',
         'sss',
         'salary_adjustment',
+        'is_station_manager',
+        'managed_branches',
     ];
 
     protected $casts = [
@@ -105,6 +107,8 @@ class Employee extends Model
         'leave_credits' => 'decimal:2',
         'birthday_leave_credits' => 'decimal:2',
         'employee_imported_at' => 'datetime',
+        'is_station_manager' => 'boolean',
+        'managed_branches' => 'array',
     ];
 
     protected static function booted(): void
@@ -269,9 +273,34 @@ class Employee extends Model
         return $this->hasMany(DtrChangeRequest::class, 'employee_id');
     }
 
-    public function sicRcAccount()
+    public function isStationManager(): bool
     {
-        return $this->hasOne(SicRcAccount::class);
+        return \App\Services\StationManagementAccess::canAccessStationManagement($this);
+    }
+
+    public function assignedBranchIds(): array
+    {
+        return \App\Services\StationManagementAccess::getManagedBranchIds($this);
+    }
+
+    public function branchAssignments(): array
+    {
+        return \App\Services\StationManagementAccess::getAssignedBranches($this);
+    }
+
+    public function assignedBranchCount(): int
+    {
+        return count($this->assignedBranchIds());
+    }
+
+    public function assignedDtrChangeRequests()
+    {
+        return $this->hasMany(DtrChangeRequest::class, 'assigned_employee_id');
+    }
+
+    public function reviewedDtrChangeRequests()
+    {
+        return $this->hasMany(DtrChangeRequest::class, 'reviewed_by_employee_id');
     }
 
     public function onFieldDtrSubmissions()

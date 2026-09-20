@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\DtrChangeRequest;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -93,7 +92,7 @@ class DtrChangeRequestService
                 'employee_id' => $employee->id,
                 'branch_id' => $employee->branch_id,
                 'payroll_period_id' => $period->id,
-                'assigned_sic_rc_account_id' => $owner->id,
+                'assigned_employee_id' => $owner->id,
                 'employee_name_snapshot' => $employee->full_name,
                 'employee_company_id_snapshot' => $employee->company_id,
                 'branch_name_snapshot' => $employee->branch->branch_name,
@@ -107,19 +106,19 @@ class DtrChangeRequestService
         });
     }
 
-    public function approve(DtrChangeRequest $request, SicRcAccount $reviewer, ?string $remarks = null): DtrChangeRequest
+    public function approve(DtrChangeRequest $request, Employee $reviewer, ?string $remarks = null): DtrChangeRequest
     {
         return $this->review($request, $reviewer, DtrChangeRequest::STATUS_APPROVED, $remarks);
     }
 
-    public function reject(DtrChangeRequest $request, SicRcAccount $reviewer, string $remarks): DtrChangeRequest
+    public function reject(DtrChangeRequest $request, Employee $reviewer, string $remarks): DtrChangeRequest
     {
         return $this->review($request, $reviewer, DtrChangeRequest::STATUS_REJECTED, $remarks);
     }
 
     protected function review(
         DtrChangeRequest $request,
-        SicRcAccount $reviewer,
+        Employee $reviewer,
         string $status,
         ?string $remarks,
     ): DtrChangeRequest {
@@ -129,7 +128,7 @@ class DtrChangeRequestService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if (! $reviewer->is_active || $reviewer->trashed() || ! in_array((int) $request->branch_id, $reviewer->assignedBranchIds(), true)) {
+            if ($reviewer->trashed() || ! StationManagementAccess::canManageBranch($reviewer, (int) $request->branch_id)) {
                 throw new AuthorizationException('This D.T.R change request does not belong to one of your assigned branches.');
             }
 
@@ -142,7 +141,7 @@ class DtrChangeRequestService
             $remarks = trim((string) $remarks);
             if (mb_strlen($remarks) > 2000) {
                 throw ValidationException::withMessages([
-                    'reviewer_remarks' => 'The SIC/RC remarks must not exceed 2,000 characters.',
+                    'reviewer_remarks' => 'The Station Manager remarks must not exceed 2,000 characters.',
                 ]);
             }
 
@@ -154,7 +153,7 @@ class DtrChangeRequestService
 
             $request->update([
                 'status' => $status,
-                'reviewed_by_sic_rc_account_id' => $reviewer->id,
+                'reviewed_by_employee_id' => $reviewer->id,
                 'reviewer_remarks' => $remarks !== '' ? $remarks : null,
                 'reviewed_at' => now(),
             ]);
@@ -163,23 +162,29 @@ class DtrChangeRequestService
         });
     }
 
-    protected function branchOwner(int $branchId): SicRcAccount
+    protected function branchOwner(int $branchId): Employee
     {
-        $owners = SicRcAccount::query()
-            ->where('is_active', true)
+        $owners = Employee::query()
+            ->where('is_station_manager', true)
+            ->activeEmployment()
             ->get()
-            ->filter(fn (SicRcAccount $account): bool => in_array($branchId, $account->assignedBranchIds(), true))
+            ->filter(fn (Employee $emp): bool => in_array($branchId, StationManagementAccess::getManagedBranchIds($emp), true))
             ->values();
 
         if ($owners->isEmpty()) {
-            throw ValidationException::withMessages([
-                'payroll_period_id' => 'No active SIC/RC account is assigned to your branch. Contact HR before submitting this request.',
-            ]);
-        }
+            // Fallback: Check if there's any active employee assigned to this branch whose designation is Station In-Charge or OIC
+            $fallback = Employee::query()
+                ->where('branch_id', $branchId)
+                ->activeEmployment()
+                ->whereHas('designation', fn ($q) => $q->where('title', 'like', '%Station In-Charge%')->orWhere('title', 'like', '%SIC%'))
+                ->first();
 
-        if ($owners->count() > 1) {
+            if ($fallback) {
+                return $fallback;
+            }
+
             throw ValidationException::withMessages([
-                'payroll_period_id' => 'Your branch has conflicting SIC/RC assignments. Contact HR before submitting this request.',
+                'payroll_period_id' => 'No active Station Manager is assigned to your branch. Contact HR before submitting this request.',
             ]);
         }
 

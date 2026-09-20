@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Filament\SicRc\Pages;
+namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\Branch;
 use App\Models\PayrollPeriod;
-use App\Models\SicRcAccount;
+use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -12,13 +12,15 @@ use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class DtrImportUpload extends Page
+class StationDtrImport extends Page
 {
-    protected string $view = 'filament.sicrc.pages.dtr-import-upload';
+    protected string $view = 'filament.employee.pages.station.station-dtr-import';
+
+    protected static ?string $slug = 'station/dtr-import';
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Import D.T.R';
+    protected static ?string $title = 'Import Station D.T.R';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowUpTray;
 
@@ -30,6 +32,11 @@ class DtrImportUpload extends Page
 
     public ?PayrollPeriod $period = null;
 
+    public static function canAccess(): bool
+    {
+        return StationManagementAccess::canAccessStationManagement(auth()->user());
+    }
+
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;
@@ -37,14 +44,18 @@ class DtrImportUpload extends Page
 
     public function mount(): void
     {
+        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
+            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        }
+
         $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
         $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
 
         $this->branch = $this->branchId ? Branch::query()->find($this->branchId) : null;
         $this->period = $this->periodId ? PayrollPeriod::query()->find($this->periodId) : null;
 
-        if (! $this->branch || ! in_array($this->branch->id, $this->assignedBranchIds(), true)) {
-            throw new HttpException(403, 'This branch is not attached to your SIC/RC account.');
+        if (! $this->branch || ! StationManagementAccess::canManageBranch(auth()->user(), $this->branch->id)) {
+            throw new HttpException(403, 'This station branch is not assigned to your management profile.');
         }
 
         if (! $this->period) {
@@ -95,30 +106,18 @@ class DtrImportUpload extends Page
             Action::make('importHistory')
                 ->label('DTR Import History')
                 ->icon(Heroicon::Clock)
-                ->url(fn (): string => DtrImportHistory::getUrl([
+                ->url(fn (): string => StationDtrImportHistory::getUrl([
                     'branchId' => $this->branch?->publicKey(),
                     'periodId' => $this->period?->publicKey(),
-                ], panel: 'sicrc')),
+                ])),
 
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => BranchEmployees::getUrl([
+                ->url(fn (): string => StationEmployees::getUrl([
                     'branchId' => $this->branch?->publicKey(),
                     'periodId' => $this->period?->publicKey(),
-                ], panel: 'sicrc')),
+                ])),
         ];
-    }
-
-    protected function account(): ?SicRcAccount
-    {
-        $account = auth('sicrc')->user();
-
-        return $account instanceof SicRcAccount ? $account : null;
-    }
-
-    protected function assignedBranchIds(): array
-    {
-        return $this->account()?->assignedBranchIds() ?? [];
     }
 }
