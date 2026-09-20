@@ -29,37 +29,37 @@ class LeavePolicy
 
     public function update(AuthUser $authUser, Leave $leave): bool
     {
-        return $authUser->can('Update:Leave');
+        return false;
     }
 
     public function delete(AuthUser $authUser, Leave $leave): bool
     {
-        return $authUser->can('Delete:Leave');
+        return false;
     }
 
     public function deleteAny(AuthUser $authUser): bool
     {
-        return $authUser->can('DeleteAny:Leave');
+        return false;
     }
 
     public function restore(AuthUser $authUser, Leave $leave): bool
     {
-        return $authUser->can('Restore:Leave');
+        return false;
     }
 
     public function forceDelete(AuthUser $authUser, Leave $leave): bool
     {
-        return $authUser->can('ForceDelete:Leave');
+        return false;
     }
 
     public function forceDeleteAny(AuthUser $authUser): bool
     {
-        return $authUser->can('ForceDeleteAny:Leave');
+        return false;
     }
 
     public function restoreAny(AuthUser $authUser): bool
     {
-        return $authUser->can('RestoreAny:Leave');
+        return false;
     }
 
     public function replicate(AuthUser $authUser, Leave $leave): bool

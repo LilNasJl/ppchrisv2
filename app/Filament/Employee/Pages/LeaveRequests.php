@@ -64,6 +64,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
         return $table
             ->query(fn (): Builder => $this->modifyQueryWithActiveTab(
                 Leave::query()
+                    ->with('approvalSteps')
                     ->where('employee_id', $this->employee()->id)
                     ->latest('created_at')
             ))
@@ -82,7 +83,12 @@ class LeaveRequests extends Page implements HasForms, HasTable
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('leave_from')->label('From')->date('M d, Y'),
+                TextColumn::make('leave_to')->label('To')->date('M d, Y'),
+                TextColumn::make('requested_days')->label('Days')->state(fn (Leave $record) => $record->getRequestedLeaveDays()),
+
                 TextColumn::make('status')
+                    ->formatStateUsing(fn (Leave $record) => $record->approval_label)
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'Pending' => 'warning',
@@ -138,6 +144,8 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
             'rejected' => Tab::make('Rejected')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Rejected')),
+            'cancelled' => Tab::make('Cancelled')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Cancelled')),
         ];
     }
 
@@ -166,17 +174,17 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     protected function cancelLeave(Leave $leave): void
     {
-        if ($leave->employee_id !== $this->employee()->id || $leave->status !== 'Pending') {
+        try {
+            app(\App\Services\LeaveApprovalService::class)->cancel($leave, auth()->user());
+        } catch (\RuntimeException $exception) {
             Notification::make()
                 ->title('Unable to cancel leave')
-                ->body('Only pending leave requests can be cancelled.')
+                ->body($exception->getMessage())
                 ->danger()
                 ->send();
 
             return;
         }
-
-        $leave->delete();
 
         Notification::make()
             ->title('Leave request cancelled')
@@ -187,6 +195,8 @@ class LeaveRequests extends Page implements HasForms, HasTable
     protected function leaveRequestSchema(): array
     {
         return [
+            \Filament\Schemas\Components\View::make('filament.leave.workflow-preview')
+                ->viewData(fn (): array => ['employee' => $this->employee()]),
             Section::make()
                 ->schema([
                     Select::make('leave_type')
@@ -312,13 +322,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
         }
 
         try {
-            Leave::validateCanCreateRequest(
-                $this->employee(),
-                (string) $data['leave_type'],
-                $data['leave_from'],
-                $data['leave_to'],
-                (bool) ($data['is_half_day'] ?? false),
-            );
+            app(\App\Services\LeaveApprovalService::class)->submit($this->employee(), $data, auth()->user());
         } catch (\RuntimeException $exception) {
             Notification::make()
                 ->title('Unable to send leave request')
@@ -328,20 +332,6 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
             return;
         }
-
-        Leave::create([
-            'employee_id' => $this->employee()->id,
-            'leave_type' => $data['leave_type'],
-            'leave_from' => Carbon::parse($data['leave_from'])->toDateString(),
-            'leave_to' => Carbon::parse($data['leave_to'])->toDateString(),
-            'is_half_day' => (bool) ($data['is_half_day'] ?? false),
-            'half_day_period' => (bool) ($data['is_half_day'] ?? false) ? $data['half_day_period'] : null,
-            'half_day_schedule' => (bool) ($data['is_half_day'] ?? false) ? ($data['half_day_schedule'] ?? null) : null,
-            'reason' => $data['reason'],
-            'status' => 'Pending',
-            'attachment_path' => $data['attachment_path'] ?? null,
-            'attachment_original_name' => $data['attachment_original_name'] ?? null,
-        ]);
 
         Notification::make()
             ->title('Leave request sent')

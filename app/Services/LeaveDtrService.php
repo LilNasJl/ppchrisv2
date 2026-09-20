@@ -16,6 +16,7 @@ class LeaveDtrService
 {
     public function approveLeaveWithPaidDtr(Leave $leave, PayrollPeriod $payrollPeriod, ?string $comment = null, ?int $reviewedBy = null): void
     {
+        abort_unless(LeaveApprovalAccess::review(\App\Models\User::find($reviewedBy)), 403);
         DB::transaction(function () use ($leave, $payrollPeriod, $comment, $reviewedBy): void {
             $leave = Leave::query()
                 ->with(['employee.branch', 'employee.designation'])
@@ -38,8 +39,8 @@ class LeaveDtrService
 
     protected function validateLeaveCanUsePayrollPeriod(Leave $leave, PayrollPeriod $payrollPeriod): void
     {
-        if ($leave->status !== 'Pending') {
-            throw new RuntimeException('Only pending leave requests can be approved.');
+        if (! $leave->isReadyForHr()) {
+            throw new RuntimeException('Only requests ready for HR review can be approved.');
         }
 
         if ($payrollPeriod->is_locked) {

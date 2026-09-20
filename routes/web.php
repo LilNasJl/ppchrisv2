@@ -59,7 +59,7 @@ Route::get('/leave-attachments/{leave}', function (Leave $leave) {
     $user = request()->user();
 
     abort_unless($user, 403);
-    abort_unless(in_array($user->role, ['hr', 'admin'], true) || (int) $user->employee?->id === (int) $leave->employee_id, 403);
+    abort_unless($user instanceof \App\Models\User && \App\Services\LeaveApprovalAccess::view($user, $leave), 403);
     abort_if(blank($leave->attachment_path) || ! Storage::disk('local')->exists($leave->attachment_path), 404);
 
     return Storage::disk('local')->response($leave->attachment_path, $leave->attachment_name);

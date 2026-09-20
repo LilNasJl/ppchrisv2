@@ -146,6 +146,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
                         ])),
 
                     Action::make('editLeave')
+                        ->visible(false)
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
                         ->schema($this->leaveHistorySchema())
@@ -155,6 +156,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
                         ->action(fn (Leave $record, array $data): mixed => $this->updateHistoryLeave($record, $data)),
 
                     Action::make('deleteLeaveHistory')
+                        ->visible(false)
                         ->label('Delete')
                         ->icon(Heroicon::Trash)
                         ->color('danger')
@@ -173,6 +175,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
     {
         return [
             Action::make('addLeave')
+                ->visible(false)
                 ->label('Add Leave')
                 ->icon(Heroicon::Plus)
                 ->schema($this->leaveHistorySchema())
@@ -327,6 +330,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
 
     protected function deleteHistoryLeave(Leave $leave): void
     {
+        abort(403, 'Leave history is read-only. Use Leave Tracking for approval decisions.');
         try {
             DB::transaction(function () use ($leave): void {
                 $leave = Leave::query()->lockForUpdate()->findOrFail($leave->id);
@@ -360,6 +364,7 @@ class EmployeeLeaveHistory extends Page implements HasForms, HasTable
 
     protected function saveHistoryLeave(?Leave $leave, array $data): Leave
     {
+        abort(403, 'Leave history is read-only. Use Leave Tracking for approval decisions.');
         $data = $this->normalizeLeaveHistoryData($data);
         $this->validateLeaveHistoryData($data);
 

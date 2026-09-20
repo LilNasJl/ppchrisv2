@@ -45,11 +45,39 @@ class Leave extends Model
         'deducted_birthday_leave_credits' => 'decimal:2',
         'status_updated_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'approval_snapshot' => 'array',
     ];
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(Employee::class)->withTrashed();
+    }
+
+    public function approvalSteps()
+    {
+        return $this->hasMany(LeaveRequestApproval::class)->orderBy('sequence');
+    }
+
+    public function approvalEvents()
+    {
+        return $this->hasMany(LeaveApprovalEvent::class)->orderBy('id');
+    }
+
+    public function isReadyForHr(): bool
+    {
+        return $this->status === 'Pending' && (! $this->approval_workflow_id
+            || ($this->approval_phase === 'hr' && ! $this->approvalSteps()->where('is_hr', false)
+                ->whereNotIn('status', ['Approved', 'Skipped'])->exists()));
+    }
+
+    public function getApprovalLabelAttribute(): string
+    {
+        if ($this->status !== 'Pending') {
+            return $this->status;
+        }
+        $step = $this->approvalSteps->firstWhere('sequence', $this->current_approval_order);
+
+        return 'Pending - '.($step?->label ?: 'HR');
     }
 
     public function reviewedBy()
@@ -150,6 +178,11 @@ class Leave extends Model
                 return;
             }
 
+            if (! $leave->isReadyForHr()) {
+                throw new RuntimeException('Only requests ready for HR review can be approved.');
+            }
+            abort_unless(\App\Services\LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
+
             $employee = Employee::query()->lockForUpdate()->findOrFail($leave->employee_id);
             $employee->resetLeaveCreditsIfNeeded();
             $employee->refresh();
@@ -216,6 +249,10 @@ class Leave extends Model
     {
         DB::transaction(function () use ($comment, $reviewedBy): void {
             $leave = static::query()->lockForUpdate()->findOrFail($this->id);
+            if (! $leave->isReadyForHr()) {
+                throw new RuntimeException('Only requests ready for HR review can be rejected here.');
+            }
+            abort_unless(\App\Services\LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
             $employee = Employee::query()->lockForUpdate()->find($leave->employee_id);
 
             if ($employee && $leave->status === 'Approved') {

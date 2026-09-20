@@ -47,8 +47,8 @@ class LeaveResource extends Resource
     public static function getNavigationBadge(): ?string
     {
         $pendingCount = ModelsLeave::query()
-            ->whereHas('employee', fn (Builder $query) => $query->activeEmployment())
             ->where('status', 'Pending')
+            ->where(fn (Builder $query) => $query->whereNull('approval_workflow_id')->orWhere('approval_phase', 'hr'))
             ->count();
 
         return $pendingCount > 0 ? (string) $pendingCount : null;
@@ -72,7 +72,6 @@ class LeaveResource extends Resource
             'index' => ListLeaves::route('/'),
             'create' => CreateLeave::route('/create'),
             'view' => ViewLeave::route('/{record}'),
-            'edit' => EditLeave::route('/{record}/edit'),
         ];
     }
 

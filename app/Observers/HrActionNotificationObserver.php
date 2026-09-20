@@ -9,11 +9,17 @@ class HrActionNotificationObserver
 {
     public function created(Model $record): void
     {
+        if ($record instanceof \App\Models\Leave) {
+            return;
+        }
         HrDatabaseNotification::recordCreated($record);
     }
 
     public function updated(Model $record): void
     {
+        if ($record instanceof \App\Models\Leave) {
+            return;
+        }
         HrDatabaseNotification::recordUpdated($record);
     }
 

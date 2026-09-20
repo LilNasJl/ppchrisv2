@@ -13,6 +13,13 @@ class CreateLeave extends CreateRecord
 {
     protected static string $resource = LeaveResource::class;
 
+    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    {
+        return app(\App\Services\LeaveApprovalService::class)->submit(
+            Employee::findOrFail($data['employee_id']), $data, auth()->user(),
+        );
+    }
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         if ((bool) ($data['is_half_day'] ?? false)) {

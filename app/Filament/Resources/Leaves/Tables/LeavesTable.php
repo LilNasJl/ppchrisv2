@@ -3,206 +3,46 @@
 namespace App\Filament\Resources\Leaves\Tables;
 
 use App\Filament\Resources\Leaves\LeaveResource;
-use App\Models\Leave as ModelsLeave;
-use App\Models\PayrollPeriod;
-use App\Services\LeaveDtrService;
+use App\Models\Leave;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
-use Filament\Actions\ViewAction;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class LeavesTable
 {
     public static function configure(Table $table): Table
     {
-        return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query
-                ->whereHas('employee', fn (Builder $query) => $query->activeEmployment())
-                ->latest('created_at'))
+        return $table->modifyQueryUsing(fn ($query) => $query->with(['employee.branch', 'employee.department', 'approvalSteps.approver.user', 'reviewedBy']))
+            ->defaultSort('created_at', 'desc')->poll('30s')
             ->columns([
-                TextColumn::make('index')
-                    ->label('#')
-                    ->rowIndex(),
+                TextColumn::make('index')->label('#')->rowIndex(),
+                TextColumn::make('employee.lastname')->label('Employee')->searchable(['firstname', 'lastname', 'middlename'])
+                    ->formatStateUsing(fn (Leave $record) => $record->approval_snapshot['employee_name'] ?? $record->employee?->full_name)
+                    ->description(fn (Leave $record) => $record->approval_snapshot['branch'] ?? $record->employee?->branch?->branch_name)->weight('semibold'),
+                TextColumn::make('leave_type')->label('Leave Type')->searchable(),
+                TextColumn::make('leave_from')->label('From')->date('M d, Y')->sortable(),
+                TextColumn::make('leave_to')->label('To')->date('M d, Y'),
+                TextColumn::make('days')->state(fn (Leave $record) => $record->getRequestedLeaveDays()),
+                TextColumn::make('status')->badge()->formatStateUsing(fn (Leave $record) => $record->approval_label)
+                    ->color(fn ($state) => match ($state) { 'Pending' => 'warning', 'Approved' => 'success', 'Rejected' => 'danger', default => 'gray' }),
+                TextColumn::make('current_approver')->label('Assigned To')->state(fn (Leave $record) => $record->status === 'Pending'
+                    ? ($record->approvalSteps->firstWhere('status', 'Pending')?->approver_name ?: 'HR') : '-')
+                    ->description(function (Leave $record): ?string {
+                        $step = $record->approvalSteps->firstWhere('status', 'Pending');
+                        if ($step && ! $step->is_hr && ! \App\Services\LeaveApprovalAccess::employee($step->approver)) {
+                            return 'Reassignment required';
+                        }
 
-                TextColumn::make('employee.lastname')
-                    ->label('Employee Name')
-                    ->formatStateUsing(fn ($record) => $record->employee
-                            ? "{$record->employee->lastname}, {$record->employee->firstname} {$record->employee->middlename}"
-                            : 'N/A'
-                    )
-                    ->searchable(['firstname', 'lastname', 'middlename'])
-                    ->sortable(),
-
-                TextColumn::make('leave_type')
-                    ->label('Leave Type')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('half_day_period')
-                    ->label('Period')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state): string => filled($state) ? str($state)->title()->replace('_', ' ')->toString() : '-')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('half_day_schedule')
-                    ->label('Schedule')
-                    ->formatStateUsing(fn (?string $state): string => filled($state) ? str($state)->title()->replace('_', ' ')->toString() : '-')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('requested_days')
-                    ->label('Days')
-                    ->getStateUsing(fn (ModelsLeave $record): string => (string) $record->getRequestedLeaveDays()),
-
-                TextColumn::make('employee.leave_credits')
-                    ->label('Leave Count')
-                    ->numeric(),
-
-                TextColumn::make('employee.birthday_leave_credits')
-                    ->label('Birthday Leave')
-                    ->numeric(),
-
-                TextColumn::make('created_at')
-                    ->label('Requested At')
-                    ->badge()
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('status_updated_at')
-                    ->label('Approved/Rejected Date'),
-
-                TextColumn::make('reviewedBy.name')
-                    ->label('Approved/Rejected By')
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('attachment_original_name')
-                    ->label('Attachment')
-                    ->url(fn (ModelsLeave $record): ?string => $record->attachment_url, shouldOpenInNewTab: true)
-                    ->placeholder('-')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('status')
-                    ->label('Status')
-                    ->badge()
-                    ->color(fn (string $state) => match ($state) {
-                        'Pending' => 'warning',   // yellow
-                        'Approved' => 'success',  // green
-                        'Rejected' => 'danger',   // red
-                        default => 'gray',
-                    }),
-
-            ])
-            ->filters([
-                // TrashedFilter::make(),
-            ])
-            ->recordActions([
-                ActionGroup::make([
-                    ActionGroup::make([
-                        Action::make('approve')
-                            ->label('Approve')
-                            ->icon(Heroicon::HandThumbUp)
-                            ->color('success')
-                            ->schema([
-                                Select::make('payroll_period_id')
-                                    ->label('Payroll Period')
-                                    ->options(fn (): array => PayrollPeriod::query()
-                                        ->where('is_locked', false)
-                                        ->orderByDesc('date_start')
-                                        ->get()
-                                        ->mapWithKeys(fn (PayrollPeriod $period): array => [
-                                            $period->id => trim($period->title.' ('.$period->date_start?->format('M d, Y').' - '.$period->date_end?->format('M d, Y').')'),
-                                        ])
-                                        ->all())
-                                    ->searchable()
-                                    ->preload()
-                                    ->required(),
-
-                                Textarea::make('hr_comment')
-                                    ->label('HR Comment')
-                                    ->rows(4)
-                                    ->required(),
-                            ])
-                            ->modalSubmitActionLabel('Approve')
-                            ->visible(fn (ModelsLeave $record): bool => $record->status === 'Pending')
-                            ->action(function (ModelsLeave $record, array $data): void {
-                                try {
-                                    $payrollPeriod = PayrollPeriod::query()
-                                        ->where('is_locked', false)
-                                        ->findOrFail($data['payroll_period_id']);
-
-                                    app(LeaveDtrService::class)->approveLeaveWithPaidDtr(
-                                        leave: $record,
-                                        payrollPeriod: $payrollPeriod,
-                                        comment: $data['hr_comment'] ?? null,
-                                        reviewedBy: auth()->id(),
-                                    );
-
-                                    Notification::make()
-                                        ->title('Leave approved and D.T.R entries created')
-                                        ->success()
-                                        ->send();
-                                } catch (\Throwable $exception) {
-                                    Notification::make()
-                                        ->title('Unable to approve leave')
-                                        ->body($exception->getMessage())
-                                        ->danger()
-                                        ->send();
-                                }
-                            }),
-
-                        Action::make('reject')
-                            ->label('Reject')
-                            ->icon(Heroicon::HandThumbDown)
-                            ->color('danger')
-                            ->schema([
-                                Textarea::make('hr_comment')
-                                    ->label('HR Comment')
-                                    ->rows(4)
-                                    ->required(),
-                            ])
-                            ->modalSubmitActionLabel('Reject')
-                            ->visible(fn (ModelsLeave $record): bool => $record->status === 'Pending')
-                            ->action(function (ModelsLeave $record, array $data): void {
-                                $record->rejectRequest($data['hr_comment'] ?? null, auth()->id());
-
-                                Notification::make()
-                                    ->title('Leave rejected')
-                                    ->success()
-                                    ->send();
-                            }),
-                    ])
-                        ->label('Approval Action')
-                        ->visible(fn (ModelsLeave $record): bool => $record->status === 'Pending'),
-
-                    ViewAction::make()
-                        ->url(fn (ModelsLeave $record): string => LeaveResource::getUrl('view', ['record' => $record])),
-                    DeleteAction::make()
-                        ->requiresConfirmation(),
-                    // EditAction::make(),
-                ]),
-                // ->icon(Heroicon::EllipsisHorizontal)
-            ])
-            ->toolbarActions([
-                // BulkActionGroup::make([
-                //     DeleteBulkAction::make(),
-                //     ForceDeleteBulkAction::make(),
-                //     RestoreBulkAction::make(),
-                // ]),
-            ]);
+                        return $step?->activated_at?->lt(now()->subHours(48)) ? 'Awaiting review for over 48 hours' : null;
+                    })->wrap(),
+                TextColumn::make('created_at')->label('Submitted')->dateTime('M d, Y h:i A')->sortable(),
+                TextColumn::make('employee.leave_credits')->label('Available Credits')->numeric()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('reviewedBy.name')->label('HR Reviewer')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('reviewed_at')->label('HR Decision')->dateTime()->toggleable(isToggledHiddenByDefault: true),
+            ])->recordActions([
+                Action::make('view')->label('View / Review')->icon(Heroicon::Eye)->button()
+                    ->url(fn (Leave $record) => LeaveResource::getUrl('view', ['record' => $record])),
+            ])->emptyStateHeading('No leave requests in this queue');
     }
 }
