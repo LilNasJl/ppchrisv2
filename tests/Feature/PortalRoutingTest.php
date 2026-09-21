@@ -36,7 +36,9 @@ class PortalRoutingTest extends TestCase
 
         $this->get(route('filament.employee.auth.login'))
             ->assertOk()
-            ->assertSee('HRIS: SELF SERVICE');
+            ->assertSee('HRIS: SELF SERVICE')
+            ->assertSee('autocapitalize="characters"', false)
+            ->assertSee('text-transform: uppercase;', false);
 
         $this->get(route('filament.kpi.auth.login'))->assertOk();
     }

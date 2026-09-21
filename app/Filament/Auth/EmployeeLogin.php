@@ -112,6 +112,13 @@ class EmployeeLogin extends BaseLogin
             ->required()
             ->autocomplete('username')
             ->autofocus()
+            ->extraInputAttributes([
+                'autocapitalize' => 'characters',
+                'style' => 'text-transform: uppercase;',
+                'oninput' => 'this.value = this.value.toUpperCase()',
+            ])
+            ->formatStateUsing(fn ($state) => filled($state) ? strtoupper((string) $state) : $state)
+            ->dehydrateStateUsing(fn ($state) => filled($state) ? strtoupper(trim((string) $state)) : $state)
             ->rule('regex:/^(?:PF-?)?\d{1,4}$/i')
             ->validationMessages([
                 'regex' => 'Enter a valid company ID, such as PF-0001.',

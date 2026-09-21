@@ -8,6 +8,7 @@
     <link rel="icon" type="image/png" href="{{ asset('ppclogo.png') }}?v=20260724">
     <link rel="apple-touch-icon" href="{{ asset('ppclogo.png') }}?v=20260724">
     <title>HRIS | Philfumes Petroleum Corporation</title>
+    <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css">
 
     <style>
         :root {
@@ -184,23 +185,32 @@
 
         .portal-actions {
             display: grid;
-            gap: 10px;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .portal-link {
             align-items: center;
             border: 1px solid transparent;
-            border-radius: 7px;
+            border-radius: 8px;
             display: inline-flex;
-            font-size: 13px;
+            font-size: 13.5px;
             font-weight: 800;
             justify-content: center;
-            min-height: 50px;
-            padding: 0 18px;
+            gap: 10px;
+            min-height: 52px;
+            padding: 0 20px;
             text-align: center;
             text-decoration: none;
-            transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+            transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
+        }
+
+        .portal-link i {
+            font-size: 17px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
         }
 
         .portal-link:hover {
@@ -661,10 +671,12 @@
                     <p class="portal-heading">Choose your secure portal</p>
                     <nav class="portal-actions" aria-label="Login portals">
                         <a href="{{ route('filament.hr.auth.login') }}" class="portal-link portal-link-primary" data-portal="hris">
-                            HRIS Portal
+                            <i class="fi fi-rr-building" aria-hidden="true"></i>
+                            <span>HRIS Portal</span>
                         </a>
                         <a href="{{ route('filament.employee.auth.login') }}" class="portal-link portal-link-secondary" data-portal="employee">
-                            Self-Service
+                            <i class="fi fi-rr-user" aria-hidden="true"></i>
+                            <span>Self-Service</span>
                         </a>
                     </nav>
                     <p class="access-note">Authorized access for Philfumes HR teams, SIC / RC users, employees, and assigned KPI raters.</p>
