@@ -108,21 +108,16 @@ class DtrDailyAggregationService
             default => 0.0,
         };
 
-        $workdayMinutes = max(0, (int) round($workHoursPerDay * 60));
         $capacitySeconds = $this->partCapacitySeconds(
             $dayPart,
             $scheduleStart,
             $scheduleEnd,
             $isSaturday,
         );
-        $requiredMinutes = min(
-            (int) round($workdayMinutes * $dayCount),
-            (int) floor($capacitySeconds / 60),
-        );
+        $requiredMinutes = (int) floor($capacitySeconds / 60);
         $workedSeconds = $this->payableSeconds($intervals, $scheduleStart, $scheduleEnd, $isSaturday);
         $workedMinutes = (int) floor($workedSeconds / 60);
-        $creditedWorkMinutes = min($requiredMinutes, $workedMinutes);
-        $shortageMinutes = max(0, $requiredMinutes - $creditedWorkMinutes);
+        $unworkedSeconds = max(0, $capacitySeconds - $workedSeconds);
         $earliest = (int) $intervals->min(fn (array $interval): int => $interval[0]);
         $latest = (int) $intervals->max(fn (array $interval): int => $interval[1]);
         $effectiveStart = $dayPart === DtrDayPartService::AFTERNOON
@@ -131,17 +126,18 @@ class DtrDailyAggregationService
         $effectiveEnd = $dayPart === DtrDayPartService::MORNING
             ? min($scheduleEnd, 12 * 3600)
             : $scheduleEnd;
-        $lateSeconds = max(0, $earliest - $effectiveStart);
-        $lateCandidate = $lateSeconds <= max(0, $lateGraceMinutes) * 60
-            ? 0
-            : (int) floor($this->payableSeconds(
+        $lateSeconds = $earliest > $effectiveStart
+            ? $this->payableSeconds(
                 collect([[$effectiveStart, min($earliest, $effectiveEnd)]]),
                 $effectiveStart,
                 $effectiveEnd,
                 $isSaturday || $dayPart !== DtrDayPartService::WHOLE_DAY,
-            ) / 60);
-        $late = min($shortageMinutes, $lateCandidate);
-        $undertime = max(0, $shortageMinutes - $late);
+            )
+            : 0;
+        $late = (int) floor($lateSeconds / 60);
+        $undertimeSeconds = max(0, $unworkedSeconds - $lateSeconds);
+        $undertime = (int) floor($undertimeSeconds / 60);
+        $creditedWorkMinutes = max(0, $requiredMinutes - $late - $undertime);
         $earlyClockIn = $dayPart === DtrDayPartService::AFTERNOON
             ? 0
             : (int) floor(max(0, $effectiveStart - $earliest) / 60);

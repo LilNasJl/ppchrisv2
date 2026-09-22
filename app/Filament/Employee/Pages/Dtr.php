@@ -52,28 +52,18 @@ class Dtr extends Page implements HasForms, HasTable
 
     public function mount(): void
     {
-        $employee = $this->employee;
-        $fingerprintId = $this->fingerprintId($employee);
+        $requestedPeriodId = PayrollPeriod::resolvePublicId(request()->query('periodId'))
+            ?: (int) request()->query('period_id');
 
-        $periodId = null;
-
-        if ($employee && filled($fingerprintId) && filled($employee->branch_id)) {
-            $periodId = PayrollPeriod::query()
-                ->where(function (Builder $query) use ($employee, $fingerprintId): void {
-                    $query
-                        ->whereHas('dtrs', fn (Builder $query): Builder => $query
-                            ->where('fingerprint_id', $fingerprintId)
-                            ->where('branch_id', $employee->branch_id))
-                        ->orWhereHas('employeeVisibleDtrs', fn (Builder $query): Builder => $query
-                            ->forEmployee($employee));
-                })
-                ->newestFirst()
-                ->value('id');
-        }
-
-        $this->period_id = (string) ($periodId ?: PayrollPeriod::query()
+        $latestPeriodId = PayrollPeriod::query()
             ->newestFirst()
-            ->value('id'));
+            ->value('id');
+
+        $periodId = $requestedPeriodId && PayrollPeriod::query()->whereKey($requestedPeriodId)->exists()
+            ? $requestedPeriodId
+            : $latestPeriodId;
+
+        $this->period_id = filled($periodId) ? (string) $periodId : null;
 
         $this->form->fill([
             'period_id' => $this->period_id,
@@ -126,6 +116,7 @@ class Dtr extends Page implements HasForms, HasTable
             Select::make('period_id')
                 ->label('Payroll Period')
                 ->options(fn (): array => $this->payrollPeriodOptions())
+                ->default(fn (): ?string => $this->period_id)
                 ->searchable()
                 ->preload()
                 ->live()
@@ -150,7 +141,8 @@ class Dtr extends Page implements HasForms, HasTable
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
-                    ->rowIndex(),
+                    ->rowIndex()
+                    ->alignCenter(),
 
                 TextColumn::make('attendance_status')
                     ->label('Status')
@@ -162,7 +154,8 @@ class Dtr extends Page implements HasForms, HasTable
                         'For Approval' => 'warning',
                         'Overtime' => 'warning',
                         default => 'success',
-                    }),
+                    })
+                    ->alignCenter(),
 
                 TextColumn::make('date_in')
                     ->label('Date In')
@@ -171,7 +164,9 @@ class Dtr extends Page implements HasForms, HasTable
 
                 TextColumn::make('time_in')
                     ->label('In')
-                    ->time('h:i A'),
+                    ->time('h:i A')
+                    ->placeholder('-')
+                    ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('date_out')
                     ->label('Date Out')
@@ -181,75 +176,132 @@ class Dtr extends Page implements HasForms, HasTable
                 TextColumn::make('time_out')
                     ->label('Out')
                     ->time('h:i A')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('schedule_start')
                     ->label('Sched. Start')
                     ->time('h:i A')
                     ->placeholder('-')
+                    ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->toggleable(),
 
                 TextColumn::make('schedule_end')
                     ->label('Sched. End')
                     ->time('h:i A')
                     ->placeholder('-')
+                    ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->toggleable(),
 
                 TextColumn::make('schedule_type')
                     ->label('Sched. Type')
                     ->badge()
+                    ->placeholder('-')
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->replace('_', ' ')->title()->toString() : '-')
+                    ->color(fn (?string $state): string => match (str($state ?? '')->lower()->toString()) {
+                        'regular' => 'gray',
+                        'saturday' => 'info',
+                        'leave' => 'info',
+                        'overtime' => 'warning',
+                        'absent' => 'danger',
+                        default => 'gray',
+                    })
                     ->toggleable(),
 
                 TextColumn::make('day_part')
                     ->label('Day Part')
-                    ->formatStateUsing(fn ($state): string => app(DtrDayPartService::class)->label($state))
+                    ->badge()
+                    ->placeholder('-')
+                    ->getStateUsing(fn ($record): string => $record instanceof \App\Models\Dtr
+                        ? app(DtrAttendanceUnitService::class)->dayPartForRecord($record)
+                        : (string) ($record->day_part ?? ''))
+                    ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
+                    ->color(fn (?string $state): string => match (app(DtrDayPartService::class)->normalize($state)) {
+                        DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 'info',
+                        DtrDayPartService::UNCLASSIFIED => 'warning',
+                        default => 'gray',
+                    })
                     ->toggleable(),
 
                 TextColumn::make('entry_source')
                     ->label('Source')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->title()->toString() : 'System')
+                    ->color('gray')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('late')
                     ->label('Late')
-                    ->formatStateUsing(fn ($state): string => $this->formatMinutes($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'danger' : null)
+                    ->alignCenter(),
 
                 TextColumn::make('undertime')
                     ->label('Undertime')
-                    ->formatStateUsing(fn ($state): string => $this->formatMinutes($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'warning' : null)
+                    ->alignCenter(),
 
                 TextColumn::make('overtime')
                     ->label('Overtime')
-                    ->formatStateUsing(fn ($state): string => $this->formatMinutes($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'purple' : null)
+                    ->alignCenter(),
 
                 TextColumn::make('credited_overtime')
                     ->label('Cred. OT')
-                    ->formatStateUsing(fn ($state): string => $this->formatMinutes($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'success' : null)
+                    ->alignCenter(),
 
                 TextColumn::make('work_hrs')
                     ->label('Work Hours')
-                    ->formatStateUsing(fn ($state): string => $this->formatDuration($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatDuration($state) : '-')
+                    ->extraAttributes(['class' => 'font-semibold tabular-nums'])
+                    ->alignCenter(),
 
                 TextColumn::make('credited_work_hrs')
                     ->label('Cred. Work Hours')
-                    ->formatStateUsing(fn ($state): string => $this->formatDuration($state)),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatDuration($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(function (DtrModel $record, $state): ?string {
+                        if ((int) $state <= 0) {
+                            return null;
+                        }
+
+                        return ((int) $record->late > 0 || (int) $record->undertime > 0)
+                            ? 'warning'
+                            : 'info';
+                    })
+                    ->alignCenter(),
 
                 TextColumn::make('holiday_type')
                     ->label('Holiday')
+                    ->badge(fn ($state): bool => filled($state))
+                    ->color('warning')
                     ->placeholder('-')
                     ->toggleable(),
 
                 TextColumn::make('holiday_rate')
                     ->label('Hol. Rate')
                     ->formatStateUsing(fn ($state): string => filled($state) ? number_format((float) $state, 2).'%' : '-')
+                    ->placeholder('-')
                     ->toggleable(),
 
                 TextColumn::make('overtime_status')
                     ->label('OT Status')
                     ->badge()
                     ->placeholder('-')
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Pending' => 'warning',
+                        'Approved' => 'success',
+                        'Rejected' => 'danger',
+                        default => 'gray',
+                    })
                     ->toggleable(),
 
                 TextColumn::make('comment')

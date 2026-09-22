@@ -170,6 +170,37 @@
             min-width: 0;
         }
 
+        /* DTR Table Color-Coding & Metric Enhancements */
+        .employee-dtr-page .tabular-nums {
+            font-variant-numeric: tabular-nums;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            letter-spacing: -0.01em;
+        }
+
+        .employee-dtr-page .fi-ta table th {
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.03em;
+        }
+
+        .employee-dtr-page .fi-ta-cell {
+            vertical-align: middle;
+        }
+
+        .employee-dtr-page .fi-badge {
+            font-size: 0.72rem !important;
+            font-weight: 700 !important;
+            padding: 2px 8px !important;
+            border-radius: 9999px !important;
+            letter-spacing: 0.01em;
+        }
+
+        .employee-dtr-page .fi-ta-text-item:empty::after,
+        .employee-dtr-page .fi-ta-text-item-placeholder {
+            color: var(--ed-muted) !important;
+            opacity: 0.6;
+        }
+
         [x-cloak] {
             display: none !important;
         }

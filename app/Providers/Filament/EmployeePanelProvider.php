@@ -45,6 +45,7 @@ class EmployeePanelProvider extends PanelProvider
             ])
             ->colors([
                 'primary' => Color::Blue,
+                'purple' => Color::Purple,
             ])
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,

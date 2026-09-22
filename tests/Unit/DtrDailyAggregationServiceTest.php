@@ -19,9 +19,9 @@ class DtrDailyAggregationServiceTest extends TestCase
         ]);
 
         $this->assertSame(420, $result['worked_minutes']);
-        $this->assertSame(480, $result['required_minutes']);
-        $this->assertSame(0, $result['late']);
-        $this->assertSame(60, $result['undertime']);
+        $this->assertSame(540, $result['required_minutes']);
+        $this->assertSame(1, $result['late']);
+        $this->assertSame(117, $result['undertime']);
         $this->assertSame(5, $result['overtime']);
         $this->assertSame(1.0, $result['day_count']);
     }
@@ -45,10 +45,10 @@ class DtrDailyAggregationServiceTest extends TestCase
     public static function dailyScenarios(): array
     {
         return [
-            'one-hour split-day shortage' => [[['08:00:00', '09:00:00'], ['11:00:00', '18:00:00']], 420, 480, 60, 1.0],
-            'normal morning and afternoon' => [[['08:00:00', '12:00:00'], ['13:00:00', '18:00:00']], 540, 480, 0, 1.0],
+            'one-hour split-day shortage' => [[['08:00:00', '09:00:00'], ['11:00:00', '18:00:00']], 420, 540, 120, 1.0],
+            'normal morning and afternoon' => [[['08:00:00', '12:00:00'], ['13:00:00', '18:00:00']], 540, 540, 0, 1.0],
             'morning half-day' => [[['08:00:00', '12:00:00']], 240, 240, 0, 0.5],
-            'overlapping intervals merge once' => [[['08:00:00', '12:00:00'], ['11:00:00', '15:00:00']], 360, 480, 120, 1.0],
+            'overlapping intervals merge once' => [[['08:00:00', '12:00:00'], ['11:00:00', '15:00:00']], 360, 540, 180, 1.0],
         ];
     }
 
@@ -68,7 +68,7 @@ class DtrDailyAggregationServiceTest extends TestCase
         $result = $this->service()->calculate($records, 8, 2);
 
         $this->assertSame(420, $result['worked_minutes']);
-        $this->assertSame(60, $result['undertime']);
+        $this->assertSame(120, $result['undertime']);
         $this->assertSame(1.0, $result['day_count']);
     }
 
