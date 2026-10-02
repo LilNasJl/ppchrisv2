@@ -32,6 +32,9 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
     {
         parent::setUp();
 
+        config(['permission.cache.store' => 'array']);
+        app(\Spatie\Permission\PermissionRegistrar::class)->initializeCache();
+
         $this->createTestTables();
 
         Gate::define('Review:Leave', fn (User $user) => in_array($user->role, ['hr', 'admin'], true));
@@ -173,7 +176,6 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
             $table->unsignedInteger('sequence');
             $table->string('label', 100);
             $table->unsignedBigInteger('approver_employee_id')->index();
-            $table->unsignedBigInteger('alternate_employee_id')->nullable();
             $table->unique(['workflow_id', 'sequence']);
         });
 
@@ -634,7 +636,57 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $this->assertTrue($leave->isReadyForHr());
     }
 
-    public function test_self_approval_falls_back_to_alternate_approver(): void
+    public function test_workflow_configuration_accepts_one_scope_and_clears_other_targets(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Tagum Station']);
+        $department = Department::create(['name' => 'Accounting']);
+        [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
+
+        $workflow = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Tagum review',
+            'is_active' => true,
+            'scope_type' => 'branch',
+            'scope_id' => $branch->id,
+            'levels' => [],
+        ], $admin);
+
+        $this->assertSame($branch->id, $workflow->branch_id);
+        $this->assertNull($workflow->employee_id);
+        $this->assertNull($workflow->designation_id);
+        $this->assertNull($workflow->department_id);
+
+        $updated = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Accounting review',
+            'is_active' => true,
+            'scope_type' => 'department',
+            'scope_id' => $department->id,
+            'version' => $workflow->version,
+            'levels' => [],
+        ], $admin, $workflow);
+
+        $this->assertNull($updated->branch_id);
+        $this->assertSame($department->id, $updated->department_id);
+        $this->assertSame('0:0:'.$department->id.':0', $updated->active_scope_key);
+    }
+
+    public function test_workflow_configuration_rejects_hidden_second_scope(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Tagum Station']);
+        [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
+
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Invalid combined scope',
+            'is_active' => true,
+            'scope_type' => 'branch',
+            'scope_id' => $branch->id,
+            'employee_id' => 999,
+            'levels' => [],
+        ], $admin);
+    }
+
+    public function test_requester_at_level_one_skips_to_level_two(): void
     {
         $branch = Branch::create(['branch_name' => 'Branch Beta']);
         [$mgrUser, $manager] = $this->createEmployeeWithUser('Manager John', 'employee', $branch);
@@ -650,13 +702,11 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $workflow->levels()->create([
             'sequence' => 1,
             'label' => 'Manager Review',
-            'approver_employee_id' => $manager->id, // Requester is the manager!
-            'alternate_employee_id' => $assistant->id, // Alternate
+            'approver_employee_id' => $manager->id,
         ]);
+        $workflow->levels()->create(['sequence' => 2, 'label' => 'Assistant Review', 'approver_employee_id' => $assistant->id]);
 
         $service = app(LeaveApprovalService::class);
-
-        // Manager submits leave
         $leave = $service->submit($manager, [
             'leave_type' => 'Vacation Leave',
             'leave_from' => '2026-09-20',
@@ -664,22 +714,61 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
             'reason' => 'Annual leave',
         ], $mgrUser);
 
-        $step1 = $leave->approvalSteps->first();
+        $steps = $leave->approvalSteps;
+        $this->assertSame('Skipped', $steps[0]->status);
+        $this->assertSame('Pending', $steps[1]->status);
+        $this->assertSame(2, $leave->current_approval_order);
+        $this->assertDatabaseHas('leave_approval_events', ['leave_id' => $leave->id, 'action' => 'Self-approval skipped']);
 
-        // Step 1 must have used the alternate (Assistant Mary) to avoid self-approval!
-        $this->assertSame($assistant->id, $step1->approver_employee_id);
-        $this->assertSame($assistant->full_name, $step1->approver_name);
+        $service->decide($leave, $steps[1]->id, $asstUser, true, 'Approved');
+        $this->assertSame('hr', $leave->fresh()->approval_phase);
+    }
 
-        // Manager cannot approve their own step
-        try {
-            $service->decide($leave, $step1->id, $mgrUser, true, 'Trying to self approve');
-            $this->fail('Expected 403 when manager attempts to approve own request');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
-            $this->assertSame(403, $e->getStatusCode());
-        }
+    public function test_requester_at_level_two_skips_to_hr_after_level_one_approval(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Branch Gamma']);
+        [$mgrUser, $manager] = $this->createEmployeeWithUser('Manager John', 'employee', $branch);
+        [$asstUser, $assistant] = $this->createEmployeeWithUser('Assistant Mary', 'employee', $branch);
+        $workflow = LeaveApprovalWorkflow::create([
+            'name' => 'Gamma Flow', 'is_active' => true, 'version' => 1,
+            'branch_id' => $branch->id, 'active_scope_key' => "0:{$branch->id}:0:0",
+        ]);
+        $workflow->levels()->create(['sequence' => 1, 'label' => 'Manager Review', 'approver_employee_id' => $manager->id]);
+        $workflow->levels()->create(['sequence' => 2, 'label' => 'Assistant Review', 'approver_employee_id' => $assistant->id]);
 
-        // Assistant can approve
-        $service->decide($leave, $step1->id, $asstUser, true, 'Assistant approved');
-        $this->assertSame('Approved', $step1->fresh()->status);
+        $service = app(LeaveApprovalService::class);
+        $leave = $service->submit($assistant, [
+            'leave_type' => 'Vacation Leave', 'leave_from' => '2026-09-20',
+            'leave_to' => '2026-09-20', 'reason' => 'Annual leave',
+        ], $asstUser);
+
+        $steps = $leave->approvalSteps;
+        $this->assertSame('Pending', $steps[0]->status);
+        $this->assertSame('Skipped', $steps[1]->status);
+        $service->decide($leave, $steps[0]->id, $mgrUser, true, 'Approved');
+        $this->assertSame('hr', $leave->fresh()->approval_phase);
+        $this->assertSame(3, $leave->fresh()->current_approval_order);
+        $this->assertTrue($leave->fresh()->isReadyForHr());
+    }
+
+    public function test_requester_at_only_preliminary_level_goes_directly_to_hr(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Branch Delta']);
+        [$mgrUser, $manager] = $this->createEmployeeWithUser('Manager John', 'employee', $branch);
+        $workflow = LeaveApprovalWorkflow::create([
+            'name' => 'Delta Flow', 'is_active' => true, 'version' => 1,
+            'branch_id' => $branch->id, 'active_scope_key' => "0:{$branch->id}:0:0",
+        ]);
+        $workflow->levels()->create(['sequence' => 1, 'label' => 'Manager Review', 'approver_employee_id' => $manager->id]);
+
+        $leave = app(LeaveApprovalService::class)->submit($manager, [
+            'leave_type' => 'Vacation Leave', 'leave_from' => '2026-09-20',
+            'leave_to' => '2026-09-20', 'reason' => 'Annual leave',
+        ], $mgrUser);
+
+        $this->assertSame('Skipped', $leave->approvalSteps[0]->status);
+        $this->assertSame('Pending', $leave->approvalSteps[1]->status);
+        $this->assertSame('hr', $leave->approval_phase);
+        $this->assertTrue($leave->isReadyForHr());
     }
 }

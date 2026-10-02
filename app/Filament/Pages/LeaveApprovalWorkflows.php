@@ -21,6 +21,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
@@ -67,7 +68,22 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                 TextColumn::make('updated_at')->label('Updated')->dateTime('M d, Y h:i A'),
             ])->recordActions([
                 Action::make('edit')->label('Edit Workflow')->icon(Heroicon::PencilSquare)->schema($this->formFields())
-                    ->fillForm(fn ($record) => $record->toArray() + ['levels' => $record->levels->toArray()])
+                    ->fillForm(function (LeaveApprovalWorkflow $record): array {
+                        $scope = collect(['employee', 'designation', 'branch', 'department'])
+                            ->first(fn (string $type): bool => filled($record->{$type.'_id'}));
+
+                        return [
+                            'name' => $record->name,
+                            'is_active' => $record->is_active,
+                            'version' => $record->version,
+                            'scope_type' => $scope ?: 'company',
+                            'scope_id' => $scope ? $record->{$scope.'_id'} : null,
+                            'levels' => $record->levels->map(fn ($level): array => [
+                                'label' => $level->label,
+                                'approver_employee_id' => $level->approver_employee_id,
+                            ])->all(),
+                        ];
+                    })
                     ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Save Workflow')
                     ->action(fn ($record, array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record)),
                 Action::make('revisions')->label('History')->icon(Heroicon::Clock)->modalSubmitAction(false)
@@ -99,18 +115,36 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                 Toggle::make('is_active')->label('Active')->default(true)->required(),
             ])->columns(2),
             Section::make('Applies To')->schema([
-                Select::make('employee_id')->label('Employee')->searchable()->options(fn () => Employee::activeEmployment()->orderBy('lastname')->get()->mapWithKeys(fn ($e) => [$e->id => $e->full_name])),
-                Select::make('designation_id')->label('Designation')->searchable()->options(fn () => Designation::orderBy('title')->pluck('title', 'id')),
-                Select::make('branch_id')->label('Branch / Station')->searchable()->options(fn () => Branch::orderBy('branch_name')->pluck('branch_name', 'id')),
-                Select::make('department_id')->label('Department')->searchable()->options(fn () => Department::orderBy('name')->pluck('name', 'id')),
+                Select::make('scope_type')->label('Apply Workflow To')->options([
+                    'company' => 'Company-wide',
+                    'employee' => 'Employee',
+                    'designation' => 'Designation',
+                    'branch' => 'Branch / Station',
+                    'department' => 'Department',
+                ])->default('company')->required()->live()
+                    ->afterStateUpdated(fn (Set $set) => $set('scope_id', null)),
+                Select::make('scope_id')->label(fn (Get $get): string => match ($get('scope_type')) {
+                    'employee' => 'Employee',
+                    'designation' => 'Designation',
+                    'branch' => 'Branch / Station',
+                    'department' => 'Department',
+                    default => 'Selection',
+                })->options(fn (Get $get): array => match ($get('scope_type')) {
+                    'employee' => Employee::activeEmployment()->orderBy('lastname')->get()->mapWithKeys(fn (Employee $employee): array => [$employee->id => $employee->full_name])->all(),
+                    'designation' => Designation::orderBy('title')->pluck('title', 'id')->all(),
+                    'branch' => Branch::orderBy('branch_name')->pluck('branch_name', 'id')->all(),
+                    'department' => Department::orderBy('name')->pluck('name', 'id')->all(),
+                    default => [],
+                })->visible(fn (Get $get): bool => in_array($get('scope_type'), ['employee', 'designation', 'branch', 'department'], true))
+                    ->required(fn (Get $get): bool => $get('scope_type') !== 'company')
+                    ->searchable()->preload(),
             ])->columns(2),
             Repeater::make('levels')->label('Preliminary Approval Levels')->defaultItems(0)->maxItems(20)
                 ->addActionLabel('Add Approval Level')->reorderableWithButtons()->collapsible()
                 ->itemLabel(fn (array $state) => $state['label'] ?? 'Approval Level')->schema([
                     TextInput::make('label')->label('Level Name')->placeholder('Department Head')->required()->maxLength(100),
                     Select::make('approver_employee_id')->label('Approver')->required()->searchable()->options(fn () => LeaveReviewActions::employeeOptions()),
-                    Select::make('alternate_employee_id')->label('Alternate Approver')->searchable()->options(fn () => LeaveReviewActions::employeeOptions()),
-                ])->columns(3),
+                ])->columns(2),
             View::make('filament.leave.final-step'),
         ];
     }

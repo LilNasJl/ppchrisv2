@@ -16,7 +16,7 @@
             <p class="muted">{{ $flow->name }} / Revision {{ $flow->version }}</p>
             <div class="route">
                 @foreach ($route as $step)
-                    <x-filament::badge color="gray">{{ $loop->iteration }}. {{ $step['label'] }}{{ $step['approver_name'] ? ': '.$step['approver_name'] : '' }}</x-filament::badge>
+                    <x-filament::badge :color="($step['skip_self'] ?? false) ? 'warning' : 'gray'">{{ $loop->iteration }}. {{ $step['label'] }}{{ ($step['skip_self'] ?? false) ? ' - skipped for own request' : ($step['approver_name'] ? ': '.$step['approver_name'] : '') }}</x-filament::badge>
                 @endforeach
             </div>
         @endif

@@ -47,7 +47,7 @@ class LeaveApprovalAccess
         // Retain access to previously assigned decisions even after a configuration change.
         return LeaveRequestApproval::where('approver_employee_id', $id)->exists()
             || LeaveApprovalWorkflow::where('is_active', true)->whereHas('levels', fn ($q) => $q
-                ->where('approver_employee_id', $id)->orWhere('alternate_employee_id', $id))->exists();
+                ->where('approver_employee_id', $id))->exists();
     }
 
     public static function view(User $user, Leave $leave): bool

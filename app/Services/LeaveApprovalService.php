@@ -32,11 +32,14 @@ class LeaveApprovalService
         $steps = [];
         foreach ($flow->levels as $level) {
             $approver = Employee::with('user')->find($level->approver_employee_id);
-            if (! LeaveApprovalAccess::employee($approver) || (int) $approver->id === (int) $employee->id) {
-                $approver = Employee::with('user')->find($level->alternate_employee_id);
+            if ((int) $level->approver_employee_id === (int) $employee->id) {
+                $steps[] = ['label' => $level->label, 'approver_employee_id' => $employee->id,
+                    'approver_name' => $employee->full_name, 'is_hr' => false, 'skip_self' => true];
+
+                continue;
             }
-            if (! LeaveApprovalAccess::employee($approver) || (int) $approver->id === (int) $employee->id) {
-                throw new RuntimeException('The '.$level->label.' level needs an available alternate approver. Please contact HR.');
+            if (! LeaveApprovalAccess::employee($approver)) {
+                throw new RuntimeException('The '.$level->label.' approver is unavailable. Please contact HR.');
             }
             $steps[] = ['label' => $level->label, 'approver_employee_id' => $approver->id,
                 'approver_name' => $approver->full_name, 'is_hr' => false];
@@ -79,10 +82,12 @@ class LeaveApprovalService
                 }
             }
             $leave = new Leave($data);
+            $firstActiveIndex = collect($steps)->search(fn (array $step): bool => ! ($step['skip_self'] ?? false));
             $leave->forceFill([
                 'employee_id' => $employee->id, 'status' => 'Pending',
                 'approval_workflow_id' => $flow->id, 'approval_workflow_version' => $flow->version,
-                'approval_phase' => $steps[0]['is_hr'] ? 'hr' : 'preliminary', 'current_approval_order' => 1,
+                'approval_phase' => $steps[$firstActiveIndex]['is_hr'] ? 'hr' : 'preliminary',
+                'current_approval_order' => $firstActiveIndex + 1,
                 'approval_snapshot' => [
                     'workflow' => $flow->name, 'version' => $flow->version, 'steps' => $steps,
                     'employee_name' => $employee->full_name, 'employee_company_id' => $employee->company_id,
@@ -91,10 +96,18 @@ class LeaveApprovalService
                 ],
             ])->save();
             foreach ($steps as $index => $step) {
-                $leave->approvalSteps()->create($step + ['sequence' => $index + 1,
-                    'status' => $index === 0 ? 'Pending' : 'Waiting', 'activated_at' => $index === 0 ? now() : null]);
+                $leave->approvalSteps()->create(Arr::only($step, ['label', 'approver_employee_id', 'approver_name', 'is_hr']) + [
+                    'sequence' => $index + 1,
+                    'status' => ($step['skip_self'] ?? false) ? 'Skipped' : ($index === $firstActiveIndex ? 'Pending' : 'Waiting'),
+                    'activated_at' => $index === $firstActiveIndex ? now() : null,
+                    'acted_at' => ($step['skip_self'] ?? false) ? now() : null,
+                    'remarks' => ($step['skip_self'] ?? false) ? 'Requester is the assigned approver.' : null,
+                ]);
             }
             $event = $this->event($leave, $actor, 'Submitted', null);
+            foreach ($leave->approvalSteps()->where('status', 'Skipped')->get() as $step) {
+                $this->event($leave, $actor, 'Self-approval skipped', 'Requester is the assigned approver.', $step);
+            }
             app(LeaveApprovalNotifier::class)->current($leave, $event);
 
             return $leave;
@@ -210,7 +223,8 @@ class LeaveApprovalService
 
     protected function advance(Leave $leave, LeaveRequestApproval $step, LeaveApprovalEvent $event): void
     {
-        $next = $leave->approvalSteps()->where('sequence', $step->sequence + 1)->firstOrFail();
+        $next = $leave->approvalSteps()->where('sequence', '>', $step->sequence)
+            ->where('status', 'Waiting')->orderBy('sequence')->firstOrFail();
         $next->update(['status' => 'Pending', 'activated_at' => now()]);
         $leave->forceFill(['current_approval_order' => $next->sequence, 'approval_phase' => $next->is_hr ? 'hr' : 'preliminary'])->save();
         app(LeaveApprovalNotifier::class)->current($leave, $event);
@@ -258,7 +272,8 @@ class LeaveApprovalService
         abort_unless(LeaveApprovalAccess::configure($actor), 403);
         validator($data, ['name' => 'required|string|max:150', 'levels' => 'present|array|max:20',
             'levels.*.label' => 'required|string|max:100', 'levels.*.approver_employee_id' => 'required|integer',
-            'is_active' => 'required|boolean'])->validate();
+            'is_active' => 'required|boolean', 'scope_type' => 'required|in:company,employee,designation,branch,department',
+            'scope_id' => 'required_unless:scope_type,company|nullable|integer'])->validate();
 
         return DB::transaction(function () use ($data, $actor, $workflow): LeaveApprovalWorkflow {
             $workflow = $workflow ? LeaveApprovalWorkflow::lockForUpdate()->findOrFail($workflow->id) : new LeaveApprovalWorkflow;
@@ -266,22 +281,29 @@ class LeaveApprovalService
                 throw ValidationException::withMessages(['name' => 'This workflow changed. Reopen it before saving.']);
             }
             $attributes = Arr::only($data, ['name', 'is_active']);
+            $scopeType = $data['scope_type'];
+            $scopeId = $data['scope_id'] ?? null;
+            if ($scopeType === 'company' && filled($scopeId)) {
+                throw ValidationException::withMessages(['scope_id' => 'Company-wide workflows cannot have a selected target.']);
+            }
+            if (collect(['employee', 'branch', 'department', 'designation'])
+                ->contains(fn (string $scope): bool => filled($data[$scope.'_id'] ?? null))) {
+                throw ValidationException::withMessages(['scope_type' => 'Choose one scope using the Applies To dropdown.']);
+            }
             foreach (['employee' => Employee::class, 'branch' => \App\Models\Branch::class,
                 'department' => \App\Models\Department::class, 'designation' => \App\Models\Designation::class] as $scope => $model) {
-                $id = $data[$scope.'_id'] ?? null;
+                $id = $scopeType === $scope ? $scopeId : null;
                 if ($id && ! $model::whereKey($id)->exists()) {
-                    throw ValidationException::withMessages([$scope.'_id' => 'Select an available '.$scope.'.']);
+                    throw ValidationException::withMessages(['scope_id' => 'Select an available '.$scope.'.']);
                 }
                 $attributes[$scope.'_id'] = $id ?: null;
             }
             foreach ($data['levels'] as $level) {
-                foreach (['approver_employee_id', 'alternate_employee_id'] as $field) {
-                    if (filled($level[$field] ?? null) && ! LeaveApprovalAccess::employee(Employee::with('user')->find($level[$field]))) {
-                        throw ValidationException::withMessages(['levels' => 'Every approver must have an active Self-Service account.']);
-                    }
+                if (filled($level['alternate_employee_id'] ?? null)) {
+                    throw ValidationException::withMessages(['levels' => 'Alternate approvers are no longer supported.']);
                 }
-                if (filled($level['alternate_employee_id'] ?? null) && (int) $level['alternate_employee_id'] === (int) $level['approver_employee_id']) {
-                    throw ValidationException::withMessages(['levels' => 'The alternate must be a different employee.']);
+                if (! LeaveApprovalAccess::employee(Employee::with('user')->find($level['approver_employee_id'] ?? null))) {
+                    throw ValidationException::withMessages(['levels' => 'Every approver must have an active Self-Service account.']);
                 }
             }
             $key = implode(':', array_map(fn ($scope) => $attributes[$scope.'_id'] ?: 0, ['employee', 'branch', 'department', 'designation']));
@@ -293,7 +315,7 @@ class LeaveApprovalService
             $workflow->fill($attributes)->save();
             $workflow->levels()->delete();
             foreach (array_values($data['levels']) as $index => $level) {
-                $workflow->levels()->create(Arr::only($level, ['label', 'approver_employee_id', 'alternate_employee_id']) + ['sequence' => $index + 1]);
+                $workflow->levels()->create(Arr::only($level, ['label', 'approver_employee_id']) + ['sequence' => $index + 1]);
             }
             DB::table('leave_workflow_revisions')->insert([
                 'workflow_id' => $workflow->id, 'version' => $workflow->version, 'actor_id' => $actor->id,
