@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Department;
 use App\Models\KpiIndicator;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
@@ -20,13 +21,21 @@ use Override;
 
 class KpiDepartmentConfiguration extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
+
     protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'kpi-configuration/department';
+
     protected static ?string $title = 'Department KPI Configuration';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
+
     public ?int $departmentId = null;
 
     public function mount(): void
@@ -37,7 +46,7 @@ class KpiDepartmentConfiguration extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return KpiConfiguration::canAccess();
+        return static::canAccessWithShield() && KpiConfiguration::canAccess();
     }
 
     public function getTitle(): string

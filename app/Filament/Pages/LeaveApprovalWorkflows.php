@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Resources\Leaves\LeaveResource;
 use App\Filament\Support\LeaveReviewActions;
 use App\Models\Branch;
 use App\Models\Department;
@@ -11,6 +12,7 @@ use App\Models\LeaveApprovalWorkflow;
 use App\Services\LeaveApprovalAccess;
 use App\Services\LeaveApprovalService;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -31,20 +33,28 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class LeaveApprovalWorkflows extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
+
     protected static ?string $title = 'Leave Approval Workflows';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
+
     protected static string|\UnitEnum|null $navigationGroup = 'Settings';
+
     protected static ?int $navigationSort = 8;
 
     public static function canAccess(): bool
     {
-        return LeaveApprovalAccess::configure(auth()->user());
+        return static::canAccessWithShield() && LeaveApprovalAccess::configure(auth()->user());
     }
 
     public function getMaxContentWidth(): Width|string|null
@@ -87,7 +97,7 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                     ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Save Workflow')
                     ->action(fn ($record, array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record)),
                 Action::make('revisions')->label('History')->icon(Heroicon::Clock)->modalSubmitAction(false)
-                    ->modalContent(fn ($record) => view('filament.leave.workflow-revisions', ['revisions' => \Illuminate\Support\Facades\DB::table('leave_workflow_revisions')->where('workflow_id', $record->id)->orderByDesc('version')->get()])),
+                    ->modalContent(fn ($record) => view('filament.leave.workflow-revisions', ['revisions' => DB::table('leave_workflow_revisions')->where('workflow_id', $record->id)->orderByDesc('version')->get()])),
             ]);
     }
 
@@ -102,7 +112,7 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                     Select::make('employee_id')->label('Employee')->options(fn () => Employee::activeEmployment()->orderBy('lastname')->get()->mapWithKeys(fn ($e) => [$e->id => $e->full_name]))->searchable()->live(),
                     View::make('filament.leave.workflow-preview')->viewData(fn (Get $get) => ['employee' => Employee::find($get('employee_id'))]),
                 ]),
-            Action::make('leaveTracking')->label('Leave Tracking')->icon(Heroicon::ArrowLeft)->color('gray')->url(\App\Filament\Resources\Leaves\LeaveResource::getUrl()),
+            Action::make('leaveTracking')->label('Leave Tracking')->icon(Heroicon::ArrowLeft)->color('gray')->url(LeaveResource::getUrl()),
         ];
     }
 

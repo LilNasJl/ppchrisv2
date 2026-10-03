@@ -3,9 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\User;
-use App\Services\FullSystemBackupService;
 use App\Services\FullSystemRestoreService;
-use App\Services\StreamedDatabaseBackupService as DatabaseBackupService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -16,11 +14,9 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 use UnitEnum;
 
@@ -40,46 +36,49 @@ class DatabaseManagement extends Page
 
     protected static ?int $navigationSort = 4;
 
+    public function mount(): void
+    {
+        if ($message = session()->pull('backup_error')) {
+            Notification::make()->danger()->title('Backup could not be downloaded')
+                ->body($message)->persistent()->send();
+        }
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             ActionGroup::make([
                 Action::make('downloadDatabaseBackup')
-                    ->label('Database Backup')
+                    ->label('Database Backup (.sql)')
                     ->icon(Heroicon::CircleStack)
-                    ->modalHeading('Confirm Database Backup')
-                    ->modalDescription('Download the database structure and records as a MySQL SQL file.')
-                    ->modalSubmitActionLabel('Download SQL Backup')
-                    ->schema([
-                        $this->currentPasswordField(),
-                    ])
-                    ->action(fn (array $data): StreamedResponse => $this->downloadDatabaseBackup($data)),
+                    ->url(route('hr_tools.backup.database', ['format' => 'sql']))
+                    ->openUrlInNewTab()
+                    ->extraAttributes([
+                        'data-navigate-ignore' => 'true',
+                        'download' => '',
+                    ]),
+
+                Action::make('downloadDatabaseGzBackup')
+                    ->label('Compressed Backup (.sql.gz for phpMyAdmin)')
+                    ->icon(Heroicon::ArchiveBox)
+                    ->color('info')
+                    ->url(route('hr_tools.backup.database', ['format' => 'gz']))
+                    ->openUrlInNewTab()
+                    ->extraAttributes([
+                        'data-navigate-ignore' => 'true',
+                        'download' => '',
+                    ]),
 
                 Action::make('downloadFullBackup')
-                    ->label('Full System Backup')
+                    ->label('Full System Backup (.zip)')
                     ->icon(Heroicon::ArrowDownTray)
                     ->color('primary')
-                    ->modalHeading('Create Encrypted Full System Backup')
-                    ->modalDescription('Includes the database, profile photos, memos, leave files, and ticket attachments. Keep the backup password because it cannot be recovered.')
-                    ->modalSubmitActionLabel('Download Full Backup')
-                    ->schema([
-                        $this->currentPasswordField(),
-                        TextInput::make('backup_password')
-                            ->label('Backup Password')
-                            ->password()
-                            ->revealable()
-                            ->minLength(12)
-                            ->autocomplete('new-password')
-                            ->helperText('Use at least 12 characters. This password is required during restoration.')
-                            ->required(),
-                        TextInput::make('backup_password_confirmation')
-                            ->label('Confirm Backup Password')
-                            ->password()
-                            ->revealable()
-                            ->autocomplete('new-password')
-                            ->required(),
-                    ])
-                    ->action(fn (array $data): BinaryFileResponse => $this->downloadFullBackup($data)),
+                    ->url(route('hr_tools.backup.full'))
+                    ->openUrlInNewTab()
+                    ->extraAttributes([
+                        'data-navigate-ignore' => 'true',
+                        'download' => '',
+                    ]),
 
                 Action::make('restoreFullBackup')
                     ->label('Restore Full Backup')
@@ -89,9 +88,8 @@ class DatabaseManagement extends Page
                     ->modalDescription('This replaces the current database and managed uploads. A private safety backup is created first, and you will be signed out after a successful restore.')
                     ->modalSubmitActionLabel('Restore System')
                     ->schema([
-                        $this->currentPasswordField(),
                         FileUpload::make('backup_archive')
-                            ->label('Encrypted Full Backup')
+                            ->label('Full Backup ZIP')
                             ->disk('local')
                             ->directory('restore-uploads')
                             ->visibility('private')
@@ -104,12 +102,10 @@ class DatabaseManagement extends Page
                             ->helperText('Upload a full-system ZIP generated by this page. Maximum application limit: 512 MB.')
                             ->required(),
                         TextInput::make('backup_password')
-                            ->label('Backup Password')
+                            ->label('Password for older encrypted backups (optional)')
                             ->password()
                             ->revealable()
-                            ->minLength(12)
-                            ->autocomplete('off')
-                            ->required(),
+                            ->autocomplete('off'),
                         TextInput::make('restore_confirmation')
                             ->label('Type RESTORE to continue')
                             ->helperText('Restoration cannot be undone from the browser after it starts.')
@@ -124,34 +120,9 @@ class DatabaseManagement extends Page
         ];
     }
 
-    protected function currentPasswordField(): TextInput
-    {
-        return TextInput::make('current_password')
-            ->label('Current Password')
-            ->password()
-            ->revealable()
-            ->autocomplete('current-password')
-            ->required();
-    }
-
-    protected function downloadDatabaseBackup(array $data): StreamedResponse
-    {
-        $this->authorizeCurrentUser($data);
-
-        return app(DatabaseBackupService::class)->download();
-    }
-
-    protected function downloadFullBackup(array $data): BinaryFileResponse
-    {
-        $this->authorizeCurrentUser($data);
-        $this->validateBackupPasswordConfirmation($data);
-
-        return app(FullSystemBackupService::class)->download((string) $data['backup_password']);
-    }
-
     protected function restoreFullBackup(array $data): ?RedirectResponse
     {
-        $this->authorizeCurrentUser($data, superAdminOnly: true);
+        $this->authorizeCurrentUser(superAdminOnly: true);
 
         if (($data['restore_confirmation'] ?? null) !== 'RESTORE') {
             throw ValidationException::withMessages([
@@ -182,7 +153,7 @@ class DatabaseManagement extends Page
         try {
             app(FullSystemRestoreService::class)->restore(
                 $disk->path($storedPath),
-                (string) $data['backup_password'],
+                (string) ($data['backup_password'] ?? ''),
             );
         } catch (Throwable $exception) {
             report($exception);
@@ -208,7 +179,7 @@ class DatabaseManagement extends Page
             ->with('status', 'The full-system backup was restored successfully. Sign in using an account contained in the restored backup.');
     }
 
-    protected function authorizeCurrentUser(array $data, bool $superAdminOnly = false): User
+    protected function authorizeCurrentUser(bool $superAdminOnly = false): User
     {
         $user = auth()->user();
 
@@ -218,21 +189,32 @@ class DatabaseManagement extends Page
             abort_unless($user->hasRole('super_admin'), 403);
         }
 
-        if (! Hash::check((string) ($data['current_password'] ?? ''), (string) $user->password)) {
-            throw ValidationException::withMessages([
-                'current_password' => 'The password is incorrect.',
-            ]);
-        }
-
         return $user;
     }
 
-    protected function validateBackupPasswordConfirmation(array $data): void
+    protected function getViewData(): array
     {
-        if (($data['backup_password'] ?? null) !== ($data['backup_password_confirmation'] ?? null)) {
-            throw ValidationException::withMessages([
-                'backup_password_confirmation' => 'The backup passwords do not match.',
-            ]);
+        $dbName = (string) config('database.connections.mysql.database', 'ppchrisv2');
+        $tablesCount = 0;
+        $sizeMb = '0.00';
+
+        try {
+            $row = DB::selectOne("SELECT COUNT(*) AS tables_count, ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'");
+            if ($row) {
+                $tablesCount = (int) ($row->tables_count ?? 0);
+                $sizeMb = (string) ($row->size_mb ?? '0.00');
+            }
+        } catch (Throwable) {
         }
+
+        return [
+            'databaseName' => $dbName,
+            'tablesCount' => $tablesCount,
+            'databaseSizeMb' => $sizeMb,
+            'sqlDownloadUrl' => route('hr_tools.backup.database', ['format' => 'sql']),
+            'sqlGzDownloadUrl' => route('hr_tools.backup.database', ['format' => 'gz']),
+            'fullDownloadUrl' => route('hr_tools.backup.full'),
+            'canRestore' => auth()->user()?->hasRole('super_admin') ?? false,
+        ];
     }
 }

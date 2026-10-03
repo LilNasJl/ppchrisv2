@@ -19,9 +19,9 @@ return new class extends Migration
         ]);
 
         $account->forceFill([
-            'name' => 'masteradmin',
-            'email' => 'masteradmin@ppchris.local',
-            'password' => Hash::make('masteradmin'),
+            'name' => config('auth.master_admin.username') ?: 'masteradmin',
+            'email' => config('auth.master_admin.email') ?: 'masteradmin@ppchris.local',
+            'password' => Hash::make((string) (config('auth.master_admin.password') ?: 'masteradmin')),
             'role' => 'admin',
             'is_disabled' => false,
             'deleted_at' => null,

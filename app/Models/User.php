@@ -14,8 +14,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'username', 'email', 'password', 'role', 'profile_photo_path', 'is_disabled', 'can_view_payroll'])]
@@ -24,6 +26,52 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasPublicUuid, HasRoles, Notifiable, SoftDeletes;
+
+    public function isMasterAdmin(): bool
+    {
+        $masterAdminUsername = (string) config('auth.master_admin.username', 'masteradmin');
+
+        return $this->exists
+            && strtolower((string) $this->username) === strtolower($masterAdminUsername)
+            && $this->role === 'admin'
+            && ! (bool) $this->is_disabled
+            && ! $this->trashed();
+    }
+
+    public static function syncMasterAdminFromConfig(): ?self
+    {
+        $username = (string) config('auth.master_admin.username', 'masteradmin');
+        $configuredPassword = config('auth.master_admin.password');
+
+        if (! filled($configuredPassword)) {
+            return null;
+        }
+
+        $user = static::query()->withTrashed()->firstOrNew([
+            'username' => $username,
+        ]);
+
+        $user->forceFill([
+            'name' => $user->name ?: $username,
+            'email' => $user->email ?: (string) config('auth.master_admin.email', 'masteradmin@ppchris.local'),
+            'role' => 'admin',
+            'is_disabled' => false,
+            'deleted_at' => null,
+        ]);
+
+        if (! Hash::check((string) $configuredPassword, (string) $user->password)) {
+            $user->password = Hash::make((string) $configuredPassword);
+        }
+
+        $user->save();
+
+        if (class_exists(Role::class)) {
+            $role = Role::findOrCreate('super_admin', 'web');
+            $user->assignRole($role);
+        }
+
+        return $user;
+    }
 
     public function canAccessPanel(Panel $panel): bool
     {

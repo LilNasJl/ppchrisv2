@@ -21,8 +21,6 @@ class DesignationsTable
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
-                    ->sortable()
-                    ->searchable()
                     ->rowIndex(),
                 TextColumn::make('title')
                     ->label('Designation Title')

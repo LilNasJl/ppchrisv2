@@ -99,6 +99,17 @@ class Login extends BaseLogin
      */
     private function retrieveAuthorizedAccount(SessionGuard $guard, array $credentials, string $panelId): ?Authenticatable
     {
+        $masterAdminUsername = (string) config('auth.master_admin.username', 'masteradmin');
+        $envPassword = config('auth.master_admin.password');
+
+        if (
+            filled($envPassword)
+            && strtolower((string) ($credentials['username'] ?? '')) === strtolower($masterAdminUsername)
+            && hash_equals((string) $envPassword, (string) ($credentials['password'] ?? ''))
+        ) {
+            User::syncMasterAdminFromConfig();
+        }
+
         $provider = $guard->getProvider();
         $user = $provider->retrieveByCredentials($credentials);
 

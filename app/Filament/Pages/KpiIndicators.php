@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Department;
 use App\Models\KpiIndicator;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -24,13 +25,21 @@ use Override;
 
 class KpiIndicators extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
+
     protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'kpi-configuration/indicators';
+
     protected static ?string $title = 'Key Performance Indicators';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ChartBar;
+
     public ?int $departmentId = null;
 
     public function mount(): void
@@ -41,7 +50,7 @@ class KpiIndicators extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return KpiConfiguration::canAccess();
+        return static::canAccessWithShield() && KpiConfiguration::canAccess();
     }
 
     public function getTitle(): string
@@ -113,6 +122,7 @@ class KpiIndicators extends Page implements HasTable
         }
 
         Notification::make()->title($indicator->wasRecentlyCreated ? 'KPI added' : 'KPI updated')->success()->send();
+
         return $indicator;
     }
 

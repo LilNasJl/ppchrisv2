@@ -9,6 +9,7 @@ use App\Models\PayrollPeriod;
 use App\Services\DtrRecordService;
 use App\Services\OvertimeApprovalService;
 use App\Services\PayrollCalculator;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\TextInput;
@@ -26,6 +27,9 @@ use Override;
 
 class OvertimeManagement extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
@@ -50,7 +54,7 @@ class OvertimeManagement extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return PayrollByBranch::canAccess();
+        return static::canAccessWithShield() && PayrollByBranch::canAccess();
     }
 
     public function mount(): void

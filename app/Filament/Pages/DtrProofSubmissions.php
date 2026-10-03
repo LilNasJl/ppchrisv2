@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\DtrSubmission;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -21,6 +22,9 @@ use Illuminate\Support\Facades\Storage;
 
 class DtrProofSubmissions extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
@@ -35,7 +39,7 @@ class DtrProofSubmissions extends Page implements HasTable
     {
         $user = auth()->user();
 
-        return $user !== null && in_array($user->role, ['hr', 'admin'], true);
+        return static::canAccessWithShield() && $user !== null && in_array($user->role, ['hr', 'admin'], true);
     }
 
     public function table(Table $table): Table

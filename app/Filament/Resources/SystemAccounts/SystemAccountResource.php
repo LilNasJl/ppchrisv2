@@ -9,7 +9,6 @@ use App\Filament\Resources\SystemAccounts\Pages\ViewSystemAccount;
 use App\Models\SystemAccount;
 use App\Models\User;
 use BackedEnum;
-use Closure;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -58,7 +57,7 @@ class SystemAccountResource extends Resource
         return $schema
             ->components([
                 Section::make('Account Details')
-                    ->description('Accounts here are only for HR/admin access. Employee accounts stay in Employee Accounts.')
+                    ->description('Assign Shield roles to control access. Employee accounts stay in Employee Accounts.')
                     ->schema([
                         TextInput::make('username')
                             ->label('Username')
@@ -76,18 +75,6 @@ class SystemAccountResource extends Resource
                                 'unique' => 'This username is already registered.',
                             ]),
 
-                        TextInput::make('email')
-                            ->label('Email')
-                            ->placeholder('e.g., admin@example.com')
-                            ->email()
-                            ->required()
-                            ->unique(
-                                table: User::class,
-                                column: 'email',
-                                ignoreRecord: true,
-                            )
-                            ->maxLength(255),
-
                         TextInput::make('password')
                             ->label('Password')
                             ->password()
@@ -96,23 +83,14 @@ class SystemAccountResource extends Resource
                             ->dehydrated(fn ($state) => filled($state))
                             ->required(fn (string $context): bool => $context === 'create'),
 
-                        Select::make('role')
-                            ->label('Account Role')
-                            ->options([
-                                'hr' => 'HR',
-                                'admin' => 'Admin',
-                            ])
-                            ->default('hr')
-                            ->required()
-                            ->native(false),
-
                         Select::make('roles')
                             ->label('Shield Roles')
                             ->relationship('roles', 'name')
                             ->multiple()
+                            ->required()
                             ->preload()
                             ->searchable()
-                            ->helperText('These Shield roles control the permissions for this HR/admin account.'),
+                            ->helperText('Access to pages and actions follows the selected Shield roles.'),
 
                         Toggle::make('is_disabled')
                             ->label('Disable Account')
@@ -137,22 +115,6 @@ class SystemAccountResource extends Resource
                 TextColumn::make('username')
                     ->label('Username')
                     ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('email')
-                    ->label('Email')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('role')
-                    ->label('Account Role')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'admin' => 'Admin',
-                        'hr' => 'HR',
-                        default => $state ?: 'N/A',
-                    })
-                    ->color(fn (?string $state): string => $state === 'admin' ? 'primary' : 'success')
                     ->sortable(),
 
                 TextColumn::make('shield_roles')

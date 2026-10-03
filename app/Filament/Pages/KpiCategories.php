@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\KpiCategory;
 use App\Models\KpiIndicator;
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -28,13 +29,21 @@ use Override;
 
 class KpiCategories extends Page implements HasTable
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
     use InteractsWithTable;
 
     protected string $view = 'filament-panels::pages.page';
+
     protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $slug = 'kpi-configuration/categories';
+
     protected static ?string $title = 'KPI Categories';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Tag;
+
     public ?int $departmentId = null;
 
     public function mount(): void
@@ -45,7 +54,7 @@ class KpiCategories extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return KpiConfiguration::canAccess();
+        return static::canAccessWithShield() && KpiConfiguration::canAccess();
     }
 
     public function getTitle(): string
@@ -185,6 +194,7 @@ class KpiCategories extends Page implements HasTable
         }
 
         Notification::make()->title($category->wasRecentlyCreated ? 'KPI category added' : 'KPI category updated')->success()->send();
+
         return $category;
     }
 

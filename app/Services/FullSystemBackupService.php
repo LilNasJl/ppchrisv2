@@ -32,12 +32,15 @@ class FullSystemBackupService extends DatabaseBackupService
         ];
     }
 
-    public function download(string $password): BinaryFileResponse
+    public function download(): BinaryFileResponse
     {
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+
         $path = $this->temporaryPath('ppchris-full-backup-');
 
         try {
-            $this->createArchiveAt($path, $password);
+            $this->createArchiveAt($path);
         } catch (Throwable $exception) {
             File::delete($path);
 
@@ -55,31 +58,43 @@ class FullSystemBackupService extends DatabaseBackupService
             ->deleteFileAfterSend(true);
     }
 
-    public function createSafetyBackup(string $password): string
+    public function createSafetyBackup(?string $password = null): string
     {
         $directory = storage_path('app/private/system-backups');
-        File::ensureDirectoryExists($directory, 0700, true);
+        File::ensureDirectoryExists($directory, 0755, true);
+        @chmod($directory, 0755);
 
         if (! is_writable($directory)) {
-            throw new RuntimeException('The private safety-backup directory is not writable by the web server.');
+            // Secondary fallback
+            $directory = storage_path('app/system-backups');
+            File::ensureDirectoryExists($directory, 0755, true);
+            @chmod($directory, 0755);
+
+            if (! is_writable($directory)) {
+                $directory = sys_get_temp_dir();
+            }
         }
 
         $path = $directory.DIRECTORY_SEPARATOR.'safety-before-restore-'.now()->format('Ymd-His').'-'.Str::random(6).'.zip';
         $this->createArchiveAt($path, $password);
-        @chmod($path, 0600);
+        @chmod($path, 0644);
         $this->cleanupSafetyBackups($directory);
 
         return $path;
     }
 
-    public function createArchiveAt(string $archivePath, string $password): void
+    public function createArchiveAt(string $archivePath, ?string $password = null): void
     {
-        if (mb_strlen($password) < 12) {
+        if ($password !== null && $password !== '' && mb_strlen($password) < 12) {
             throw new RuntimeException('The backup password must contain at least 12 characters.');
         }
 
-        if (! extension_loaded('zip') || ! ZipArchive::isEncryptionMethodSupported(ZipArchive::EM_AES_256, true)) {
-            throw new RuntimeException('PHP ZIP support with AES-256 encryption is required.');
+        if (! extension_loaded('zip')) {
+            throw new RuntimeException('PHP ZIP support is required for a full-system backup.');
+        }
+
+        if ($password && ! ZipArchive::isEncryptionMethodSupported(ZipArchive::EM_AES_256, true)) {
+            throw new RuntimeException('PHP ZIP support with AES-256 encryption is required for this backup.');
         }
 
         $connection = DB::connection();
@@ -106,10 +121,12 @@ class FullSystemBackupService extends DatabaseBackupService
             $result = $zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
             if ($result !== true) {
-                throw new RuntimeException('The encrypted system backup archive could not be created.');
+                throw new RuntimeException('The system backup archive could not be created.');
             }
 
-            $zip->setPassword($password);
+            if ($password) {
+                $zip->setPassword($password);
+            }
 
             $manifest = [
                 'format_version' => self::FORMAT_VERSION,
@@ -117,6 +134,7 @@ class FullSystemBackupService extends DatabaseBackupService
                 'generated_at' => now()->toIso8601String(),
                 'framework_version' => app()->version(),
                 'php_version' => PHP_VERSION,
+                'encryption' => $password ? 'aes-256' : 'none',
                 'database' => [
                     'driver' => $connection->getDriverName(),
                     'name' => $connection->getDatabaseName(),
@@ -127,7 +145,7 @@ class FullSystemBackupService extends DatabaseBackupService
                 'entries' => [],
             ];
 
-            $this->addEncryptedFile($zip, $sqlPath, 'database.sql', $password);
+            $this->addArchiveFile($zip, $sqlPath, 'database.sql', $password);
             $manifest['entries']['database.sql'] = $this->fileMetadata($sqlPath);
 
             foreach (self::managedDirectories() as $archiveRoot => $sourceRoot) {
@@ -143,7 +161,9 @@ class FullSystemBackupService extends DatabaseBackupService
                 throw new RuntimeException('The backup manifest could not be added to the archive.');
             }
 
-            $this->encryptEntry($zip, 'manifest.json', $password);
+            if ($password) {
+                $this->encryptEntry($zip, 'manifest.json', $password);
+            }
 
             if (! $zip->close()) {
                 throw new RuntimeException('The system backup archive could not be finalized.');
@@ -171,7 +191,7 @@ class FullSystemBackupService extends DatabaseBackupService
         ZipArchive $zip,
         string $sourceRoot,
         string $archiveRoot,
-        string $password,
+        ?string $password,
         array &$entries,
     ): void {
         $zip->addEmptyDir($archiveRoot);
@@ -194,22 +214,24 @@ class FullSystemBackupService extends DatabaseBackupService
             $relativePath = ltrim(str_replace('\\', '/', substr($sourcePath, strlen($sourceRoot))), '/');
             $archivePath = $archiveRoot.'/'.$relativePath;
 
-            $this->addEncryptedFile($zip, $sourcePath, $archivePath, $password);
+            $this->addArchiveFile($zip, $sourcePath, $archivePath, $password);
             $entries[$archivePath] = $this->fileMetadata($sourcePath);
         }
     }
 
-    protected function addEncryptedFile(
+    protected function addArchiveFile(
         ZipArchive $zip,
         string $sourcePath,
         string $archivePath,
-        string $password,
+        ?string $password,
     ): void {
         if (! $zip->addFile($sourcePath, $archivePath)) {
             throw new RuntimeException('A required backup file could not be added: '.$archivePath);
         }
 
-        $this->encryptEntry($zip, $archivePath, $password);
+        if ($password) {
+            $this->encryptEntry($zip, $archivePath, $password);
+        }
     }
 
     protected function encryptEntry(ZipArchive $zip, string $archivePath, string $password): void
@@ -239,13 +261,21 @@ class FullSystemBackupService extends DatabaseBackupService
 
     protected function temporaryPath(string $prefix): string
     {
-        $path = tempnam(sys_get_temp_dir(), $prefix);
+        $dir = storage_path('app/private/temp');
+        if (! is_dir($dir)) {
+            File::ensureDirectoryExists($dir, 0755, true);
+            @chmod($dir, 0755);
+        }
+
+        $path = is_writable($dir)
+            ? @tempnam($dir, $prefix)
+            : @tempnam(sys_get_temp_dir(), $prefix);
 
         if ($path === false) {
             throw new RuntimeException('A secure temporary backup file could not be created.');
         }
 
-        @chmod($path, 0600);
+        @chmod($path, 0644);
 
         return $path;
     }

@@ -185,8 +185,10 @@ class LeaveApprovalWorkflowUnitTest extends TestCase
 
     public function test_leave_approval_access_view_authorizes_correct_actors(): void
     {
-        // Admin user can view
-        $adminUser = (new User)->forceFill(['role' => 'admin', 'is_disabled' => false]);
+        // Admin access is governed by Shield permissions.
+        $adminUser = \Mockery::mock(User::class)->makePartial();
+        $adminUser->forceFill(['role' => 'admin', 'is_disabled' => false]);
+        $adminUser->shouldReceive('can')->with('View:Leave')->andReturn(true);
         $leaveAdmin = (new Leave)->forceFill(['employee_id' => 10, 'status' => 'Pending']);
         $this->assertTrue(LeaveApprovalAccess::view($adminUser, $leaveAdmin));
 
@@ -247,7 +249,10 @@ class LeaveApprovalWorkflowUnitTest extends TestCase
 
     public function test_leave_approval_access_review_and_configure(): void
     {
-        $adminUser = (new User)->forceFill(['role' => 'admin', 'is_disabled' => false]);
+        $adminUser = \Mockery::mock(User::class)->makePartial();
+        $adminUser->forceFill(['role' => 'admin', 'is_disabled' => false]);
+        $adminUser->shouldReceive('can')->with('Review:Leave')->andReturn(true);
+        $adminUser->shouldReceive('can')->with('Manage:LeaveWorkflow')->andReturn(true);
         $employeeUser = (new User)->forceFill(['role' => 'employee', 'is_disabled' => false]);
         $disabledHr = (new User)->forceFill(['role' => 'hr', 'is_disabled' => true]);
 
@@ -258,6 +263,12 @@ class LeaveApprovalWorkflowUnitTest extends TestCase
         $this->assertTrue(LeaveApprovalAccess::configure($adminUser));
         $this->assertFalse(LeaveApprovalAccess::configure($employeeUser));
         $this->assertFalse(LeaveApprovalAccess::configure($disabledHr));
+
+        $adminWithoutGrants = \Mockery::mock(User::class)->makePartial();
+        $adminWithoutGrants->forceFill(['role' => 'admin', 'is_disabled' => false]);
+        $adminWithoutGrants->shouldReceive('can')->andReturn(false);
+        $this->assertFalse(LeaveApprovalAccess::review($adminWithoutGrants));
+        $this->assertFalse(LeaveApprovalAccess::configure($adminWithoutGrants));
 
         $hrWithReview = \Mockery::mock(User::class)->makePartial();
         $hrWithReview->forceFill(['role' => 'hr', 'is_disabled' => false]);

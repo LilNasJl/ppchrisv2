@@ -123,4 +123,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Master Admin Credentials Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Allows setting the default master administrator username, email, and
+    | password directly from the .env environment file.
+    |
+    */
+
+    'master_admin' => [
+        'username' => env('MASTER_ADMIN_USERNAME', 'masteradmin'),
+        'email' => env('MASTER_ADMIN_EMAIL', 'masteradmin@ppchris.local'),
+        'password' => env('MASTER_ADMIN_PASSWORD'),
+    ],
+
 ];

@@ -17,17 +17,17 @@ class LeaveApprovalAccess
 
     public static function review(?User $user): bool
     {
-        return self::hr($user) && ($user->role === 'admin' || $user->can('Review:Leave') || $user->can('Update:Leave'));
+        return self::hr($user) && ($user->can('Review:Leave') || $user->can('Update:Leave'));
     }
 
     public static function configure(?User $user): bool
     {
-        return self::hr($user) && ($user->role === 'admin' || $user->can('Manage:LeaveWorkflow'));
+        return self::hr($user) && $user->can('Manage:LeaveWorkflow');
     }
 
     public static function override(?User $user): bool
     {
-        return self::review($user) && ($user->role === 'admin' || $user->can('Override:Leave'));
+        return self::review($user) && $user->can('Override:Leave');
     }
 
     public static function employee(?Employee $employee): bool
@@ -56,7 +56,7 @@ class LeaveApprovalAccess
             return false;
         }
         if (self::hr($user)) {
-            return $user->role === 'admin' || $user->can('View:Leave') || self::review($user);
+            return $user->can('View:Leave') || self::review($user);
         }
         if (! self::employee($user->employee) || $user->role !== 'employee') {
             return false;

@@ -57,9 +57,22 @@ Artisan::command('dtr:recalculate-daily {--period=}', function (DtrDailyAggregat
     $this->info("Recalculated {$groups} employee-day D.T.R group(s){$scope}.");
 })->purpose('Recalculate combined daily Regular attendance metrics');
 
+Artisan::command('auth:sync-masteradmin', function (): void {
+    $account = \App\Models\User::syncMasterAdminFromConfig();
+
+    if (! $account) {
+        $this->warn('Master admin credentials are not fully configured in auth config or environment.');
+
+        return;
+    }
+
+    $this->info("Master admin account [{$account->username}] synced successfully.");
+})->purpose('Synchronize masteradmin account credentials from environment/configuration');
+
 Schedule::command('payroll-period:ensure-current')->hourly();
 Schedule::command('payroll-period:auto-lock-due')->hourly();
 Schedule::command('employment:promote-eligible')
     ->hourly()
     ->timezone(config('app.timezone'))
     ->withoutOverlapping();
+

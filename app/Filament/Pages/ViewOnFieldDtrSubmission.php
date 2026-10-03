@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\DtrSubmission;
 use App\Services\OnFieldDtrService;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -13,6 +14,10 @@ use Override;
 
 class ViewOnFieldDtrSubmission extends Page
 {
+    use HasPageShield {
+        canAccess as protected canAccessWithShield;
+    }
+
     protected string $view = 'filament.pages.view-on-field-dtr-submission';
 
     protected static bool $shouldRegisterNavigation = false;
@@ -27,7 +32,7 @@ class ViewOnFieldDtrSubmission extends Page
     {
         $user = auth()->user();
 
-        return $user !== null && in_array($user->role, ['hr', 'admin'], true);
+        return static::canAccessWithShield() && $user !== null && in_array($user->role, ['hr', 'admin'], true);
     }
 
     #[Override]

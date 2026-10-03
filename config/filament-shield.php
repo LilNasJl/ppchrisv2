@@ -71,7 +71,7 @@ return [
     'super_admin' => [
         'enabled' => true,
         'name' => 'super_admin',
-        'define_via_gate' => true,
+        'define_via_gate' => false,
         'intercept_gate' => 'before',
     ],
 
@@ -234,6 +234,9 @@ return [
 
     'custom_permissions' => [
         'Impersonate:Employee' => 'Impersonate employee accounts',
+        'Manage:LeaveWorkflow' => 'Manage leave approval workflows',
+        'Review:Leave' => 'Review leave requests',
+        'Override:Leave' => 'Override leave approval levels',
     ],
 
     /*

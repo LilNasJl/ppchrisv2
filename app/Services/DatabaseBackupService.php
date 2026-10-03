@@ -13,29 +13,42 @@ class DatabaseBackupService
 {
     public function create(): string
     {
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+
         $connection = DB::connection();
 
         if ($connection->getDriverName() !== 'mysql') {
             throw new RuntimeException('Database backups are currently supported only for MySQL connections.');
         }
 
-        $directory = storage_path('app/private/database-backups');
-        File::ensureDirectoryExists($directory);
+        $directory = $this->resolveBackupDirectory();
         $this->deleteStaleBackups($directory);
 
         $filename = 'database-backup-'.now()->format('Ymd-His').'-'.Str::random(8).'.sql';
         $path = $directory.DIRECTORY_SEPARATOR.$filename;
-        $stream = fopen($path, 'wb');
+        $stream = @fopen($path, 'wb');
 
         if ($stream === false) {
-            throw new RuntimeException('The database backup file could not be created.');
+            // Secondary fallback to system temporary directory
+            $fallbackDir = sys_get_temp_dir();
+            $path = $fallbackDir.DIRECTORY_SEPARATOR.$filename;
+            $stream = @fopen($path, 'wb');
+
+            if ($stream === false) {
+                throw new RuntimeException('The database backup file could not be created. Please verify server storage permissions.');
+            }
         }
+
+        @chmod($path, 0644);
 
         try {
             $this->writeBackup($connection->getPdo(), $connection->getDatabaseName(), $stream);
             fclose($stream);
         } catch (Throwable $exception) {
-            fclose($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
             File::delete($path);
 
             throw $exception;
@@ -71,18 +84,31 @@ class DatabaseBackupService
         $this->writeLine($stream, '-- PhilFumes HRIS database backup');
         $this->writeLine($stream, '-- Database: '.$database);
         $this->writeLine($stream, '-- Generated: '.now()->format('Y-m-d H:i:s T'));
+        $this->writeLine($stream, '-- Compatible with phpMyAdmin and MySQL CLI');
         $this->writeLine($stream);
         $this->writeLine($stream, 'SET NAMES utf8mb4;');
         $this->writeLine($stream, 'SET FOREIGN_KEY_CHECKS = 0;');
         $this->writeLine($stream, "SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';");
+        $this->writeLine($stream, 'SET AUTOCOMMIT = 0;');
         $this->writeLine($stream);
 
         $transactionStarted = false;
 
         try {
-            $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-            $pdo->exec('START TRANSACTION WITH CONSISTENT SNAPSHOT');
-            $transactionStarted = true;
+            try {
+                $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+                $pdo->exec('START TRANSACTION WITH CONSISTENT SNAPSHOT');
+                $transactionStarted = true;
+            } catch (Throwable) {
+                // Some shared hosts (Hostinger) restrict consistent snapshot privileges.
+                // Fall back to standard transaction or autocommit off.
+                try {
+                    $pdo->beginTransaction();
+                    $transactionStarted = true;
+                } catch (Throwable) {
+                    $transactionStarted = false;
+                }
+            }
 
             foreach ($tables as $table) {
                 $this->writeTable($pdo, $stream, $table);
@@ -94,16 +120,26 @@ class DatabaseBackupService
 
             $this->writeTriggers($pdo, $stream);
 
-            $pdo->exec('COMMIT');
-            $transactionStarted = false;
+            if ($transactionStarted) {
+                try {
+                    $pdo->exec('COMMIT');
+                } catch (Throwable) {
+                }
+                $transactionStarted = false;
+            }
         } finally {
             if ($transactionStarted) {
-                $pdo->exec('ROLLBACK');
+                try {
+                    $pdo->exec('ROLLBACK');
+                } catch (Throwable) {
+                }
             }
         }
 
+        $this->writeLine($stream, 'COMMIT;');
         $this->writeLine($stream, 'SET FOREIGN_KEY_CHECKS = 1;');
-        $this->writeLine($stream, '-- Backup completed.');
+        $this->writeLine($stream, 'SET AUTOCOMMIT = 1;');
+        $this->writeLine($stream, '-- Backup completed successfully.');
     }
 
     /**
@@ -281,17 +317,52 @@ class DatabaseBackupService
      */
     protected function writeLine(mixed $stream, string $line = ''): void
     {
-        if (fwrite($stream, $line.PHP_EOL) === false) {
-            throw new RuntimeException('The database backup could not be written.');
+        $line .= PHP_EOL;
+        $length = strlen($line);
+        $offset = 0;
+
+        while ($offset < $length) {
+            $written = fwrite($stream, substr($line, $offset));
+
+            if ($written === false || $written === 0) {
+                throw new RuntimeException('The database backup could not be written completely. Check available storage space and permissions.');
+            }
+
+            $offset += $written;
         }
     }
 
     protected function deleteStaleBackups(string $directory): void
     {
-        foreach ((array) File::glob($directory.DIRECTORY_SEPARATOR.'database-backup-*.sql') as $path) {
+        foreach ((array) File::glob($directory.DIRECTORY_SEPARATOR.'database-backup-*.sql*') as $path) {
             if (File::lastModified($path) < now()->subDay()->getTimestamp()) {
                 File::delete($path);
             }
         }
+    }
+
+    protected function resolveBackupDirectory(): string
+    {
+        $primary = storage_path('app/private/database-backups');
+        if (! is_dir($primary)) {
+            File::ensureDirectoryExists($primary, 0755, true);
+            @chmod($primary, 0755);
+        }
+
+        if (is_writable($primary)) {
+            return $primary;
+        }
+
+        $secondary = storage_path('app/database-backups');
+        if (! is_dir($secondary)) {
+            File::ensureDirectoryExists($secondary, 0755, true);
+            @chmod($secondary, 0755);
+        }
+
+        if (is_writable($secondary)) {
+            return $secondary;
+        }
+
+        return sys_get_temp_dir();
     }
 }

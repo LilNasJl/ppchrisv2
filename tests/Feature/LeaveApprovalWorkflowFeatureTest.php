@@ -3,27 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
-use App\Models\Counter;
 use App\Models\Department;
-use App\Models\Designation;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
-use App\Models\LeaveApprovalEvent;
-use App\Models\LeaveApprovalLevel;
 use App\Models\LeaveApprovalWorkflow;
-use App\Models\LeaveRequestApproval;
 use App\Models\PayrollPeriod;
 use App\Models\User;
-use App\Services\LeaveApprovalAccess;
 use App\Services\LeaveApprovalService;
-use App\Services\LeaveDtrService;
-use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class LeaveApprovalWorkflowFeatureTest extends TestCase
@@ -33,7 +25,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         parent::setUp();
 
         config(['permission.cache.store' => 'array']);
-        app(\Spatie\Permission\PermissionRegistrar::class)->initializeCache();
+        app(PermissionRegistrar::class)->initializeCache();
 
         $this->createTestTables();
 
@@ -90,6 +82,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
 
         Schema::create('users', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable();
             $table->string('name');
             $table->string('email')->nullable();
             $table->string('username')->nullable();
@@ -674,7 +667,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $branch = Branch::create(['branch_name' => 'Tagum Station']);
         [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
 
         app(LeaveApprovalService::class)->saveWorkflow([
             'name' => 'Invalid combined scope',

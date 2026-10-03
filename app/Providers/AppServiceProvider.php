@@ -37,6 +37,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -61,6 +62,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         date_default_timezone_set(config('app.timezone', 'Asia/Manila'));
+
+        Gate::before(fn (User $user): ?bool => $user->isMasterAdmin() ? true : null);
 
         foreach ($this->hrNotifiableModels() as $model) {
             $model::observe(HrActionNotificationObserver::class);

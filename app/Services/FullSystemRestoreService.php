@@ -22,7 +22,7 @@ class FullSystemRestoreService
     /**
      * @return array{generated_at: string|null, statements: int, safety_backup: string}
      */
-    public function restore(string $archivePath, string $password): array
+    public function restore(string $archivePath, string $password = ''): array
     {
         if (! is_file($archivePath)) {
             throw new RuntimeException('The uploaded full-system backup could not be found.');
@@ -81,8 +81,14 @@ class FullSystemRestoreService
      */
     protected function stageAndValidateArchive(string $archivePath, string $password): array
     {
-        $stagingPath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'ppchris-restore-'.Str::random(20);
-        File::ensureDirectoryExists($stagingPath, 0700, true);
+        $baseTemp = storage_path('app/private/temp');
+        if (! is_dir($baseTemp)) {
+            File::ensureDirectoryExists($baseTemp, 0755, true);
+        }
+
+        $stagingBase = is_writable($baseTemp) ? $baseTemp : sys_get_temp_dir();
+        $stagingPath = $stagingBase.DIRECTORY_SEPARATOR.'ppchris-restore-'.Str::random(20);
+        File::ensureDirectoryExists($stagingPath, 0755, true);
 
         $zip = new ZipArchive;
         $result = $zip->open($archivePath, ZipArchive::RDONLY);
@@ -94,7 +100,9 @@ class FullSystemRestoreService
         }
 
         try {
-            $zip->setPassword($password);
+            if ($password !== '') {
+                $zip->setPassword($password);
+            }
             $manifest = $this->readManifest($zip);
             $entries = $this->validateManifest($manifest);
             $this->validateArchiveEntries($zip, $entries);
@@ -156,7 +164,7 @@ class FullSystemRestoreService
         $content = $zip->getFromIndex($index);
 
         if (! is_string($content) || $content === '') {
-            throw new RuntimeException('The backup password is incorrect or the manifest is damaged.');
+            throw new RuntimeException('The manifest could not be read. Older encrypted backups require their original password.');
         }
 
         try {
@@ -295,7 +303,7 @@ class FullSystemRestoreService
         $source = $zip->getStream($entryName);
 
         if ($source === false) {
-            throw new RuntimeException('The backup password is incorrect or '.$entryName.' is damaged.');
+            throw new RuntimeException('The backup entry could not be read: '.$entryName.'. Check the password for an older encrypted backup.');
         }
 
         $target = fopen($destination, 'wb');

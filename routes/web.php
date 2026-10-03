@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DtrPrintController;
 use App\Http\Controllers\Hr\DtrExportController;
+use App\Http\Controllers\Hr\DatabaseBackupDownloadController;
 use App\Http\Controllers\Hr\DtrImportController;
 use App\Http\Controllers\Hr\DtrSubmissionDownloadController;
 use App\Http\Controllers\Hr\EmployeeImportController;
@@ -129,7 +130,9 @@ Route::get('/dtr/print/{period}/{branch}/{employee}', DtrPrintController::class)
 Route::middleware('auth')
     ->prefix('hr-tools')
     ->name('hr_tools.')
-    ->group(function (): void {
+      ->group(function (): void {
+          Route::get('/backup/database', [DatabaseBackupDownloadController::class, 'database'])->name('backup.database');
+          Route::get('/backup/full', [DatabaseBackupDownloadController::class, 'full'])->name('backup.full');
         Route::post('/import/employees', EmployeeImportController::class)->name('import.employees');
         Route::post('/import/dtr', DtrImportController::class)->name('import.dtr');
         Route::get('/export/dtr.csv', DtrExportController::class)->name('export.dtr');
