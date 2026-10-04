@@ -6,6 +6,7 @@ use App\Filament\Pages\DtrManage;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
@@ -51,8 +52,21 @@ class DtrPrintController extends Controller
             abort_unless(in_array($user->role, ['hr', 'admin'], true) && DtrManage::canAccess(), 403);
         }
 
-        $rows = $dtrRecords
-            ->query($selectedEmployee, $selectedBranch->id, $payrollPeriod->id)
+        $selectedPeriodId = (int) $payrollPeriod->id;
+
+        $hasEmployeeVisibleDtr = (! $payrollPeriod->is_locked || ! $dtrRecords->query($selectedEmployee, $selectedBranch->id, $selectedPeriodId)->exists())
+            && EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', $selectedPeriodId)
+                ->forEmployee($selectedEmployee)
+                ->exists();
+
+        $rowsQuery = $hasEmployeeVisibleDtr
+            ? EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', $selectedPeriodId)
+                ->forEmployee($selectedEmployee)
+            : $dtrRecords->query($selectedEmployee, $selectedBranch->id, $selectedPeriodId);
+
+        $rows = $rowsQuery
             ->orderBy('date_in')
             ->orderBy('time_in')
             ->orderBy('id')

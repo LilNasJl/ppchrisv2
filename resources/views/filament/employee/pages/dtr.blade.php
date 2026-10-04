@@ -29,21 +29,21 @@
         }
 
         .employee-dtr-toolbar {
-            align-items: end;
+            align-items: center;
             background: var(--ed-surface);
             border: 1px solid var(--ed-border);
             border-top: 3px solid var(--ed-blue);
             border-radius: 8px;
             display: grid;
             gap: 16px;
-            grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-            padding: 16px;
+            grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+            padding: 14px 18px;
         }
 
         .employee-dtr-heading {
             align-items: center;
             display: flex;
-            gap: 11px;
+            gap: 12px;
         }
 
         .employee-dtr-heading-icon {
@@ -59,8 +59,8 @@
         }
 
         .employee-dtr-heading-icon svg {
-            height: 21px;
-            width: 21px;
+            height: 22px;
+            width: 22px;
         }
 
         .employee-dtr-heading h2 {
@@ -74,7 +74,15 @@
         .employee-dtr-heading p {
             color: var(--ed-muted);
             font-size: 12px;
-            margin: 3px 0 0;
+            margin: 2px 0 0;
+        }
+
+        .employee-dtr-period-form {
+            min-width: 0;
+        }
+
+        .employee-dtr-period-form .fi-fo-field-wrp-label {
+            display: none !important;
         }
 
         .employee-dtr-overview {
@@ -84,15 +92,11 @@
         }
 
         .employee-dtr-metric {
-            background: var(--ed-surface);
+            background: linear-gradient(180deg, var(--ed-surface), var(--ed-blue-soft));
             border: 1px solid var(--ed-border);
             border-radius: 8px;
             min-width: 0;
-            padding: 12px 13px;
-        }
-
-        .employee-dtr-metric {
-            background: linear-gradient(180deg, var(--ed-surface), var(--ed-blue-soft));
+            padding: 12px 14px;
         }
 
         .employee-dtr-label {
@@ -123,12 +127,21 @@
             font-size: 13px;
             font-weight: 700;
             padding: 22px;
+            text-align: center;
         }
 
         .employee-dtr-tabs {
             display: grid;
             gap: 12px;
             min-width: 0;
+        }
+
+        .employee-dtr-tab-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
         .employee-dtr-tab-list {
@@ -138,7 +151,6 @@
             border-radius: 8px;
             display: inline-flex;
             gap: 4px;
-            justify-self: start;
             padding: 4px;
         }
 
@@ -152,8 +164,9 @@
             font-size: 13px;
             font-weight: 750;
             gap: 7px;
-            min-height: 36px;
-            padding: 8px 13px;
+            min-height: 34px;
+            padding: 6px 14px;
+            transition: all 0.15s ease;
         }
 
         .employee-dtr-tab svg {
@@ -170,7 +183,7 @@
             min-width: 0;
         }
 
-        /* DTR Table Color-Coding & Metric Enhancements */
+        /* Table Column & Badge Enhancements */
         .employee-dtr-page .tabular-nums {
             font-variant-numeric: tabular-nums;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -179,8 +192,9 @@
 
         .employee-dtr-page .fi-ta table th {
             text-transform: uppercase;
-            font-size: 0.72rem;
-            letter-spacing: 0.03em;
+            font-size: 0.70rem;
+            letter-spacing: 0.04em;
+            font-weight: 800;
         }
 
         .employee-dtr-page .fi-ta-cell {
@@ -189,7 +203,7 @@
 
         .employee-dtr-page .fi-badge {
             font-size: 0.72rem !important;
-            font-weight: 700 !important;
+            font-weight: 750 !important;
             padding: 2px 8px !important;
             border-radius: 9999px !important;
             letter-spacing: 0.01em;
@@ -198,7 +212,7 @@
         .employee-dtr-page .fi-ta-text-item:empty::after,
         .employee-dtr-page .fi-ta-text-item-placeholder {
             color: var(--ed-muted) !important;
-            opacity: 0.6;
+            opacity: 0.5;
         }
 
         [x-cloak] {
@@ -225,7 +239,7 @@
             .employee-dtr-tab-list {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-                justify-self: stretch;
+                width: 100%;
             }
 
             .employee-dtr-tab {
@@ -242,40 +256,44 @@
                 </span>
                 <div>
                     <h2>Daily Time Record</h2>
-                    <p>Review your attendance by payroll period. All records are view only.</p>
+                    <p>Review attendance records and payroll period summaries.</p>
                 </div>
             </div>
 
-            <div>{{ $this->form }}</div>
+            <div class="employee-dtr-period-form">
+                {{ $this->form }}
+            </div>
         </section>
 
         @if (! $this->selectedPeriod)
             <div class="employee-dtr-empty">No payroll period is available yet.</div>
         @elseif ($this->employee)
             <div x-data="{ activeTab: 'dtr' }" class="employee-dtr-tabs">
-                <div class="employee-dtr-tab-list" role="tablist" aria-label="D.T.R views">
-                    <button
-                        type="button"
-                        class="employee-dtr-tab"
-                        x-bind:class="{ 'is-active': activeTab === 'dtr' }"
-                        x-bind:aria-selected="activeTab === 'dtr'"
-                        x-on:click="activeTab = 'dtr'"
-                        role="tab"
-                    >
-                        <x-filament::icon icon="heroicon-o-table-cells" />
-                        D.T.R
-                    </button>
-                    <button
-                        type="button"
-                        class="employee-dtr-tab"
-                        x-bind:class="{ 'is-active': activeTab === 'overview' }"
-                        x-bind:aria-selected="activeTab === 'overview'"
-                        x-on:click="activeTab = 'overview'"
-                        role="tab"
-                    >
-                        <x-filament::icon icon="heroicon-o-chart-bar-square" />
-                        Overview
-                    </button>
+                <div class="employee-dtr-tab-bar">
+                    <div class="employee-dtr-tab-list" role="tablist" aria-label="D.T.R views">
+                        <button
+                            type="button"
+                            class="employee-dtr-tab"
+                            x-bind:class="{ 'is-active': activeTab === 'dtr' }"
+                            x-bind:aria-selected="activeTab === 'dtr'"
+                            x-on:click="activeTab = 'dtr'"
+                            role="tab"
+                        >
+                            <x-filament::icon icon="heroicon-o-table-cells" />
+                            D.T.R Entries
+                        </button>
+                        <button
+                            type="button"
+                            class="employee-dtr-tab"
+                            x-bind:class="{ 'is-active': activeTab === 'overview' }"
+                            x-bind:aria-selected="activeTab === 'overview'"
+                            x-on:click="activeTab = 'overview'"
+                            role="tab"
+                        >
+                            <x-filament::icon icon="heroicon-o-chart-bar-square" />
+                            Overview
+                        </button>
+                    </div>
                 </div>
 
                 <section x-show="activeTab === 'dtr'" class="employee-dtr-tab-panel" role="tabpanel">
@@ -291,7 +309,13 @@
                         </div>
                         <div class="employee-dtr-metric">
                             <div class="employee-dtr-label">Status</div>
-                            <div class="employee-dtr-value">{{ $this->selectedPeriod->is_locked ? 'Locked' : 'Open' }}</div>
+                            <div class="employee-dtr-value">
+                                @if ($this->selectedPeriod->is_locked)
+                                    <span style="display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 700; background-color: #fee2e2; color: #991b1b;">Locked</span>
+                                @else
+                                    <span style="display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 700; background-color: #dcfce7; color: #166534;">Open</span>
+                                @endif
+                            </div>
                         </div>
                         <div class="employee-dtr-metric">
                             <div class="employee-dtr-label">Total Entries</div>

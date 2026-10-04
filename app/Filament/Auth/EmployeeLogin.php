@@ -106,7 +106,8 @@ class EmployeeLogin extends BaseLogin
     {
         return TextInput::make('username')
             ->label('Company ID')
-            ->placeholder('PF0001')
+            ->prefix('PF')
+            ->placeholder('0001')
             ->prefixIcon('heroicon-m-identification')
             ->prefixIconColor('primary')
             ->required()
@@ -121,7 +122,7 @@ class EmployeeLogin extends BaseLogin
             ->dehydrateStateUsing(fn ($state) => filled($state) ? strtoupper(trim((string) $state)) : $state)
             ->rule('regex:/^(?:PF-?)?\d{1,4}$/i')
             ->validationMessages([
-                'regex' => 'Enter a valid company ID, such as PF-0001.',
+                'regex' => 'Enter a valid company ID number, such as 0001.',
             ]);
     }
 
@@ -174,6 +175,6 @@ class EmployeeLogin extends BaseLogin
             return parent::getSubheading();
         }
 
-        return 'Use your company ID without the dash.';
+        return 'Enter your company ID number.';
     }
 }

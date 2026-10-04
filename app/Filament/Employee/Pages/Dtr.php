@@ -12,6 +12,7 @@ use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -120,7 +121,8 @@ class Dtr extends Page implements HasForms, HasTable
                 ->searchable()
                 ->preload()
                 ->live()
-                ->afterStateUpdated(function (): void {
+                ->afterStateUpdated(function (?string $state): void {
+                    $this->period_id = filled($state) ? (string) $state : null;
                     unset($this->selectedPeriod, $this->overview);
                     $this->resetTable();
                 })
@@ -200,7 +202,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->replace('_', ' ')->title()->toString() : '-')
                     ->color(fn (?string $state): string => match (str($state ?? '')->lower()->toString()) {
                         'regular' => 'gray',
-                        'saturday' => 'info',
+                        'saturday', 'sunday', 'rest_day' => 'info',
                         'leave' => 'info',
                         'overtime' => 'warning',
                         'absent' => 'danger',
@@ -282,13 +284,15 @@ class Dtr extends Page implements HasForms, HasTable
                 TextColumn::make('holiday_type')
                     ->label('Holiday')
                     ->badge(fn ($state): bool => filled($state))
-                    ->color('warning')
+                    ->color(fn ($state): ?string => filled($state) ? 'warning' : null)
                     ->placeholder('-')
                     ->toggleable(),
 
                 TextColumn::make('holiday_rate')
                     ->label('Hol. Rate')
                     ->formatStateUsing(fn ($state): string => filled($state) ? number_format((float) $state, 2).'%' : '-')
+                    ->badge(fn ($state): bool => filled($state))
+                    ->color(fn ($state): ?string => filled($state) ? 'success' : null)
                     ->placeholder('-')
                     ->toggleable(),
 
@@ -310,19 +314,27 @@ class Dtr extends Page implements HasForms, HasTable
                     ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->recordActions([
-                Action::make('viewDetails')
-                    ->label('View Details')
-                    ->icon(Heroicon::Eye)
-                    ->modalHeading('D.T.R Details')
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Close')
-                    ->modalWidth('4xl')
-                    ->modalContent(fn (DtrModel $record) => view('filament.employee.pages.partials.dtr-details', [
-                        'record' => $record,
-                        'status' => $this->attendanceStatus($record),
-                    ])),
+            ->actions([
+                ActionGroup::make([
+                    Action::make('viewDetails')
+                        ->label('View Details')
+                        ->icon(Heroicon::Eye)
+                        ->modalHeading('D.T.R Details')
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Close')
+                        ->modalWidth('2xl')
+                        ->modalContent(fn (DtrModel $record) => view('filament.employee.pages.partials.dtr-details', [
+                            'record' => $record,
+                            'status' => $this->attendanceStatus($record),
+                        ])),
+                ])
+                ->icon(Heroicon::EllipsisVertical)
+                ->iconButton()
+                ->label('Action')
+                ->tooltip('Actions')
+                ->color('gray'),
             ])
+            ->actionsColumnLabel('Action')
             ->recordUrl(null)
             ->striped()
             ->paginationPageOptions([10, 25, 50])
@@ -342,8 +354,10 @@ class Dtr extends Page implements HasForms, HasTable
 
     public function getSelectedPeriodProperty(): ?PayrollPeriod
     {
-        return filled($this->period_id)
-            ? PayrollPeriod::query()->find($this->period_id)
+        $periodId = $this->period_id ?: ($this->data['period_id'] ?? null);
+
+        return filled($periodId)
+            ? PayrollPeriod::query()->find($periodId)
             : null;
     }
 
@@ -461,29 +475,32 @@ class Dtr extends Page implements HasForms, HasTable
     protected function baseDtrQuery(): Builder
     {
         $employee = $this->employee;
+        $periodId = $this->period_id ?: ($this->data['period_id'] ?? null);
 
-        if (! $employee || blank($employee->branch_id) || blank($this->period_id)) {
+        if (! $employee || blank($employee->branch_id) || blank($periodId)) {
             return DtrModel::query()->whereRaw('1 = 0');
         }
 
         if ($this->selectedPeriod && ! $this->selectedPeriod->is_locked && $this->hasEmployeeVisibleDtr($employee)) {
             return EmployeeVisibleDtr::query()
-                ->where('payroll_period_id', (int) $this->period_id)
+                ->where('payroll_period_id', (int) $periodId)
                 ->forEmployee($employee);
         }
 
         return app(DtrRecordService::class)->query(
             $employee,
             (int) $employee->branch_id,
-            (int) $this->period_id,
+            (int) $periodId,
         );
     }
 
     protected function hasEmployeeVisibleDtr(Employee $employee): bool
     {
-        return filled($this->period_id)
+        $periodId = $this->period_id ?: ($this->data['period_id'] ?? null);
+
+        return filled($periodId)
             && EmployeeVisibleDtr::query()
-                ->where('payroll_period_id', (int) $this->period_id)
+                ->where('payroll_period_id', (int) $periodId)
                 ->forEmployee($employee)
                 ->exists();
     }

@@ -41,8 +41,65 @@ class LeavesTable
                 TextColumn::make('reviewedBy.name')->label('HR Reviewer')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('reviewed_at')->label('HR Decision')->dateTime()->toggleable(isToggledHiddenByDefault: true),
             ])->recordActions([
-                Action::make('view')->label('View / Review')->icon(Heroicon::Eye)->button()
-                    ->url(fn (Leave $record) => LeaveResource::getUrl('view', ['record' => $record])),
+                \Filament\Actions\ActionGroup::make([
+                    Action::make('view')
+                        ->label('View / Review')
+                        ->icon(Heroicon::Eye)
+                        ->url(fn (Leave $record) => LeaveResource::getUrl('view', ['record' => $record])),
+
+                    Action::make('delete')
+                        ->label('Delete')
+                        ->icon(Heroicon::Trash)
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Delete Leave Request')
+                        ->modalDescription('Are you sure you want to permanently delete this leave request history? This will return any deducted leave credits, remove associated paid D.T.R records and approval history, and cannot be undone.')
+                        ->modalSubmitActionLabel('Permanently Delete')
+                        ->action(function (Leave $record): void {
+                            \Illuminate\Support\Facades\DB::transaction(function () use ($record): void {
+                                $leave = Leave::withTrashed()->lockForUpdate()->find($record->id);
+                                if (! $leave) {
+                                    return;
+                                }
+
+                                $employee = \App\Models\Employee::lockForUpdate()->find($leave->employee_id);
+                                if ($employee) {
+                                    $employee->resetLeaveCreditsIfNeeded();
+                                    $employee->refresh();
+
+                                    if ((float) $leave->deducted_leave_credits > 0) {
+                                        $employee->increment('leave_credits', (float) $leave->deducted_leave_credits);
+                                    }
+
+                                    if ((float) $leave->deducted_birthday_leave_credits > 0) {
+                                        $employee->increment('birthday_leave_credits', (float) $leave->deducted_birthday_leave_credits);
+                                    }
+                                }
+
+                                \App\Models\Dtr::where('leave_id', $leave->id)->forceDelete();
+                                \App\Models\EmployeeVisibleDtr::where('leave_id', $leave->id)->delete();
+
+                                $eventIds = \App\Models\LeaveApprovalEvent::where('leave_id', $leave->id)->pluck('id');
+                                if ($eventIds->isNotEmpty()) {
+                                    \Illuminate\Support\Facades\DB::table('leave_approval_deliveries')
+                                        ->whereIn('event_id', $eventIds)
+                                        ->delete();
+                                    \App\Models\LeaveApprovalEvent::whereIn('id', $eventIds)->delete();
+                                }
+
+                                \App\Models\LeaveRequestApproval::where('leave_id', $leave->id)->delete();
+
+                                $leave->forceDelete();
+                            });
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Leave request permanently deleted')
+                                ->success()
+                                ->send();
+                        }),
+                ])
+                    ->icon(Heroicon::Bars3)
+                    ->tooltip('Actions'),
             ])->emptyStateHeading('No leave requests in this queue');
     }
 }
