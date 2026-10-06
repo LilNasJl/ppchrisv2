@@ -55,13 +55,21 @@ class StationManagementConsolidationFeatureTest extends TestCase
         Schema::create('leave_approval_workflows', function (Blueprint $table): void {
             $table->id();
             $table->string('name')->default('Default Workflow');
+            $table->unsignedBigInteger('employee_id')->nullable();
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->unsignedBigInteger('department_id')->nullable();
+            $table->unsignedBigInteger('designation_id')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->unsignedInteger('version')->default(1);
+            $table->string('active_scope_key')->nullable();
             $table->timestamps();
         });
 
         Schema::create('leave_approval_levels', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('workflow_id');
+            $table->unsignedInteger('sequence')->default(1);
+            $table->string('label')->default('Level 1');
             $table->unsignedBigInteger('approver_employee_id')->nullable();
             $table->unsignedBigInteger('alternate_employee_id')->nullable();
             $table->timestamps();
@@ -135,7 +143,6 @@ class StationManagementConsolidationFeatureTest extends TestCase
             $table->id();
             $table->string('uid', 20)->nullable();
             $table->foreignId('user_id')->nullable();
-            $table->string('company_id', 20)->nullable();
             $table->string('firstname');
             $table->string('middlename')->nullable();
             $table->string('lastname');
@@ -411,6 +418,12 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $component->assertSuccessful();
     }
 
+    public function test_station_managers_hr_page_is_removed(): void
+    {
+        $this->assertFalse(class_exists(\App\Filament\Pages\StationManagers::class));
+        $this->assertFileDoesNotExist(app_path('Filament/Pages/StationManagers.php'));
+    }
+
     public function test_export_controller_redirects_with_notification_when_no_records_exist(): void
     {
         [, $managerUser, $branch, $period] = $this->setupUsers();
@@ -474,7 +487,6 @@ class StationManagementConsolidationFeatureTest extends TestCase
         // Regular employee
         $regularEmp = Employee::query()->create([
             'uid' => '0001',
-            'company_id' => 'PF-0001',
             'firstname' => 'Juan',
             'lastname' => 'Dela Cruz',
             'branch_id' => $branch->id,
@@ -495,15 +507,14 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $regularEmp->save();
         $regularEmp->setRelation('user', $regularUser);
 
-        // Station manager employee
+        // Station manager employee (via Approval Workflow)
         $managerEmp = Employee::query()->create([
             'uid' => '0999',
-            'company_id' => 'PF-0999',
             'firstname' => 'Camille',
             'lastname' => 'Manager',
             'branch_id' => $branch->id,
-            'is_station_manager' => true,
-            'managed_branches' => [['branch_id' => $branch->id, 'branch_name' => 'Tagum Station']],
+            'is_station_manager' => false,
+            'managed_branches' => null,
             'employment_type' => 'Permanent',
             'rate_type' => 'daily',
             'daily_rate' => 800,
@@ -519,6 +530,19 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $managerEmp->user_id = $managerUser->id;
         $managerEmp->save();
         $managerEmp->setRelation('user', $managerUser);
+        $managerUser->setRelation('employee', $managerEmp);
+
+        $workflow = \App\Models\LeaveApprovalWorkflow::query()->create([
+            'name' => 'Tagum Station Workflow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        \App\Models\LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'Station In-Charge',
+            'approver_employee_id' => $managerEmp->id,
+        ]);
 
         return [$regularUser, $managerUser, $branch, $period];
     }

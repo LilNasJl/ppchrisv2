@@ -96,8 +96,26 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->date('date_end');
             $table->date('date_payout');
             $table->text('description')->nullable();
+            $table->string('attachment_path', 2048)->nullable();
+            $table->string('attachment_original_name', 255)->nullable();
             $table->boolean('is_locked')->default(false);
             $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_calculation_settings', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id')->nullable();
+            $table->decimal('regular_work_days_per_month', 8, 2)->default(26);
+            $table->decimal('regular_half_month_days', 8, 2)->default(13);
+            $table->decimal('work_hours_per_day', 8, 2)->default(8);
+            $table->decimal('half_day_work_day_value', 8, 2)->default(0.5);
+            $table->decimal('overtime_rate_multiplier', 8, 2)->default(1);
+            $table->decimal('regular_holiday_rate', 8, 2)->default(200);
+            $table->decimal('special_holiday_rate', 8, 2)->default(30);
+            $table->integer('late_grace_minutes')->default(0);
+            $table->decimal('holiday_overtime_premium_rate', 8, 2)->default(0);
+            $table->boolean('unworked_regular_holiday_pay_enabled')->default(true);
             $table->timestamps();
         });
 
@@ -136,10 +154,28 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->unsignedBigInteger('payroll_period_id');
             $table->unsignedBigInteger('branch_id')->nullable();
             $table->unsignedBigInteger('employee_id')->nullable();
+            $table->string('fingerprint_id')->nullable();
             $table->date('date_in')->nullable();
             $table->time('time_in')->nullable();
             $table->date('date_out')->nullable();
             $table->time('time_out')->nullable();
+            $table->string('schedule_type')->nullable();
+            $table->string('schedule_start')->nullable();
+            $table->string('schedule_end')->nullable();
+            $table->double('late')->nullable()->default(0);
+            $table->double('undertime')->nullable()->default(0);
+            $table->double('overtime')->nullable()->default(0);
+            $table->double('early_clock_in')->nullable()->default(0);
+            $table->double('credited_early_clock_in')->nullable()->default(0);
+            $table->double('credited_overtime')->nullable()->default(0);
+            $table->double('work_hrs')->nullable()->default(0);
+            $table->double('credited_work_hrs')->nullable()->default(0);
+            $table->string('overtime_status')->nullable()->default('n/a');
+            $table->boolean('early_clock_in_approved')->nullable()->default(false);
+            $table->boolean('overtime_approved')->nullable()->default(false);
+            $table->boolean('is_absent')->nullable()->default(false);
+            $table->unsignedInteger('absence_minutes')->nullable()->default(0);
+            $table->string('day_part')->nullable()->default('whole_day');
             $table->boolean('is_locked')->default(false);
             $table->softDeletes();
             $table->timestamps();
@@ -150,11 +186,13 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->unsignedBigInteger('payroll_period_id');
             $table->unsignedBigInteger('branch_id');
             $table->unsignedBigInteger('employee_id');
+            $table->string('fingerprint_id')->nullable();
             $table->boolean('is_locked')->default(false);
             $table->date('date_in')->nullable();
             $table->time('time_in')->nullable();
             $table->date('date_out')->nullable();
             $table->time('time_out')->nullable();
+            $table->string('schedule_type')->nullable();
             $table->integer('credited_overtime')->default(0);
             $table->integer('undertime')->default(0);
             $table->integer('late')->default(0);
@@ -174,6 +212,7 @@ class DtrChangeRequestWorkflowTest extends TestCase
 
         Schema::create('dtr_change_requests', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->unsignedBigInteger('employee_id');
             $table->unsignedBigInteger('branch_id');
             $table->unsignedBigInteger('payroll_period_id');
@@ -183,6 +222,8 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->date('date_to');
             $table->string('request_type');
             $table->text('description')->nullable();
+            $table->string('attachment_path', 2048)->nullable();
+            $table->string('attachment_original_name', 255)->nullable();
             $table->string('status')->default('pending');
             $table->text('reviewer_remarks')->nullable();
             $table->timestamp('reviewed_at')->nullable();
@@ -191,7 +232,42 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->string('employee_company_id_snapshot')->nullable();
             $table->string('branch_name_snapshot')->nullable();
             $table->string('payroll_period_title_snapshot')->nullable();
+            $table->unsignedBigInteger('dtr_id')->nullable();
+            $table->unsignedBigInteger('employee_visible_dtr_id')->nullable();
+            $table->date('dtr_date')->nullable();
+            $table->unsignedInteger('current_level')->default(1);
+            $table->unsignedInteger('total_levels')->default(1);
+            $table->string('current_step_label', 100)->nullable();
+            $table->json('workflow_snapshot')->nullable();
+            $table->json('approvals_history')->nullable();
+            $table->json('original_values')->nullable();
+            $table->json('proposed_values')->nullable();
+            $table->text('rejection_reason')->nullable();
+            $table->unsignedBigInteger('first_level_editor_id')->nullable();
+            $table->timestamp('first_level_edited_at')->nullable();
+            $table->timestamp('cancelled_at')->nullable();
             $table->timestamps();
+        });
+
+        Schema::create('leave_approval_workflows', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->unsignedBigInteger('employee_id')->nullable();
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->unsignedBigInteger('department_id')->nullable();
+            $table->unsignedBigInteger('designation_id')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedInteger('version')->default(1);
+            $table->string('active_scope_key')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('leave_approval_levels', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('workflow_id');
+            $table->unsignedInteger('sequence')->default(1);
+            $table->string('label')->default('Level 1');
+            $table->unsignedBigInteger('approver_employee_id');
         });
     }
 
@@ -219,10 +295,10 @@ class DtrChangeRequestWorkflowTest extends TestCase
         app(DtrChangeRequestService::class)->submit($employee, $data);
     }
 
-    public function test_submission_requires_exactly_one_active_branch_owner(): void
+    public function test_submission_requires_active_approval_workflow(): void
     {
-        [$employee, $period, $owner] = $this->context();
-        $owner->update(['is_station_manager' => false]);
+        [$employee, $period] = $this->context();
+        \App\Models\LeaveApprovalWorkflow::query()->update(['is_active' => false]);
 
         $this->expectException(ValidationException::class);
 
@@ -263,11 +339,20 @@ class DtrChangeRequestWorkflowTest extends TestCase
             'firstname' => 'Other',
             'lastname' => 'Manager',
             'branch_id' => $otherBranch->id,
-            'is_station_manager' => true,
-            'managed_branches' => [['branch_id' => $otherBranch->id]],
             'employment_type' => 'Permanent',
             'rate_type' => 'daily',
             'daily_rate' => 500,
+        ]);
+        $otherFlow = \App\Models\LeaveApprovalWorkflow::query()->create([
+            'name' => 'Other Branch Workflow',
+            'branch_id' => $otherBranch->id,
+            'is_active' => true,
+        ]);
+        \App\Models\LeaveApprovalLevel::query()->create([
+            'workflow_id' => $otherFlow->id,
+            'sequence' => 1,
+            'label' => 'SIC',
+            'approver_employee_id' => $other->id,
         ]);
 
         $this->expectException(AuthorizationException::class);
@@ -334,6 +419,54 @@ class DtrChangeRequestWorkflowTest extends TestCase
         $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
     }
 
+    public function test_forgot_to_punch_rejected_for_complete_dtr_entry(): void
+    {
+        [$employee, $period, $owner] = $this->context();
+
+        $dtr = \App\Models\Dtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $employee->branch_id,
+            'fingerprint_id' => $employee->uid,
+            'date_in' => '2026-08-15',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-08-15',
+            'time_out' => '17:00:00',
+            'schedule_type' => 'Regular',
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('The selected DTR entry is not a Forgot To Punch record.');
+
+        app(DtrChangeRequestService::class)->submitFromDtr($employee, $dtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'Attempting forgot to punch on complete entry.',
+        ]);
+    }
+
+    public function test_forgot_to_punch_allowed_for_incomplete_or_forgot_entry(): void
+    {
+        [$employee, $period, $owner] = $this->context();
+
+        $dtr = \App\Models\Dtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $employee->branch_id,
+            'fingerprint_id' => $employee->uid,
+            'date_in' => '2026-08-16',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-08-16',
+            'time_out' => null,
+            'schedule_type' => 'Forgot to Punch',
+        ]);
+
+        $request = app(DtrChangeRequestService::class)->submitFromDtr($employee, $dtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'Missed punching out.',
+        ]);
+
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+        $this->assertSame(DtrChangeRequest::TYPE_FORGOT_TO_PUNCH, $request->request_type);
+    }
+
     private function context(): array
     {
         $branch = $this->branch('Test Branch');
@@ -360,8 +493,6 @@ class DtrChangeRequestWorkflowTest extends TestCase
             'firstname' => 'Manager',
             'lastname' => 'One',
             'branch_id' => $branch->id,
-            'is_station_manager' => true,
-            'managed_branches' => [['branch_id' => $branch->id]],
             'employment_type' => 'Permanent',
             'rate_type' => 'daily',
             'daily_rate' => 600,
@@ -374,6 +505,18 @@ class DtrChangeRequestWorkflowTest extends TestCase
         $owner->update(['user_id' => $ownerUser->id]);
         $owner->setRelation('user', $ownerUser);
         $ownerUser->setRelation('employee', $owner);
+
+        $workflow = \App\Models\LeaveApprovalWorkflow::query()->create([
+            'name' => 'Test Branch Approval Flow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        \App\Models\LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'Station In-Charge',
+            'approver_employee_id' => $owner->id,
+        ]);
 
         return [$employee, $period, $owner];
     }

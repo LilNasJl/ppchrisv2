@@ -2,26 +2,35 @@
 
 namespace App\Filament\Employee\Pages\Station;
 
+use App\Models\Branch;
 use App\Models\DtrChangeRequest;
 use App\Models\Employee;
+use App\Filament\Employee\Pages\Station\StationChangeRequestHistory;
 use App\Services\DtrChangeRequestService;
 use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
-use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use UnitEnum;
@@ -42,7 +51,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function canAccess(): bool
     {
@@ -56,18 +65,13 @@ class ReviewDtrChangeRequests extends Page implements HasTable
         }
 
         $user = auth()->user();
-        if (! StationManagementAccess::canAccessStationManagement($user)) {
-            return null;
-        }
-
-        $branchIds = StationManagementAccess::getManagedBranchIds($user);
-        if ($branchIds === []) {
+        $employee = $user?->employee;
+        if (! $employee || ! StationManagementAccess::canAccessStationManagement($user)) {
             return null;
         }
 
         $count = DtrChangeRequest::query()
-            ->whereIn('branch_id', $branchIds)
-            ->pending()
+            ->pendingForApprover($employee)
             ->count();
 
         return $count > 0 ? (string) $count : null;
@@ -92,119 +96,567 @@ class ReviewDtrChangeRequests extends Page implements HasTable
 
     public function table(Table $table): Table
     {
+        $employee = auth()->user()?->employee;
+
         return $table
             ->query(fn (): Builder => DtrChangeRequest::query()
-                ->whereIn('branch_id', $this->assignedBranchIds())
-                ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user'])
+                ->pendingForApprover($employee)
+                ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
                 ->latest('created_at'))
             ->heading('Employee D.T.R Change Requests')
-            ->description('Approving a request records the decision. Use Open Employee D.T.R when a correction is required.')
+            ->description('Review attendance change requests sequentially. Level 1 approvers may correct D.T.R entries prior to approval.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
 
                 TextColumn::make('employee_name_snapshot')
                     ->label('Employee')
-                    ->searchable()
-                    ->wrap(),
-
-                TextColumn::make('employee_company_id_snapshot')
-                    ->label('Company ID')
-                    ->searchable()
-                    ->badge(),
+                    ->description(fn (DtrChangeRequest $record): string => ($record->employee_company_id_snapshot ? "ID: {$record->employee_company_id_snapshot}" : '') . ($record->branch_name_snapshot ? " • {$record->branch_name_snapshot}" : ''))
+                    ->searchable(['employee_name_snapshot', 'employee_company_id_snapshot', 'branch_name_snapshot'])
+                    ->sortable(),
 
                 TextColumn::make('branch_name_snapshot')
-                    ->label('Station / Branch')
+                    ->label('Station / Scope')
                     ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: false),
+
+                TextColumn::make('dtr_date')
+                    ->label('D.T.R Date')
+                    ->getStateUsing(function (DtrChangeRequest $record): ?string {
+                        if ($record->request_type === DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES) {
+                            $count = count($record->proposed_values['entries'] ?? []);
+                            $from = $record->date_from ? Carbon::parse($record->date_from)->format('M d') : '';
+                            $to = $record->date_to ? Carbon::parse($record->date_to)->format('M d, Y') : '';
+                            $range = ($from && $to) ? ($from === Carbon::parse($record->date_to)->format('M d') ? $to : "{$from} - {$to}") : '-';
+                            return "{$range} ({$count} entries)";
+                        }
+                        return filled($record->dtr_date ?: $record->date_from) ? Carbon::parse($record->dtr_date ?: $record->date_from)->format('M d, Y') : '-';
+                    })
+                    ->description(fn (DtrChangeRequest $record): ?string => $record->created_at?->format('M d, h:i A'))
                     ->sortable(),
+
+                TextColumn::make('request_type_label')
+                    ->label('Request Type')
+                    ->badge()
+                    ->color('info'),
+
+                TextColumn::make('display_status')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn (DtrChangeRequest $record): string => match ($record->status) {
+                        DtrChangeRequest::STATUS_APPROVED => 'success',
+                        DtrChangeRequest::STATUS_REJECTED => 'danger',
+                        DtrChangeRequest::STATUS_CANCELLED => 'gray',
+                        default => 'warning',
+                    })
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction)),
+
+                TextColumn::make('current_level')
+                    ->label('Approval Level')
+                    ->formatStateUsing(fn (DtrChangeRequest $record): string => $record->status === DtrChangeRequest::STATUS_PENDING
+                        ? "L{$record->current_level}/{$record->total_levels}: ".($record->current_step_label ?? 'Review')
+                        : ($record->status === DtrChangeRequest::STATUS_APPROVED ? 'Completed' : 'Finalized')),
 
                 TextColumn::make('created_at')
                     ->label('Date Submitted')
                     ->dateTime('M d, Y h:i A')
-                    ->sortable(),
-
-                TextColumn::make('payroll_period_title_snapshot')
-                    ->label('Payroll Period')
-                    ->wrap(),
-
-                TextColumn::make('date_from')->label('Date From')->date('M d, Y')->sortable(),
-                TextColumn::make('date_to')->label('Date To')->date('M d, Y')->sortable(),
-
-                TextColumn::make('request_type_label')
-                    ->label('Request Type')
-                    ->wrap(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('description')
-                    ->limit(55)
-                    ->wrap()
-                    ->toggleable(),
-
-                TextColumn::make('status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        DtrChangeRequest::STATUS_APPROVED => 'success',
-                        DtrChangeRequest::STATUS_REJECTED => 'danger',
-                        default => 'warning',
+                    ->label('Explanation')
+                    ->limit(40)
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                SelectFilter::make('branch_id')
+                    ->label('Station / Scope')
+                    ->options(function (): array {
+                        $branches = StationManagementAccess::getAssignedBranches(auth()->user());
+                        return collect($branches)->pluck('branch_name', 'branch_id')->all();
                     })
-                    ->sortable(),
+                    ->searchable(),
+
+                SelectFilter::make('request_type')
+                    ->label('Request Type')
+                    ->options(DtrChangeRequest::requestTypeOptions()),
             ])
             ->recordActions([
                 ActionGroup::make([
                     Action::make('view')
                         ->label('View Details')
                         ->icon(Heroicon::Eye)
+                        ->visible(fn (DtrChangeRequest $record): bool => $record->canBeReviewedBy(auth()->user()))
                         ->modalHeading('D.T.R Change Request')
                         ->modalSubmitAction(false)
                         ->modalCancelActionLabel('Close')
-                        ->schema($this->detailsSchema())
-                        ->fillForm(fn (DtrChangeRequest $record): array => $this->detailsData($record)),
-
-                    Action::make('openDtr')
-                        ->label('Open Employee D.T.R')
-                        ->icon(Heroicon::Clock)
-                        ->visible(fn (DtrChangeRequest $record): bool => filled($record->employee) && filled($record->branch) && filled($record->payrollPeriod))
-                        ->url(fn (DtrChangeRequest $record): string => ManageEmployeeDtr::getUrl([
-                            'branchId' => $record->branch?->publicKey(),
-                            'employeeId' => $record->employee?->publicKey(),
-                            'periodId' => $record->payrollPeriod?->publicKey(),
+                        ->modalWidth('2xl')
+                        ->modalContent(fn (DtrChangeRequest $record) => view('filament.employee.pages.partials.dtr-change-request-details-modal', [
+                            'record' => $record,
                         ])),
+
+                    Action::make('editDtr')
+                        ->label('Edit & Review D.T.R')
+                        ->icon(Heroicon::PencilSquare)
+                        ->color('warning')
+                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING
+                            && $record->is_first_level
+                            && $record->is_editable_type
+                            && $record->canBeEditedBy(auth()->user()))
+                        ->modalWidth('2xl')
+                        ->modalHeading('Edit & Review D.T.R Information')
+                        ->modalDescription('Correct the time punches and schedule. Clicking Approve will automatically save your changes and approve the request.')
+                        ->modalSubmitActionLabel('Approve & Save Changes')
+                        ->modalSubmitAction(fn ($action) => $action->color('success')->icon('heroicon-m-check-circle'))
+                        ->form([
+                            DatePicker::make('date_in')
+                                ->label('Date In')
+                                ->default(fn (DtrChangeRequest $record): ?string => $record->proposed_values['date_in'] ?? $record->original_values['date_in'] ?? (string) $record->dtr_date)
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, $set, $get) {
+                                    if (blank($state)) {
+                                        return;
+                                    }
+                                    $start = $get('schedule_start');
+                                    $end = $get('schedule_end');
+                                    if (filled($start) && filled($end)) {
+                                        try {
+                                            if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                $set('date_out', Carbon::parse($state)->addDay()->toDateString());
+                                                return;
+                                            }
+                                        } catch (\Throwable) {}
+                                    }
+                                    $set('date_out', Carbon::parse($state)->toDateString());
+                                }),
+
+                            TimePicker::make('time_in')
+                                ->label('Time In')
+                                ->placeholder('Select Time In')
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    $val = $record->proposed_values['time_in'] ?? $record->original_values['time_in'] ?? null;
+                                    if (blank($val)) {
+                                        return null;
+                                    }
+                                    try {
+                                        return Carbon::parse($val)->format('H:i:s');
+                                    } catch (\Throwable) {
+                                        return $val;
+                                    }
+                                })
+                                ->required(),
+
+                            DatePicker::make('date_out')
+                                ->label('Date Out')
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    if (filled($record->proposed_values['date_out'] ?? null)) {
+                                        return (string) $record->proposed_values['date_out'];
+                                    }
+                                    if (filled($record->original_values['date_out'] ?? null)) {
+                                        return (string) $record->original_values['date_out'];
+                                    }
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $schedType = $record->proposed_values['schedule_type'] ?? $record->original_values['schedule_type'] ?? null;
+                                    [$start, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $schedType);
+                                    $baseDate = $record->dtr_date ?: ($record->original_values['date_in'] ?? today()->toDateString());
+                                    if (filled($start) && filled($end)) {
+                                        try {
+                                            if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                return Carbon::parse($baseDate)->addDay()->toDateString();
+                                            }
+                                        } catch (\Throwable) {}
+                                    }
+                                    return (string) $baseDate;
+                                })
+                                ->required(),
+
+                            TimePicker::make('time_out')
+                                ->label('Time Out')
+                                ->placeholder('Select Time Out')
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    $val = $record->proposed_values['time_out'] ?? $record->original_values['time_out'] ?? null;
+                                    if (blank($val)) {
+                                        return null;
+                                    }
+                                    try {
+                                        return Carbon::parse($val)->format('H:i:s');
+                                    } catch (\Throwable) {
+                                        return $val;
+                                    }
+                                })
+                                ->required(),
+
+                            Select::make('schedule_type')
+                                ->label('Schedule Type')
+                                ->options(function (DtrChangeRequest $record): array {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    return app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: true);
+                                })
+                                ->placeholder(function (DtrChangeRequest $record): string {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: false);
+                                    return empty($options)
+                                        ? "No schedule configuration is available for this employee's assigned station or branch."
+                                        : 'Select Schedule Type...';
+                                })
+                                ->helperText(function (DtrChangeRequest $record): ?string {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: false);
+                                    if (empty($options)) {
+                                        return "No schedule configuration is available for this employee's assigned station or branch.";
+                                    }
+                                    return null;
+                                })
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: false);
+                                    if (empty($options)) {
+                                        return null;
+                                    }
+
+                                    $existingType = $record->proposed_values['schedule_type']
+                                        ?? $record->original_values['schedule_type']
+                                        ?? $record->targetDtrRecord()?->schedule_type
+                                        ?? null;
+
+                                    if (filled($existingType)) {
+                                        $norm = DtrChangeRequestService::normalizeScheduleType($existingType);
+                                        foreach (array_keys($options) as $optKey) {
+                                            if (DtrChangeRequestService::normalizeScheduleType($optKey) === $norm) {
+                                                return $optKey;
+                                            }
+                                        }
+                                    }
+
+                                    return array_key_first($options);
+                                })
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, $set, $get, ?DtrChangeRequest $record) {
+                                    if (! $record) {
+                                        return;
+                                    }
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    [$start, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $state, formatForInput: true);
+                                    $set('schedule_start', $start ?? '');
+                                    $set('schedule_end', $end ?? '');
+
+                                    $dateIn = $get('date_in');
+                                    if (filled($dateIn) && filled($start) && filled($end)) {
+                                        try {
+                                            if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                $set('date_out', Carbon::parse($dateIn)->addDay()->toDateString());
+                                            } else {
+                                                $set('date_out', Carbon::parse($dateIn)->toDateString());
+                                            }
+                                        } catch (\Throwable) {}
+                                    }
+                                }),
+
+                            TextInput::make('schedule_start')
+                                ->label('Schedule Start')
+                                ->placeholder('Automatically populated')
+                                ->readOnly()
+                                ->dehydrated(true)
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: false);
+                                    $existingType = $record->proposed_values['schedule_type']
+                                        ?? $record->original_values['schedule_type']
+                                        ?? $record->targetDtrRecord()?->schedule_type
+                                        ?? null;
+
+                                    $selectedType = null;
+                                    if (filled($existingType)) {
+                                        $norm = DtrChangeRequestService::normalizeScheduleType($existingType);
+                                        foreach (array_keys($options) as $optKey) {
+                                            if (DtrChangeRequestService::normalizeScheduleType($optKey) === $norm) {
+                                                $selectedType = $optKey;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    $selectedType = $selectedType ?: (empty($options) ? null : array_key_first($options));
+
+                                    [$start] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $selectedType, formatForInput: true);
+                                    return $start;
+                                }),
+
+                            TextInput::make('schedule_end')
+                                ->label('Schedule End')
+                                ->placeholder('Automatically populated')
+                                ->readOnly()
+                                ->dehydrated(true)
+                                ->default(function (DtrChangeRequest $record): ?string {
+                                    $branch = $record->branch ?: ($record->branch_id ? Branch::find($record->branch_id) : $record->employee?->branch);
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($branch, withTimes: false);
+                                    $existingType = $record->proposed_values['schedule_type']
+                                        ?? $record->original_values['schedule_type']
+                                        ?? $record->targetDtrRecord()?->schedule_type
+                                        ?? null;
+
+                                    $selectedType = null;
+                                    if (filled($existingType)) {
+                                        $norm = DtrChangeRequestService::normalizeScheduleType($existingType);
+                                        foreach (array_keys($options) as $optKey) {
+                                            if (DtrChangeRequestService::normalizeScheduleType($optKey) === $norm) {
+                                                $selectedType = $optKey;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    $selectedType = $selectedType ?: (empty($options) ? null : array_key_first($options));
+
+                                    [, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $selectedType, formatForInput: true);
+                                    return $end;
+                                }),
+
+                            TextInput::make('comment')
+                                ->label('Remarks / Comment')
+                                ->default(fn (DtrChangeRequest $record): ?string => $record->proposed_values['comment'] ?? $record->original_values['comment'] ?? null)
+                                ->columnSpanFull(),
+
+                            Textarea::make('reviewer_remarks')
+                                ->label('Approver Remarks (Optional)')
+                                ->placeholder('Add any notes or justification for this approval...')
+                                ->rows(3)
+                                ->maxLength(2000)
+                                ->columnSpanFull(),
+                        ])
+                        ->extraModalFooterActions(fn (DtrChangeRequest $record): array => [
+                            Action::make('rejectInsideEditModal')
+                                ->label('Reject Request')
+                                ->icon('heroicon-m-x-circle')
+                                ->color('danger')
+                                ->requiresConfirmation()
+                                ->modalHeading('Are you sure you want to continue?')
+                                ->modalDescription('Are you sure you want to reject this change request? The workflow will stop and no changes will be applied.')
+                                ->modalSubmitActionLabel('Yes, Reject Request')
+                                ->schema([
+                                    Textarea::make('rejection_reason_inside')
+                                        ->label('Rejection Remarks / Reason')
+                                        ->placeholder('Explain why this change request is being rejected...')
+                                        ->rows(3)
+                                        ->maxLength(2000)
+                                        ->required(),
+                                ])
+                                ->action(function (DtrChangeRequest $record, array $data): void {
+                                    $reviewer = $this->managerEmployee();
+                                    $record = app(DtrChangeRequestService::class)->reject(
+                                        $record,
+                                        $reviewer,
+                                        (string) $data['rejection_reason_inside'],
+                                    );
+
+                                    $this->notifyEmployee($record);
+                                    Notification::make()->title('D.T.R change request rejected')->success()->send();
+                                })
+                                ->cancelParentActions(),
+                        ])
+                        ->action(function (DtrChangeRequest $record, array $data): void {
+                            $reviewer = $this->managerEmployee();
+                            // 1. Automatically save corrections
+                            app(DtrChangeRequestService::class)->saveCorrections($record, $reviewer, $data);
+
+                            // 2. Automatically approve
+                            $record = app(DtrChangeRequestService::class)->approve(
+                                $record,
+                                $reviewer,
+                                $data['reviewer_remarks'] ?? null,
+                                $data,
+                            );
+
+                            $this->notifyEmployee($record);
+                            Notification::make()
+                                ->title('D.T.R corrections saved & approved')
+                                ->body('The change request has been processed successfully.')
+                                ->success()
+                                ->send();
+                        }),
 
                     Action::make('approve')
                         ->label('Approve')
                         ->icon('heroicon-m-check-circle')
                         ->color('success')
-                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING)
-                        ->modalHeading('Approve D.T.R Change Request')
-                        ->modalDescription('This approves the request record. It will not automatically alter biometric punches.')
-                        ->modalSubmitActionLabel('Approve Request')
-                        ->schema([
-                            Textarea::make('reviewer_remarks')
-                                ->label('Station Manager Remarks')
-                                ->rows(4)
-                                ->maxLength(2000),
-                        ])
+                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING
+                            && $record->canBeReviewedBy(auth()->user())
+                            && ! ($record->is_first_level && $record->is_editable_type))
+                        ->requiresConfirmation()
+                        ->modalWidth('2xl')
+                        ->modalHeading('Are you sure you want to continue?')
+                        ->modalDescription(function (DtrChangeRequest $record): string {
+                            if ($record->is_overtime_type) {
+                                return match ($record->overtime_request_scope) {
+                                    DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => 'Employee requested Overtime Only. Only regular after-schedule overtime will be approved.',
+                                    DtrChangeRequest::OT_SCOPE_EARLY_ONLY => 'Employee requested Early Clock In Only. Only early clock in overtime will be approved.',
+                                    default => 'Employee requested Both Early Clock In & Overtime. You can approve both or choose which component to approve below.',
+                                };
+                            }
+
+                            if ($record->request_type === DtrChangeRequest::TYPE_DELETE_TIME_ENTRY) {
+                                return $record->is_final_level
+                                    ? 'Approving will permanently delete the selected DTR entry from official records. This action cannot be undone.'
+                                    : 'Approving will forward this deletion request to the next approval level.';
+                            }
+
+                            if ($record->request_type === DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES) {
+                                $count = count($record->proposed_values['entries'] ?? []);
+                                return $record->is_final_level
+                                    ? "Approving will officially create {$count} missing DTR record(s) and apply them to payroll calculations."
+                                    : "Approving will forward this missing DTR request ({$count} entries) to the next approval level.";
+                            }
+
+                            return $record->is_final_level
+                                ? 'Approving will officially finalize the attendance record and apply changes to payroll calculations.'
+                                : 'Approving will forward this request to the next approval level with any saved corrections.';
+                        })
+                        ->modalSubmitActionLabel('Yes, Approve Request')
+                        ->schema(function (DtrChangeRequest $record): array {
+                            if (! $record->is_overtime_type) {
+                                return [
+                                    Textarea::make('reviewer_remarks')
+                                        ->label('Approver Remarks (Optional)')
+                                        ->rows(4)
+                                        ->maxLength(2000),
+                                ];
+                            }
+
+                            $targetRecord = $record->targetDtrRecord();
+                            $earlyCalculated = max(0, (int) ($record->original_values['early_clock_in'] ?? $targetRecord?->early_clock_in ?? 0));
+                            $otCalculated = max(0, (int) ($record->original_values['overtime'] ?? $targetRecord?->overtime ?? 0));
+                            $scope = $record->overtime_request_scope;
+
+                            $components = [
+                                ViewField::make('overtime_approval_info')
+                                    ->view('filament.employee.pages.partials.dtr-change-request-overtime-approval-info')
+                                    ->viewData([
+                                        'record' => $record,
+                                        'scope' => $scope,
+                                        'earlyCalculated' => $earlyCalculated,
+                                        'otCalculated' => $otCalculated,
+                                    ])
+                                    ->columnSpanFull(),
+                            ];
+
+                            if ($scope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY) {
+                                $components[] = TextInput::make('credited_overtime_minutes')
+                                    ->label('Credited Overtime (Minutes)')
+                                    ->numeric()
+                                    ->integer()
+                                    ->minValue(30)
+                                    ->maxValue($otCalculated)
+                                    ->default($otCalculated)
+                                    ->required()
+                                    ->helperText(sprintf('Approve regular after-schedule overtime (30 to %d mins). Early clock in is excluded from this request.', $otCalculated));
+                            } elseif ($scope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
+                                $components[] = TextInput::make('credited_early_minutes')
+                                    ->label('Credited Early Clock In (Minutes)')
+                                    ->numeric()
+                                    ->integer()
+                                    ->minValue(30)
+                                    ->maxValue($earlyCalculated)
+                                    ->default($earlyCalculated)
+                                    ->required()
+                                    ->helperText(sprintf('Approve early clock in overtime (30 to %d mins). Regular overtime is excluded from this request.', $earlyCalculated));
+                            } else {
+                                $components[] = Select::make('approved_overtime_scope')
+                                    ->label('Select What to Approve')
+                                    ->options([
+                                        DtrChangeRequest::OT_SCOPE_BOTH => sprintf('Both Early Clock In (%d mins) & Overtime (%d mins)', $earlyCalculated, $otCalculated),
+                                        DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => sprintf('Overtime Only (%d mins)', $otCalculated),
+                                        DtrChangeRequest::OT_SCOPE_EARLY_ONLY => sprintf('Early Clock In Only (%d mins)', $earlyCalculated),
+                                    ])
+                                    ->default(DtrChangeRequest::OT_SCOPE_BOTH)
+                                    ->required()
+                                    ->live()
+                                    ->helperText('Choose whether to approve both overtime components or only one of them.');
+
+                                $components[] = TextInput::make('credited_early_minutes')
+                                    ->label('Credited Early Clock In (Minutes)')
+                                    ->numeric()
+                                    ->integer()
+                                    ->minValue(30)
+                                    ->maxValue($earlyCalculated)
+                                    ->default($earlyCalculated)
+                                    ->visible(fn ($get): bool => in_array($get('approved_overtime_scope') ?? DtrChangeRequest::OT_SCOPE_BOTH, [
+                                        DtrChangeRequest::OT_SCOPE_BOTH,
+                                        DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
+                                    ], true))
+                                    ->required(fn ($get): bool => in_array($get('approved_overtime_scope') ?? DtrChangeRequest::OT_SCOPE_BOTH, [
+                                        DtrChangeRequest::OT_SCOPE_BOTH,
+                                        DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
+                                    ], true))
+                                    ->helperText(sprintf('Enter credited early minutes from 30 to %d.', $earlyCalculated));
+
+                                $components[] = TextInput::make('credited_overtime_minutes')
+                                    ->label('Credited Regular Overtime (Minutes)')
+                                    ->numeric()
+                                    ->integer()
+                                    ->minValue(30)
+                                    ->maxValue($otCalculated)
+                                    ->default($otCalculated)
+                                    ->visible(fn ($get): bool => in_array($get('approved_overtime_scope') ?? DtrChangeRequest::OT_SCOPE_BOTH, [
+                                        DtrChangeRequest::OT_SCOPE_BOTH,
+                                        DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+                                    ], true))
+                                    ->required(fn ($get): bool => in_array($get('approved_overtime_scope') ?? DtrChangeRequest::OT_SCOPE_BOTH, [
+                                        DtrChangeRequest::OT_SCOPE_BOTH,
+                                        DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+                                    ], true))
+                                    ->helperText(sprintf('Enter credited overtime minutes from 30 to %d.', $otCalculated));
+                            }
+
+                            $components[] = Textarea::make('reviewer_remarks')
+                                ->label('Approver Remarks (Optional)')
+                                ->rows(3)
+                                ->maxLength(2000)
+                                ->columnSpanFull();
+
+                            return $components;
+                        })
                         ->action(function (DtrChangeRequest $record, array $data): void {
                             $reviewer = $this->managerEmployee();
-                            $record = app(DtrChangeRequestService::class)->approve(
-                                $record,
-                                $reviewer,
-                                $data['reviewer_remarks'] ?? null,
-                            );
+                            try {
+                                $record = app(DtrChangeRequestService::class)->approve(
+                                    $record,
+                                    $reviewer,
+                                    $data['reviewer_remarks'] ?? null,
+                                    $data,
+                                );
 
-                            $this->notifyEmployee($record);
-                            Notification::make()->title('D.T.R change request approved')->success()->send();
+                                $this->notifyEmployee($record);
+                                Notification::make()->title('D.T.R change request approved')->success()->send();
+                            } catch (\DomainException $e) {
+                                Notification::make()
+                                    ->title('Unable to Approve Request')
+                                    ->body($e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            } catch (\Illuminate\Validation\ValidationException $e) {
+                                $msg = collect($e->errors())->flatten()->first() ?: $e->getMessage();
+                                Notification::make()
+                                    ->title('Unable to Approve Request')
+                                    ->body($msg)
+                                    ->danger()
+                                    ->send();
+                            }
                         }),
 
                     Action::make('reject')
                         ->label('Reject')
                         ->icon('heroicon-m-x-circle')
                         ->color('danger')
-                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING)
-                        ->modalHeading('Reject D.T.R Change Request')
-                        ->modalDescription('Explain why the change request cannot be approved.')
-                        ->modalSubmitActionLabel('Reject Request')
+                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING
+                            && $record->canBeReviewedBy(auth()->user())
+                            && ! ($record->is_first_level && $record->is_editable_type))
+                        ->requiresConfirmation()
+                        ->modalHeading('Are you sure you want to continue?')
+                        ->modalDescription('Explain why the change request cannot be approved. Workflow will stop and no changes will be applied.')
+                        ->modalSubmitActionLabel('Yes, Reject Request')
                         ->schema([
                             Textarea::make('reviewer_remarks')
-                                ->label('Rejection Remarks')
+                                ->label('Rejection Remarks / Reason')
                                 ->rows(4)
                                 ->maxLength(2000)
                                 ->required(),
@@ -226,7 +678,27 @@ class ReviewDtrChangeRequests extends Page implements HasTable
             ])
             ->poll('15s')
             ->striped()
+            ->emptyStateHeading('No Pending Change Requests')
+            ->emptyStateDescription('There are currently no attendance change requests awaiting your approval.')
+            ->emptyStateActions([
+                Action::make('history')
+                    ->label('View Change Request History')
+                    ->icon(Heroicon::Clock)
+                    ->color('gray')
+                    ->url(fn (): string => StationChangeRequestHistory::getUrl()),
+            ])
             ->defaultPaginationPageOption(10);
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('changeRequestHistory')
+                ->label('Change Request History')
+                ->icon(Heroicon::Clock)
+                ->color('gray')
+                ->url(fn (): string => StationChangeRequestHistory::getUrl()),
+        ];
     }
 
     public function content(Schema $schema): Schema
@@ -236,57 +708,12 @@ class ReviewDtrChangeRequests extends Page implements HasTable
         ]);
     }
 
-    protected function detailsSchema(): array
-    {
-        return [
-            Section::make()
-                ->schema([
-                    TextInput::make('employee')->disabled()->dehydrated(false),
-                    TextInput::make('employee_id')->label('Company ID')->disabled()->dehydrated(false),
-                    TextInput::make('branch')->label('Station Branch')->disabled()->dehydrated(false),
-                    TextInput::make('date_submitted')->label('Date Submitted')->disabled()->dehydrated(false),
-                    TextInput::make('payroll_period')->disabled()->dehydrated(false)->columnSpanFull(),
-                    TextInput::make('date_range')->disabled()->dehydrated(false),
-                    TextInput::make('request_type')->disabled()->dehydrated(false),
-                    Textarea::make('description')->rows(5)->disabled()->dehydrated(false)->columnSpanFull(),
-                    Textarea::make('reviewer_remarks')->label('Manager Remarks')->rows(4)->disabled()->dehydrated(false)->columnSpanFull(),
-                    TextInput::make('status')->disabled()->dehydrated(false),
-                    TextInput::make('reviewed_by')->label('Reviewed By')->disabled()->dehydrated(false),
-                    TextInput::make('reviewed_at')->label('Reviewed At')->disabled()->dehydrated(false),
-                ])
-                ->columns(2),
-        ];
-    }
-
-    protected function detailsData(DtrChangeRequest $request): array
-    {
-        return [
-            'employee' => $request->employee_name_snapshot,
-            'employee_id' => $request->employee_company_id_snapshot ?: 'N/A',
-            'branch' => $request->branch_name_snapshot,
-            'date_submitted' => $request->created_at?->format('M d, Y h:i A'),
-            'payroll_period' => $request->payroll_period_title_snapshot,
-            'date_range' => $request->date_from?->format('M d, Y').' - '.$request->date_to?->format('M d, Y'),
-            'request_type' => $request->request_type_label,
-            'description' => $request->description,
-            'reviewer_remarks' => $request->reviewer_remarks ?: 'No remarks yet.',
-            'status' => $request->status,
-            'reviewed_by' => $request->reviewer_name ?: 'Not reviewed yet',
-            'reviewed_at' => $request->reviewed_at?->format('M d, Y h:i A') ?: 'Not reviewed yet',
-        ];
-    }
-
     protected function managerEmployee(): Employee
     {
         $employee = auth()->user()?->employee;
         abort_unless($employee instanceof Employee, 403);
 
         return $employee;
-    }
-
-    protected function assignedBranchIds(): array
-    {
-        return StationManagementAccess::getManagedBranchIds(auth()->user());
     }
 
     protected function notifyEmployee(DtrChangeRequest $request): void

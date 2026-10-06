@@ -58,10 +58,12 @@ class StationOverview extends Page
             return 0;
         }
 
-        return Employee::query()
-            ->whereIn('branch_id', $branchIds)
-            ->activeEmployment()
-            ->count();
+        return StationManagementAccess::scopeManagedEmployeesQuery(
+            Employee::query()
+                ->whereIn('branch_id', $branchIds)
+                ->activeEmployment(),
+            auth()->user(),
+        )->count();
     }
 
     #[Override]

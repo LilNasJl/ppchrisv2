@@ -24,7 +24,7 @@ class StationBiometrics extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::FingerPrint;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     public string $biometricsUrl = 'https://www.biometrics.philfumes.net';
 

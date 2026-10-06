@@ -57,7 +57,10 @@ class ManageStationDtr extends Page implements HasTable
             ->description('Choose a station branch, then select an open payroll period to manage employees and D.T.R records.')
             ->query(fn (): Builder => BranchModel::query()
                 ->whereIn('id', $this->assignedBranchIds())
-                ->withCount(['employees' => fn (Builder $query): Builder => $query->activeEmployment()])
+                ->withCount(['employees' => fn (Builder $query): Builder => StationManagementAccess::scopeManagedEmployeesQuery(
+                    $query->activeEmployment(),
+                    auth()->user(),
+                )])
                 ->orderBy('branch_name'))
             ->columns([
                 TextColumn::make('index')

@@ -40,9 +40,6 @@ class ListLeaves extends ListRecords
             CreateAction::make()
                 ->label('New Leave Request')
                 ->icon(Heroicon::PaperAirplane),
-            \Filament\Actions\Action::make('workflows')->label('Approval Workflows')->icon(Heroicon::AdjustmentsHorizontal)->color('gray')
-                ->visible(fn () => \App\Filament\Pages\LeaveApprovalWorkflows::canAccess())
-                ->url(\App\Filament\Pages\LeaveApprovalWorkflows::getUrl()),
         ];
     }
 }

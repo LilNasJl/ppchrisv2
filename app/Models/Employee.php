@@ -348,6 +348,24 @@ class Employee extends Model
         });
     }
 
+    public function scopeSearchByCompanyId(Builder $query, string $search): Builder
+    {
+        $clean = preg_replace('/[^0-9]/', '', $search);
+
+        if (filled($clean)) {
+            return $query->where(function (Builder $q) use ($clean): void {
+                $q->where($this->qualifyColumn('uid'), 'like', "%{$clean}%")
+                    ->orWhere($this->qualifyColumn('uid'), '=', (int) $clean);
+            });
+        }
+
+        if (str_starts_with(strtoupper(trim($search)), 'PF')) {
+            return $query->whereNotNull($this->qualifyColumn('uid'));
+        }
+
+        return $query->whereRaw('1 = 0');
+    }
+
     public function hasEndedEmployment(): bool
     {
         return in_array($this->employment_type, self::ENDED_EMPLOYMENT_TYPES, true);

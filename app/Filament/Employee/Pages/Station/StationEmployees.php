@@ -87,11 +87,14 @@ class StationEmployees extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => Employee::query()
-                ->with(['user', 'designation', 'department', 'branch'])
-                ->activeEmployment()
-                ->where('branch_id', $this->branchId)
-                ->whereHas('user', fn (Builder $query): Builder => $query->where('role', 'employee'))
+            ->query(fn (): Builder => StationManagementAccess::scopeManagedEmployeesQuery(
+                Employee::query()
+                    ->with(['user', 'designation', 'department', 'branch'])
+                    ->activeEmployment()
+                    ->where('branch_id', $this->branchId)
+                    ->whereHas('user', fn (Builder $query): Builder => $query->where('role', 'employee')),
+                auth()->user(),
+            )
                 ->orderBy('lastname')
                 ->orderBy('firstname'))
             ->columns([

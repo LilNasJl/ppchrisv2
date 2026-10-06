@@ -255,7 +255,7 @@
             <x-filament::icon icon="heroicon-o-chart-bar" class="w-4 h-4" />
             Work Duration & Attendance Metrics
         </div>
-        <div class="dtr-modal-grid dtr-modal-grid-3">
+        <div class="dtr-modal-grid dtr-modal-grid-4">
             <div class="dtr-modal-item">
                 <span class="dtr-modal-item-label">Work Hours</span>
                 <span class="dtr-modal-item-value mono">
@@ -296,6 +296,26 @@
                 <span class="dtr-modal-item-value">
                     @if ((int) $record->undertime > 0)
                         <span class="dtr-metric-pill is-warning">{{ (int) $record->undertime }} min</span>
+                    @else
+                        <span style="color: var(--modal-text-muted);">-</span>
+                    @endif
+                </span>
+            </div>
+            <div class="dtr-modal-item">
+                <span class="dtr-modal-item-label">Early OT</span>
+                <span class="dtr-modal-item-value">
+                    @if ((int) $record->early_clock_in > 0)
+                        <span class="dtr-metric-pill is-info">{{ (int) $record->early_clock_in }} min</span>
+                    @else
+                        <span style="color: var(--modal-text-muted);">-</span>
+                    @endif
+                </span>
+            </div>
+            <div class="dtr-modal-item">
+                <span class="dtr-modal-item-label">Credited Early OT</span>
+                <span class="dtr-modal-item-value">
+                    @if ((int) $record->credited_early_clock_in > 0)
+                        <span class="dtr-metric-pill is-success">{{ (int) $record->credited_early_clock_in }} min</span>
                     @else
                         <span style="color: var(--modal-text-muted);">-</span>
                     @endif

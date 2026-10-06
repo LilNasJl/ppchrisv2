@@ -44,7 +44,9 @@ class LeaveApprovalWorkflows extends Page implements HasTable
 
     protected string $view = 'filament-panels::pages.page';
 
-    protected static ?string $title = 'Leave Approval Workflows';
+    protected static ?string $title = 'Approval Workflows';
+
+    protected static ?string $navigationLabel = 'Approval Workflows';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::AdjustmentsHorizontal;
 
@@ -112,7 +114,6 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                     Select::make('employee_id')->label('Employee')->options(fn () => Employee::activeEmployment()->orderBy('lastname')->get()->mapWithKeys(fn ($e) => [$e->id => $e->full_name]))->searchable()->live(),
                     View::make('filament.leave.workflow-preview')->viewData(fn (Get $get) => ['employee' => Employee::find($get('employee_id'))]),
                 ]),
-            Action::make('leaveTracking')->label('Leave Tracking')->icon(Heroicon::ArrowLeft)->color('gray')->url(LeaveResource::getUrl()),
         ];
     }
 

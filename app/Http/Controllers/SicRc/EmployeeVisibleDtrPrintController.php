@@ -41,6 +41,7 @@ class EmployeeVisibleDtrPrintController extends DtrPrintController
             ->findOrFail($employeeId);
 
         abort_unless((int) $selectedEmployee->branch_id === (int) $selectedBranch->id, 403);
+        abort_unless(StationManagementAccess::canManageEmployee($manager, $selectedEmployee), 403, 'Employee not in your managed scope.');
 
         $rows = EmployeeVisibleDtr::query()
             ->where('payroll_period_id', $payrollPeriod->id)

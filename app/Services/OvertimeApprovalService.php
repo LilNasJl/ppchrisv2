@@ -209,8 +209,8 @@ class OvertimeApprovalService
             $totalCreditedOvertime = $approvedOvertimeMinutes + $approvedEarlyMinutes;
 
             $record->forceFill([
-                'early_clock_in_approved' => $approved && $this->hasEligibleEarlyOvertime($record),
-                'overtime_approved' => $approved && $this->hasEligibleOvertime($record),
+                'early_clock_in_approved' => $approved && $this->hasEligibleEarlyOvertime($record) && $approvedEarlyMinutes >= 30,
+                'overtime_approved' => $approved && $this->hasEligibleOvertime($record) && $approvedOvertimeMinutes >= 30,
                 'overtime_status' => $targetStatus,
                 'credited_early_clock_in' => $approvedEarlyMinutes,
                 'credited_overtime' => $totalCreditedOvertime,

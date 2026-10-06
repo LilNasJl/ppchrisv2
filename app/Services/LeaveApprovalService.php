@@ -120,6 +120,7 @@ class LeaveApprovalService
             $leave = $this->pending($request);
             $step = $this->current($leave);
             abort_unless($actor->role === 'employee' && LeaveApprovalAccess::employee($actor->employee)
+                && StationManagementAccess::canManageEmployee($actor, $leave->employee ?: $leave->employee_id)
                 && ! $step->is_hr && (int) $step->approver_employee_id === (int) $actor->employee->id
                 && (int) $leave->employee_id !== (int) $actor->employee->id, 403);
             if ($step->id !== $expectedStep) {

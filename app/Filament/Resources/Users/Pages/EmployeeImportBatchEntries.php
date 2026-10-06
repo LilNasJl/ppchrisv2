@@ -59,8 +59,8 @@ class EmployeeImportBatchEntries extends Page implements HasTable
                 TextColumn::make('company_id')
                     ->label('ID No.')
                     ->badge()
-                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
-                        ->where('uid', 'like', '%'.preg_replace('/[^0-9]/', '', $search).'%')),
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->searchByCompanyId($search))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('uid', $direction)),
 
                 TextColumn::make('full_name')
                     ->label('Employee Name')

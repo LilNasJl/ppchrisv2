@@ -8,21 +8,29 @@ use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
+use App\Services\DtrChangeRequestService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 use Override;
 
 class Dtr extends Page implements HasForms, HasTable
@@ -246,6 +254,13 @@ class Dtr extends Page implements HasForms, HasTable
                     ->color(fn ($state): ?string => (int) $state > 0 ? 'warning' : null)
                     ->alignCenter(),
 
+                TextColumn::make('early_clock_in')
+                    ->label('Early In')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'info' : null)
+                    ->alignCenter(),
+
                 TextColumn::make('overtime')
                     ->label('Overtime')
                     ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
@@ -327,6 +342,189 @@ class Dtr extends Page implements HasForms, HasTable
                             'record' => $record,
                             'status' => $this->attendanceStatus($record),
                         ])),
+
+                    Action::make('changeRequest')
+                        ->label('Change Request')
+                        ->icon(Heroicon::DocumentPlus)
+                        ->modalHeading('Submit D.T.R Change Request')
+                        ->modalIcon(Heroicon::DocumentPlus)
+                        ->modalDescription(fn (DtrModel $record): string => 'Request approval or correction for ' . (filled($record->date_in) ? Carbon::parse($record->date_in)->format('M d, Y') : 'this D.T.R entry'))
+                        ->modalSubmitActionLabel('Submit Request')
+                        ->modalCancelActionLabel('Cancel')
+                        ->modalWidth('2xl')
+                        ->form([
+                            ViewField::make('dtr_summary')
+                                ->view('filament.employee.pages.partials.dtr-change-request-summary')
+                                ->viewData(fn ($record, $get = null): array => [
+                                    'record' => $record,
+                                    'requestType' => is_callable($get) ? $get('request_type') : null,
+                                    'overtimeScope' => is_callable($get) ? $get('overtime_request_scope') : null,
+                                ])
+                                ->columnSpanFull(),
+
+                            Select::make('request_type')
+                                ->label('Change Request Type')
+                                ->placeholder('Select request type...')
+                                ->options([
+                                    DtrChangeRequest::TYPE_OVERTIME_APPROVAL => 'Overtime Approval',
+                                    DtrChangeRequest::TYPE_FORGOT_TO_PUNCH => 'Forgot To Punch Approval',
+                                    DtrChangeRequest::TYPE_TIME_DISCREPANCY => 'Time Entries Discrepancy',
+                                    DtrChangeRequest::TYPE_DELETE_TIME_ENTRY => 'Delete Time Entry',
+                                ])
+                                ->required()
+                                ->rules([
+                                    fn ($record): \Closure => function (string $attribute, $value, \Closure $fail) use ($record): void {
+                                        if ($value === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH) {
+                                            $schedTypeLower = strtolower((string) ($record->schedule_type ?? ''));
+                                            $isForgotSched = str_contains($schedTypeLower, 'forgot');
+                                            $hasMissingPunch = blank($record->time_in) || blank($record->time_out);
+
+                                            if (! $isForgotSched && ! $hasMissingPunch) {
+                                                $fail('The selected DTR entry is not a Forgot To Punch record. Please select Time Entries Discrepancy or another appropriate request type.');
+                                            }
+                                        }
+                                    },
+                                ])
+                                ->helperText(function ($record, $get): ?string {
+                                    if ($get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH) {
+                                        $schedTypeLower = strtolower((string) ($record->schedule_type ?? ''));
+                                        $isForgotSched = str_contains($schedTypeLower, 'forgot');
+                                        $hasMissingPunch = blank($record->time_in) || blank($record->time_out);
+
+                                        if (! $isForgotSched && ! $hasMissingPunch) {
+                                            return '⚠️ Warning: This DTR entry has complete punches and is not marked as Forgot To Punch. Submission is restricted; please use Time Entries Discrepancy instead.';
+                                        }
+                                    }
+
+                                    return null;
+                                })
+                                ->live()
+                                ->columnSpanFull(),
+
+                            Select::make('overtime_request_scope')
+                                ->label('Overtime Component to Request')
+                                ->visible(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_OVERTIME_APPROVAL)
+                                ->required(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_OVERTIME_APPROVAL)
+                                ->live()
+                                ->options(function ($record): array {
+                                    $early = max(0, (int) ($record?->early_clock_in ?? 0));
+                                    $ot = max(0, (int) ($record?->overtime ?? 0));
+
+                                    if ($early >= 30 && $ot >= 30) {
+                                        return [
+                                            DtrChangeRequest::OT_SCOPE_BOTH => "Both Early Clock In ({$early} mins) & Overtime ({$ot} mins)",
+                                            DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$ot} mins)",
+                                            DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$early} mins)",
+                                        ];
+                                    }
+
+                                    if ($ot >= 30) {
+                                        return [
+                                            DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$ot} mins)",
+                                        ];
+                                    }
+
+                                    if ($early >= 30) {
+                                        return [
+                                            DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$early} mins)",
+                                        ];
+                                    }
+
+                                    return [
+                                        DtrChangeRequest::OT_SCOPE_BOTH => 'Both Early Clock In & Overtime',
+                                    ];
+                                })
+                                ->default(function ($record): string {
+                                    $early = max(0, (int) ($record?->early_clock_in ?? 0));
+                                    $ot = max(0, (int) ($record?->overtime ?? 0));
+
+                                    if ($early >= 30 && $ot >= 30) {
+                                        return DtrChangeRequest::OT_SCOPE_BOTH;
+                                    }
+
+                                    if ($ot >= 30) {
+                                        return DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY;
+                                    }
+
+                                    if ($early >= 30) {
+                                        return DtrChangeRequest::OT_SCOPE_EARLY_ONLY;
+                                    }
+
+                                    return DtrChangeRequest::OT_SCOPE_BOTH;
+                                })
+                                ->helperText(function ($record): string {
+                                    $early = max(0, (int) ($record?->early_clock_in ?? 0));
+                                    $ot = max(0, (int) ($record?->overtime ?? 0));
+
+                                    if ($early >= 30 && $ot >= 30) {
+                                        return 'Select whether to request approval for Both, Overtime Only, or Early Clock In Only.';
+                                    }
+
+                                    if ($ot >= 30) {
+                                        return sprintf('After-schedule overtime is eligible (%d mins). Early clock in (%d mins) is below policy threshold.', $ot, $early);
+                                    }
+
+                                    if ($early >= 30) {
+                                        return sprintf('Early clock in is eligible (%d mins). After-schedule overtime (%d mins) is below policy threshold.', $early, $ot);
+                                    }
+
+                                    return 'Minimum 30 minutes required for overtime approval.';
+                                })
+                                ->columnSpanFull(),
+
+                            Textarea::make('explanation')
+                                ->label('Explanation / Justification')
+                                ->placeholder(fn ($get): string => $get('request_type') === DtrChangeRequest::TYPE_DELETE_TIME_ENTRY
+                                    ? 'Explain why this DTR entry should be permanently deleted...'
+                                    : 'Provide a clear explanation for this request (e.g. reason for missed punch or details of overtime rendered)...')
+                                ->required()
+                                ->rows(3)
+                                ->maxLength(2000)
+                                ->columnSpanFull(),
+
+                            FileUpload::make('attachment_path')
+                                ->label('Attached File')
+                                ->disk('local')
+                                ->directory('dtr-change-requests')
+                                ->acceptedFileTypes([
+                                    'image/png',
+                                    'image/jpeg',
+                                    'image/jpg',
+                                ])
+                                ->maxSize(2560)
+                                ->helperText('Accepted file types: PNG, JPG, JPEG (Max 2.5MB).')
+                                ->storeFileNamesIn('attachment_original_name')
+                                ->fetchFileInformation(false)
+                                ->downloadable()
+                                ->openable()
+                                ->columnSpanFull(),
+                        ])
+                        ->action(function (DtrModel $record, array $data): void {
+                            $employee = $this->employee;
+                            if (! $employee) {
+                                Notification::make()->title('Employee record not found')->danger()->send();
+                                return;
+                            }
+
+                            try {
+                                app(DtrChangeRequestService::class)->submitFromDtr($employee, $record, $data);
+
+                                Notification::make()
+                                    ->title('D.T.R Change Request Submitted')
+                                    ->body('Your change request has been submitted for review.')
+                                    ->success()
+                                    ->send();
+
+                                $this->resetTable();
+                            } catch (ValidationException $e) {
+                                $message = collect($e->errors())->flatten()->first() ?: $e->getMessage();
+                                Notification::make()
+                                    ->title('Unable to Submit Request')
+                                    ->body($message)
+                                    ->danger()
+                                    ->send();
+                            }
+                        }),
                 ])
                 ->icon(Heroicon::EllipsisVertical)
                 ->iconButton()

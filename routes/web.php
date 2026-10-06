@@ -69,6 +69,24 @@ Route::get('/leave-attachments/{leave}', function (Leave $leave) {
     ->middleware('auth')
     ->name('leave.attachments.show');
 
+Route::get('/dtr-change-request-attachments/{changeRequest}', function (\App\Models\DtrChangeRequest $changeRequest) {
+    $user = request()->user();
+    abort_unless($user, 403);
+
+    // Allow employee owner, assigned approver, branch manager, or HR/admin
+    $employee = $user->employee;
+    $isOwner = $employee && (int) $employee->id === (int) $changeRequest->employee_id;
+    $isApprover = $changeRequest->canBeReviewedBy($user);
+    $isHrOrAdmin = in_array($user->role, ['hr', 'admin', 'super_admin'], true);
+
+    abort_unless($isOwner || $isApprover || $isHrOrAdmin, 403);
+    abort_if(blank($changeRequest->attachment_path) || ! \Illuminate\Support\Facades\Storage::disk('local')->exists($changeRequest->attachment_path), 404);
+
+    return \Illuminate\Support\Facades\Storage::disk('local')->response($changeRequest->attachment_path, $changeRequest->attachment_name);
+})
+    ->middleware('auth')
+    ->name('dtr-change-requests.attachment');
+
 Route::get('/ticket-attachments/{ticket}/{source}', function (Ticket $ticket, string $source) {
     $user = request()->user();
 

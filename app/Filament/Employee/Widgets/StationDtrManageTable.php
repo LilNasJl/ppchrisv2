@@ -4,8 +4,11 @@ namespace App\Filament\Employee\Widgets;
 
 use App\Filament\Widgets\DtrManageTable;
 use App\Models\Dtr;
+use App\Models\DtrChangeRequest;
 use App\Models\EmployeeVisibleDtr;
+use App\Services\DtrChangeRequestService;
 use App\Services\StationManagementAccess;
+use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Notifications\Notification;
@@ -90,10 +93,100 @@ class StationDtrManageTable extends DtrManageTable
             ->forEmployee($employee);
     }
 
+    public function getPendingChangeRequestForRecord(Dtr $record): ?DtrChangeRequest
+    {
+        $dtrDate = $record->date_in ? Carbon::parse($record->date_in)->toDateString() : null;
+
+        return DtrChangeRequest::query()
+            ->where('employee_id', $record->employee_id)
+            ->where('status', DtrChangeRequest::STATUS_PENDING)
+            ->where(function (Builder $query) use ($record, $dtrDate): void {
+                if ($record instanceof EmployeeVisibleDtr) {
+                    $query->where('employee_visible_dtr_id', $record->id);
+                } else {
+                    $query->where('dtr_id', $record->id);
+                }
+
+                if ($dtrDate) {
+                    $query->orWhere(function (Builder $sub) use ($record, $dtrDate): void {
+                        $sub->where('payroll_period_id', $record->payroll_period_id)
+                            ->whereDate('dtr_date', $dtrDate);
+                    });
+                }
+            })
+            ->latest('id')
+            ->first();
+    }
+
+    protected function canEditDtrRecord(Dtr $record): bool
+    {
+        if ($record->isControlledOnFieldDtr()) {
+            return false;
+        }
+
+        if ($this->isRecordLocked($record)) {
+            return false;
+        }
+
+        $changeRequest = $this->getPendingChangeRequestForRecord($record);
+
+        if (! $changeRequest) {
+            return false;
+        }
+
+        if ($changeRequest->status !== DtrChangeRequest::STATUS_PENDING) {
+            return false;
+        }
+
+        if (! $changeRequest->is_first_level) {
+            return false;
+        }
+
+        if (! $changeRequest->is_editable_type) {
+            return false;
+        }
+
+        return $changeRequest->canBeEditedBy(auth()->user());
+    }
+
+    protected function canDeleteDtrRecord(Dtr $record): bool
+    {
+        return false;
+    }
+
     protected function updateDtr(Dtr $record, array $data): bool
     {
+        if (! $this->canEditDtrRecord($record)) {
+            Notification::make()
+                ->title('Editing not permitted')
+                ->body('DTR entries cannot be edited without an active first-level Change Request.')
+                ->danger()
+                ->send();
+
+            return false;
+        }
+
+        $changeRequest = $this->getPendingChangeRequestForRecord($record);
+
         if (! parent::updateDtr($record, $data)) {
             return false;
+        }
+
+        if ($changeRequest && auth()->user()?->employee) {
+            app(DtrChangeRequestService::class)->saveCorrections(
+                $changeRequest,
+                auth()->user()->employee,
+                [
+                    'date_in' => $record->date_in,
+                    'time_in' => $record->time_in,
+                    'date_out' => $record->date_out,
+                    'time_out' => $record->time_out,
+                    'schedule_type' => $record->schedule_type,
+                    'schedule_start' => $record->schedule_start,
+                    'schedule_end' => $record->schedule_end,
+                    'comment' => $record->comment,
+                ]
+            );
         }
 
         if (! $record instanceof EmployeeVisibleDtr || ! $record->exists) {
@@ -110,6 +203,7 @@ class StationDtrManageTable extends DtrManageTable
 
         Notification::make()
             ->title('Station D.T.R preview updated')
+            ->body('Corrections have been synchronized to the pending Change Request.')
             ->success()
             ->send();
 

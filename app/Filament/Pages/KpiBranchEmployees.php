@@ -54,7 +54,11 @@ class KpiBranchEmployees extends Page implements HasTable
                 ->orderBy('firstname'))
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
-                TextColumn::make('company_id')->label('Employee ID')->searchable(),
+                TextColumn::make('company_id')
+                    ->label('Employee ID')
+                    ->badge()
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->searchByCompanyId($search))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('uid', $direction)),
                 TextColumn::make('full_name')->label('Employee')->searchable(['lastname', 'middlename', 'firstname'])->wrap(),
                 TextColumn::make('department.name')->label('Department')->placeholder('-')->wrap(),
                 TextColumn::make('designation.title')->label('Designation')->placeholder('-')->wrap(),
