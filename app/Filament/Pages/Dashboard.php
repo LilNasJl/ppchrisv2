@@ -5,14 +5,29 @@ namespace App\Filament\Pages;
 use App\Filament\Widgets\AgeGroupSummary;
 use App\Filament\Widgets\BirthdayGreetingCard;
 use App\Filament\Widgets\DashboardCard;
+use App\Filament\Widgets\DepartmentEmployeeCountChart;
 use App\Filament\Widgets\EducationLevelSummary;
+use App\Filament\Widgets\EmployeeStatusSummary;
 use App\Filament\Widgets\EmploymentTypeHeadCount;
 use App\Filament\Widgets\HeadCountPerDept;
+use App\Filament\Widgets\HolidayCalendarHighlights;
+use App\Filament\Widgets\LeaveRequestStatusSummary;
+use App\Filament\Widgets\MonthlyEmployeeMovementChart;
+use App\Filament\Widgets\OverallDailyAttendanceSummaryChart;
+use App\Filament\Widgets\OvertimeLogHoursChart;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Filament\Actions\Action;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\RenderHook;
+use Filament\Schemas\Components\View;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
-use UnitEnum;
+use Filament\View\PanelsRenderHook;
+use Livewire\Attributes\Url;
+use Override;
 
 class Dashboard extends Page
 {
@@ -22,19 +37,59 @@ class Dashboard extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Analytic and Reporting';
+    protected static ?string $navigationLabel = 'Dashboard';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = -1000;
+
+    #[Url(as: 'view', except: 'primary')]
+    public string $viewMode = 'primary';
+
+    #[Override]
+    public function getHeading(): string
+    {
+        return 'HRIS Dashboard';
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    #[Override]
+    protected function getHeaderActions(): array
+    {
+        $showAnalytics = $this->viewMode !== 'analytics';
+
+        return [
+            Action::make('dashboard-view')
+                ->label($showAnalytics ? 'Dashboard Analytics' : 'Back to Dashboard')
+                ->icon($showAnalytics ? Heroicon::ChartBar : Heroicon::ArrowLeft)
+                ->iconButton()
+                ->tooltip($showAnalytics ? 'Dashboard Analytics' : 'Back to Dashboard')
+                ->size(Size::Small)
+                ->color('primary')
+                ->url(static::getUrl($showAnalytics ? ['view' => 'analytics'] : [])),
+        ];
+    }
 
     protected function getHeaderWidgets(): array
     {
+        if ($this->viewMode === 'analytics') {
+            return [
+                DashboardCard::class,
+                BirthdayGreetingCard::class,
+                HeadCountPerDept::class,
+                EmploymentTypeHeadCount::class,
+                EducationLevelSummary::class,
+                AgeGroupSummary::class,
+            ];
+        }
+
         return [
-            DashboardCard::class,
-            BirthdayGreetingCard::class,
-            HeadCountPerDept::class,
-            EmploymentTypeHeadCount::class,
-            EducationLevelSummary::class,
-            AgeGroupSummary::class,
+            EmployeeStatusSummary::class,
+            DepartmentEmployeeCountChart::class,
+            MonthlyEmployeeMovementChart::class,
         ];
     }
 
@@ -43,6 +98,59 @@ class Dashboard extends Page
         return [
             'default' => 1,
             'lg' => 2,
+        ];
+    }
+
+    #[Override]
+    public function headerWidgets(Schema $schema): Schema
+    {
+        if ($this->viewMode === 'analytics') {
+            return $schema->components([
+                RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_START),
+                View::make('filament.pages.partials.employee-snapshot-header')
+                    ->viewData([
+                        'eyebrow' => 'People Analytics',
+                        'title' => 'Workforce Analytics',
+                        'description' => 'Explore employee headcount, tenure, demographics, and education at a glance.',
+                    ])
+                    ->columnSpanFull(),
+                Grid::make($this->getHeaderWidgetsColumns())
+                    ->schema(fn (): array => $this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())),
+                RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_END),
+            ])->hidden(fn (): bool => empty($this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())));
+        }
+
+        return $schema->components([
+            RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_START),
+            View::make('filament.pages.partials.employee-snapshot-header')
+                ->viewData([
+                    'eyebrow' => 'Workforce Overview',
+                    'title' => 'Employee Snapshot',
+                    'description' => 'Workforce status, pending tickets, and monthly movement.',
+                ])
+                ->columnSpanFull(),
+            Grid::make($this->getHeaderWidgetsColumns())
+                ->schema(fn (): array => $this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())),
+            View::make('filament.pages.partials.employee-snapshot-header')
+                ->viewData([
+                    'eyebrow' => 'Attendance Overview',
+                    'title' => 'Attendance & Leave Overview',
+                    'description' => 'Daily attendance, overtime activity, and leave request status.',
+                ])
+                ->columnSpanFull(),
+            Grid::make($this->getHeaderWidgetsColumns())
+                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getAttendanceLeaveWidgets())),
+            RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_END),
+        ])->hidden(fn (): bool => empty($this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())));
+    }
+
+    protected function getAttendanceLeaveWidgets(): array
+    {
+        return [
+            LeaveRequestStatusSummary::class,
+            OverallDailyAttendanceSummaryChart::class,
+            OvertimeLogHoursChart::class,
+            HolidayCalendarHighlights::class,
         ];
     }
 }
