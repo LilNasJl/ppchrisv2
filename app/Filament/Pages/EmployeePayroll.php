@@ -222,10 +222,10 @@ class EmployeePayroll extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => BranchPayrollEmployees::getUrl([
+                ->url(fn (): string => Payroll::getUrl(array_filter([
                     'periodId' => PayrollPeriod::query()->find($this->period_id)?->publicKey(),
                     'branchId' => Branch::query()->find($this->branchId)?->publicKey(),
-                ])),
+                ]))),
         ];
     }
 }

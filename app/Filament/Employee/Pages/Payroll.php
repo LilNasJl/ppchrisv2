@@ -55,20 +55,26 @@ class Payroll extends Page implements HasForms
         ]);
     }
 
+    public function updatedPeriodId($value): void
+    {
+        $resolvedId = filled($value)
+            ? $this->availablePayrollPeriodsQuery()->whereKey($value)->value('id')
+            : null;
+
+        $this->period_id = filled($resolvedId) ? (string) $resolvedId : null;
+
+        if (isset($this->form)) {
+            $this->form->fill([
+                'period_id' => $this->period_id,
+            ]);
+        }
+
+        unset($this->selectedPeriod, $this->payrollRow);
+    }
+
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('printPayslip')
-                ->label('Print / PDF Payslip')
-                ->icon(Heroicon::Printer)
-                ->url(fn (): ?string => $this->selectedPeriod
-                    ? route('payroll.payslip.print', [
-                        'period' => $this->selectedPeriod->publicKey(),
-                    ])
-                    : null)
-                ->openUrlInNewTab()
-                ->visible(fn (): bool => filled($this->selectedPeriod) && filled($this->payrollRow)),
-        ];
+        return [];
     }
 
     protected function getFormSchema(): array
@@ -103,7 +109,7 @@ class Payroll extends Page implements HasForms
 
     public function getPayrollRowProperty(): ?array
     {
-        if (! $this->employee || ! $this->selectedPeriod) {
+        if (! $this->employee || ! $this->selectedPeriod || ! $this->selectedPeriod->is_locked) {
             return null;
         }
 
@@ -114,6 +120,13 @@ class Payroll extends Page implements HasForms
         }
 
         return $calculator->employeeRow($this->employee, $this->selectedPeriod);
+    }
+
+    public function availablePayrollPeriods()
+    {
+        return $this->availablePayrollPeriodsQuery()
+            ->newestFirst()
+            ->get();
     }
 
     protected function availablePayrollPeriodsQuery(?Employee $employee = null): Builder

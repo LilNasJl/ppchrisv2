@@ -20,20 +20,25 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Override;
 
 class DtrChangeRequests extends Page implements HasTable
 {
+    use HasTabs;
     use InteractsWithTable;
 
     protected string $view = 'filament.employee.pages.dtr-change-requests';
@@ -53,8 +58,136 @@ class DtrChangeRequests extends Page implements HasTable
 
     public function mount(): void
     {
-        $this->periodId = request()->query('periodId');
+        $requested = request()->query('periodId');
+        if (filled($requested)) {
+            $resolved = PayrollPeriod::resolvePublicId($requested) ?: (int) $requested;
+            $this->periodId = filled($resolved) && PayrollPeriod::query()->whereKey($resolved)->exists()
+                ? (string) $resolved
+                : null;
+        } else {
+            $this->periodId = null;
+        }
+
+        $this->loadDefaultActiveTab();
         $this->markReviewedRequestsAsSeen();
+    }
+
+    public function updatedPeriodId($value): void
+    {
+        $this->periodId = filled($value) ? (string) $value : null;
+        unset($this->selectedPeriod, $this->overview);
+        $this->resetPage();
+        $this->resetTable();
+    }
+
+    public function getDefaultActiveTab(): string|int|null
+    {
+        return 'pending';
+    }
+
+    public function getTabs(): array
+    {
+        return [
+            'pending' => Tab::make('Pending')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_PENDING))
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_PENDING)),
+
+            'approved' => Tab::make('Approved')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_APPROVED))
+                ->badgeColor('success')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_APPROVED)),
+
+            'rejected' => Tab::make('Rejected')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_REJECTED))
+                ->badgeColor('danger')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_REJECTED)),
+
+            'cancelled' => Tab::make('Cancelled')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_CANCELLED))
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_CANCELLED)),
+
+            'all' => Tab::make('All')
+                ->badge(fn (): ?int => $this->getTabCount(null)),
+        ];
+    }
+
+    protected function getTabCount(?string $status): ?int
+    {
+        $employeeId = auth()->user()?->employee?->id;
+        if (! $employeeId) {
+            return null;
+        }
+
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
+
+        $count = DtrChangeRequest::query()
+            ->where('employee_id', $employeeId)
+            ->when(filled($resolvedPeriodId), fn ($q) => $q->where('payroll_period_id', $resolvedPeriodId))
+            ->when(filled($status), fn ($q) => $q->where('status', $status))
+            ->count();
+
+        return $count > 0 ? $count : null;
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                $this->getTabsContentComponent(),
+                EmbeddedTable::make(),
+            ]);
+    }
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    #[Override]
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    public function getSelectedPeriodProperty(): ?PayrollPeriod
+    {
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
+
+        return filled($resolvedPeriodId)
+            ? PayrollPeriod::query()->find($resolvedPeriodId)
+            : null;
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, PayrollPeriod>
+     */
+    public function payrollPeriods()
+    {
+        return PayrollPeriod::query()
+            ->newestFirst()
+            ->get();
+    }
+
+    public function getDtrUrl(): string
+    {
+        $period = $this->selectedPeriod;
+
+        return Dtr::getUrl(array_filter([
+            'periodId' => $period?->publicKey(),
+        ]));
     }
 
     public function markReviewedRequestsAsSeen(): void
@@ -73,19 +206,39 @@ class DtrChangeRequests extends Page implements HasTable
             : null;
 
         return $table
-            ->query(fn (): Builder => DtrChangeRequest::query()
-                ->where('employee_id', $this->employee()->id)
-                ->when(filled($resolvedPeriodId), fn ($q) => $q->where('payroll_period_id', $resolvedPeriodId))
-                ->with(['payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
-                ->latest('created_at'))
-            ->heading('My D.T.R Change Requests')
-            ->description('Submitted requests are reviewed sequentially through the configured approval hierarchy.')
+            ->query(fn (): Builder => $this->modifyQueryWithActiveTab(
+                DtrChangeRequest::query()
+                    ->where('employee_id', $this->employee()->id)
+                    ->when(filled($resolvedPeriodId), fn ($q) => $q->where('payroll_period_id', $resolvedPeriodId))
+                    ->with(['payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
+                    ->latest('created_at')
+            ))
+            ->heading('D.T.R Change Requests')
+            ->description('Track, submit, and manage attendance correction and approval requests.')
+            ->headerActions([
+                Action::make('periodSelector')
+                    ->view('filament.employee.pages.partials.dtr-period-select-action'),
+
+                $this->getMissingDtrEntriesAction(),
+
+                Action::make('returnToDtr')
+                    ->label('Return to D.T.R')
+                    ->icon(Heroicon::ArrowLeft)
+                    ->color('gray')
+                    ->outlined()
+                    ->url(fn (): string => $this->getDtrUrl()),
+            ])
+            ->recordClasses('text-xs')
             ->columns([
-                TextColumn::make('index')->label('#')->rowIndex(),
+                TextColumn::make('index')
+                    ->label('#')
+                    ->rowIndex()
+                    ->alignCenter(),
 
                 TextColumn::make('created_at')
                     ->label('Date Requested')
                     ->dateTime('M d, Y h:i A')
+                    ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->sortable(),
 
                 TextColumn::make('dtr_date')
@@ -100,6 +253,7 @@ class DtrChangeRequests extends Page implements HasTable
                         }
                         return filled($record->dtr_date ?: $record->date_from) ? Carbon::parse($record->dtr_date ?: $record->date_from)->format('M d, Y') : '-';
                     })
+                    ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->sortable(),
 
                 TextColumn::make('payroll_period_title_snapshot')
@@ -110,7 +264,14 @@ class DtrChangeRequests extends Page implements HasTable
                 TextColumn::make('request_type_label')
                     ->label('Request Type')
                     ->badge()
-                    ->color('info')
+                    ->color(fn (DtrChangeRequest $record): string => match ($record->request_type) {
+                        DtrChangeRequest::TYPE_OVERTIME_APPROVAL => 'warning',
+                        DtrChangeRequest::TYPE_FORGOT_TO_PUNCH => 'info',
+                        DtrChangeRequest::TYPE_TIME_DISCREPANCY => 'purple',
+                        DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES => 'purple',
+                        DtrChangeRequest::TYPE_DELETE_TIME_ENTRY => 'danger',
+                        default => 'info',
+                    })
                     ->wrap(),
 
                 TextColumn::make('display_status')
@@ -122,7 +283,8 @@ class DtrChangeRequests extends Page implements HasTable
                         DtrChangeRequest::STATUS_CANCELLED => 'gray',
                         default => 'warning',
                     })
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction)),
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction))
+                    ->alignCenter(),
 
                 TextColumn::make('current_level')
                     ->label('Approval Level')
@@ -131,17 +293,13 @@ class DtrChangeRequests extends Page implements HasTable
                         : ($record->status === DtrChangeRequest::STATUS_APPROVED ? 'Completed (All levels approved)' : 'Finalized'))
                     ->wrap(),
 
-                TextColumn::make('current_approver_name')
-                    ->label('Current Approver')
-                    ->wrap(),
-
                 TextColumn::make('updated_at')
                     ->label('Last Updated')
                     ->dateTime('M d, Y h:i A')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->recordActions([
+            ->actions([
                 ActionGroup::make([
                     Action::make('view')
                         ->label('View Details')
@@ -162,43 +320,84 @@ class DtrChangeRequests extends Page implements HasTable
                         ->modalHeading('Cancel D.T.R Change Request?')
                         ->modalDescription('Are you sure you want to cancel this change request? This action cannot be undone.')
                         ->modalSubmitActionLabel('Yes, Cancel Request')
-                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING)
+                        ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING && ! $this->isSelectedPeriodLocked() && ! (bool) $record->payrollPeriod?->is_locked)
+                        ->disabled(fn (DtrChangeRequest $record): bool => $this->isSelectedPeriodLocked() || (bool) $record->payrollPeriod?->is_locked)
                         ->action(function (DtrChangeRequest $record): void {
-                            app(DtrChangeRequestService::class)->cancel($record, $this->employee());
+                            if ($this->isSelectedPeriodLocked() || (bool) $record->payrollPeriod?->is_locked) {
+                                Notification::make()
+                                    ->title('Payroll Period Locked')
+                                    ->body('Cannot cancel change requests for a locked payroll period.')
+                                    ->danger()
+                                    ->send();
 
-                            Notification::make()
-                                ->title('Change Request Cancelled')
-                                ->body('The change request has been cancelled.')
-                                ->success()
-                                ->send();
+                                return;
+                            }
+
+                            try {
+                                app(DtrChangeRequestService::class)->cancel($record, $this->employee());
+
+                                Notification::make()
+                                    ->title('Change Request Cancelled')
+                                    ->body('The change request has been cancelled.')
+                                    ->success()
+                                    ->send();
+
+                                $this->resetTable();
+                            } catch (ValidationException $e) {
+                                $message = collect($e->errors())->flatten()->first() ?: $e->getMessage();
+                                Notification::make()
+                                    ->title('Unable to Cancel Request')
+                                    ->body($message)
+                                    ->danger()
+                                    ->send();
+                            }
                         }),
                 ])
                 ->icon(Heroicon::EllipsisVertical)
-                ->tooltip('Actions'),
+                ->iconButton()
+                ->label('Action')
+                ->tooltip('Actions')
+                ->color('gray'),
             ])
+            ->actionsColumnLabel('Action')
+            ->recordUrl(null)
             ->poll('15s')
             ->striped()
-            ->defaultPaginationPageOption(10);
+            ->paginationPageOptions([10, 25, 50])
+            ->defaultPaginationPageOption(10)
+            ->emptyStateHeading('No D.T.R change requests found')
+            ->emptyStateDescription('You have not submitted any change requests for this payroll period.')
+            ->emptyStateIcon(Heroicon::DocumentText);
     }
 
-    public function content(Schema $schema): Schema
+    public function isSelectedPeriodLocked(): bool
     {
-        return $schema->components([
-            EmbeddedTable::make(),
-        ]);
+        return (bool) $this->selectedPeriod?->is_locked;
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('missingDtrEntries')
-                ->label('Missing DTR Entries')
-                ->icon(Heroicon::DocumentPlus)
-                ->color('primary')
-                ->modalHeading('Submit Missing D.T.R Entries')
-                ->modalDescription('Submit one or more missing attendance records for an unlocked payroll period.')
-                ->modalSubmitActionLabel('Submit Request')
-                ->modalCancelActionLabel('Cancel')
+            $this->getMissingDtrEntriesAction(),
+            Action::make('return')
+                ->label('Return')
+                ->icon(Heroicon::ArrowLeft)
+                ->url(fn (): string => $this->getDtrUrl()),
+        ];
+    }
+
+    protected function getMissingDtrEntriesAction(): Action
+    {
+        return Action::make('missingDtrEntries')
+            ->label('Missing DTR Entries')
+            ->icon(Heroicon::DocumentPlus)
+            ->color('primary')
+            ->visible(fn (): bool => ! $this->isSelectedPeriodLocked())
+            ->disabled(fn (): bool => $this->isSelectedPeriodLocked())
+            ->modalHeading('Submit Missing D.T.R Entries')
+            ->modalDescription('Submit one or more missing attendance records for an unlocked payroll period.')
+            ->modalSubmitActionLabel('Submit Request')
+            ->modalCancelActionLabel('Cancel')
                 ->modalWidth('4xl')
                 ->form([
                     Section::make('Payroll Period')
@@ -350,6 +549,16 @@ class DtrChangeRequests extends Page implements HasTable
                         ]),
                 ])
                 ->action(function (array $data): void {
+                    if ($this->isSelectedPeriodLocked()) {
+                        Notification::make()
+                            ->title('Payroll Period Locked')
+                            ->body('Cannot submit missing D.T.R entries for a locked payroll period.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
                     $employee = $this->employee();
                     try {
                         app(DtrChangeRequestService::class)->submitMissingDtrEntries($employee, $data);
@@ -373,13 +582,7 @@ class DtrChangeRequests extends Page implements HasTable
                             ->danger()
                             ->send();
                     }
-                }),
-
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(Dtr::getUrl()),
-        ];
+                });
     }
 
     protected function periodBoundary(mixed $periodId, string $column): ?string

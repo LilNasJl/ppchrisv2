@@ -53,7 +53,11 @@ return new class extends Migration
             ->whereNull('month_day')
             ->whereNotNull('date')
             ->update([
-                'month_day' => DB::raw("DATE_FORMAT(`date`, '%m-%d')"),
+                'month_day' => DB::raw(
+                    DB::getDriverName() === 'sqlite'
+                        ? "strftime('%m-%d', \"date\")"
+                        : "DATE_FORMAT(`date`, '%m-%d')"
+                ),
             ]);
 
         DB::table('holidays')
@@ -86,6 +90,10 @@ return new class extends Migration
 
     private function hasIndex(string $table, string $index): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasIndex($table, $index);
+        }
+
         return DB::table('information_schema.statistics')
             ->where('table_schema', DB::getDatabaseName())
             ->where('table_name', $table)

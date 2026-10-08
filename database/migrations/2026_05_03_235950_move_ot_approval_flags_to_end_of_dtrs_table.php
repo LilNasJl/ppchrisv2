@@ -7,6 +7,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE dtrs
                 MODIFY early_clock_in_approved TINYINT(1) NOT NULL DEFAULT 0 AFTER updated_at,
@@ -16,6 +20,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE dtrs
                 MODIFY early_clock_in_approved TINYINT(1) NOT NULL DEFAULT 0 AFTER overtime_status,

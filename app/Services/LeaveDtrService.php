@@ -133,7 +133,7 @@ class LeaveDtrService
             $creditedMinutes = app(DtrDayPartService::class)
                 ->payableMinutes($dateString, $scheduleStart, $scheduleEnd, $effectiveSchedule['deduct_noon_break']);
 
-            Dtr::query()->create([
+            $dtr = Dtr::query()->create([
                 'leave_id' => $leave->id,
                 'payroll_period_id' => $payrollPeriod->id,
                 'branch_id' => $employee->branch_id,
@@ -168,6 +168,11 @@ class LeaveDtrService
                 'is_imported' => false,
                 'is_locked' => false,
             ]);
+
+            app(DtrSynchronizationService::class)->syncOfficialToVisible(
+                $dtr,
+                'approved_leave',
+            );
         }
     }
 

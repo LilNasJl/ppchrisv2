@@ -2,30 +2,39 @@
     @include('filament.pages.partials.compact-management-table-styles')
 
     <style>
-        .loan-tabs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
+        .loan-management-table-wrap {
+            width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+            overscroll-behavior-inline: contain;
+            border-radius: 0.65rem;
         }
 
-        .loan-tab {
-            border: 1px solid rgba(148, 163, 184, .32);
-            border-radius: 8px;
-            padding: 9px 14px;
-            font-weight: 700;
-            color: inherit;
-            background: rgba(255, 255, 255, .68);
+        .loan-management-table-wrap .fi-ta,
+        .loan-management-table-wrap .fi-ta-ctn {
+            width: 100%;
+            min-width: 0;
         }
 
-        .dark .loan-tab {
-            background: rgba(15, 23, 42, .38);
+        .loan-management-table-wrap .fi-ta table {
+            min-width: 1100px;
         }
 
-        .loan-tab[aria-selected="true"] {
-            border-color: rgb(37, 99, 235);
-            background: rgb(37, 99, 235);
-            color: #fff;
+        .loan-management-table-wrap .fi-ta-header-cell {
+            padding-inline: 0.4rem !important;
+        }
+
+        .loan-management-table-wrap .fi-ta-cell {
+            padding-block: 0.22rem !important;
+        }
+
+        .loan-management-table-wrap .fi-ta-text {
+            min-height: 2.1rem !important;
+            padding: 0.42rem 0.55rem !important;
+        }
+
+        .loan-management-table-wrap .fi-ta-cell .fi-ta-text-item {
+            white-space: nowrap !important;
         }
 
         .loan-form-actions {
@@ -35,39 +44,14 @@
         }
     </style>
 
-    <div class="loan-tabs" role="tablist" aria-label="Loan management tabs">
-        <button
-            type="button"
-            class="loan-tab"
-            aria-selected="{{ $activeLoanTab === 'list' ? 'true' : 'false' }}"
-            wire:click="showLoanTab('list')"
-        >
-            Loan List
-        </button>
-
-        <button
-            type="button"
-            class="loan-tab"
-            aria-selected="{{ $activeLoanTab === 'requests' ? 'true' : 'false' }}"
-            wire:click="showLoanTab('requests')"
-        >
-            Loan Requests
-        </button>
-
-        <button
-            type="button"
-            class="loan-tab"
-            aria-selected="{{ $activeLoanTab === 'information' ? 'true' : 'false' }}"
-            wire:click="showLoanTab('information')"
-        >
-            Add Loan
-        </button>
-    </div>
-
     @if ($activeLoanTab === 'list')
-        {{ $this->table }}
+        <div class="loan-management-table-wrap">
+            {{ $this->table }}
+        </div>
     @elseif ($activeLoanTab === 'requests')
-        <livewire:loan-request-management-table />
+        <div class="loan-management-table-wrap">
+            <livewire:loan-request-management-table />
+        </div>
     @else
         <form wire:submit.prevent="createLoan">
             {{ $this->form }}

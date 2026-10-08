@@ -44,16 +44,24 @@ class HolidayEntitlementService
         ];
     }
 
-    public function regularHolidaysForEmployeeRange(Employee $employee, CarbonInterface|string $start, CarbonInterface|string $end, ?int $branchId = null): Collection
-    {
-        return app(HolidayResolver::class)
-            ->holidaysForRange($start, $end, $branchId)
+    public function regularHolidaysForEmployeeRange(
+        Employee $employee,
+        CarbonInterface|string $start,
+        CarbonInterface|string $end,
+        ?int $branchId = null,
+        ?Collection $preloadedBranchHolidays = null,
+    ): Collection {
+        $holidays = $preloadedBranchHolidays
+            ?? app(HolidayResolver::class)->holidaysForRange($start, $end, $branchId);
+
+        return $holidays
             ->filter(fn (Holiday $holiday, string $date): bool => $this->isRegularHoliday($holiday)
                 && ! $this->isExcluded($holiday, $employee, $date))
             ->map(function (Holiday $holiday, string $date): Holiday {
-                $holiday->setAttribute('occurrence_date', Carbon::parse($date)->toDateString());
+                $cloned = clone $holiday;
+                $cloned->setAttribute('occurrence_date', Carbon::parse($date)->toDateString());
 
-                return $holiday;
+                return $cloned;
             })
             ->values();
     }
@@ -67,6 +75,36 @@ class HolidayEntitlementService
         }
 
         $date = Carbon::parse($date)->startOfDay();
+        $dateString = $date->toDateString();
+        $month = (int) $date->month;
+        $day = (int) $date->day;
+
+        if ($employee instanceof Employee && $employee->relationLoaded('preloadedHolidayExclusions')) {
+            /** @var Collection<int, HolidayEmployeeExclusion> $exclusions */
+            $exclusions = $employee->getRelation('preloadedHolidayExclusions');
+
+            return $exclusions->contains(function (HolidayEmployeeExclusion $exclusion) use ($holiday, $dateString, $month, $day): bool {
+                if ((int) $exclusion->holiday_id !== (int) $holiday->id) {
+                    return false;
+                }
+
+                $occDate = $exclusion->occurrence_date instanceof CarbonInterface
+                    ? $exclusion->occurrence_date
+                    : (filled($exclusion->occurrence_date) ? Carbon::parse($exclusion->occurrence_date) : null);
+
+                if (! $occDate) {
+                    return false;
+                }
+
+                if ($occDate->toDateString() === $dateString) {
+                    return true;
+                }
+
+                return (bool) $exclusion->applies_every_year
+                    && (int) $occDate->month === $month
+                    && (int) $occDate->day === $day;
+            });
+        }
 
         return HolidayEmployeeExclusion::query()
             ->where('holiday_id', $holiday->id)

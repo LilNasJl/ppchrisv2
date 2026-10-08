@@ -10,6 +10,7 @@ use App\Models\EmployeeVisibleDtr;
 use App\Models\LeaveApprovalAccess;
 use App\Models\LeaveApprovalWorkflow;
 use App\Models\PayrollPeriod;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
@@ -22,15 +23,24 @@ class DtrChangeRequestService
 {
     /**
      * Resolves the approval workflow hierarchy for an employee by checking
-     * LeaveApprovalWorkflow first, falling back to the branch station manager if none configured.
+     * LeaveApprovalWorkflow.
      *
-     * @return array<int, array{level: int, label: string, approver_employee_id: int, approver_name: string}>
+     * Rules:
+     * - Regular employee requests use the configured workflow approvers only
+     *   (the last workflow approver is the final approver).
+     * - When an approver submits their own DTR Change Request, skip the requester
+     *   (and any lower workflow levels):
+     *   - If a higher workflow approver exists, send the request to that approver
+     *     (who becomes the final approver if last in the workflow).
+     *   - If no higher workflow approver exists, automatically send the request
+     *     directly to HR for final approval.
+     *
+     * @return array<int, array{level: int, label: string, approver_employee_id: int|null, approver_name: string, is_hr?: bool}>
      */
     public function resolveWorkflow(Employee $employee): array
     {
-        $steps = [];
-
         if (Schema::hasTable('leave_approval_workflows') && Schema::hasTable('leave_approval_levels')) {
+            // 1. Check active workflows matching the employee's organizational scope
             $matches = LeaveApprovalWorkflow::with('levels')->where('is_active', true);
 
             foreach ([
@@ -54,37 +64,132 @@ class DtrChangeRequestService
                     continue;
                 }
 
-                $candidateSteps = [];
-                foreach ($flow->levels as $level) {
-                    if ((int) $level->approver_employee_id === (int) $employee->id) {
-                        continue; // Skip self-approval
-                    }
-
-                    $approver = Employee::with('user')->find($level->approver_employee_id);
-                    if ($approver && StationManagementAccess::isActiveApproverAccount($approver)) {
-                        $candidateSteps[] = [
-                            'level' => count($candidateSteps) + 1,
-                            'label' => (string) $level->label,
-                            'approver_employee_id' => (int) $approver->id,
-                            'approver_name' => (string) $approver->full_name,
-                        ];
-                    }
-                }
-
-                if (count($candidateSteps) > 0) {
-                    $steps = $candidateSteps;
-                    break;
+                $steps = $this->buildStepsFromWorkflow($flow, $employee);
+                if (count($steps) > 0) {
+                    return $steps;
                 }
             }
-        }
 
-        if (count($steps) > 0) {
-            return $steps;
+            // 2. Fallback for approvers whose home organizational scope (e.g., Main Office)
+            // differs from the station/scope workflow where they are assigned as an approver:
+            $approverWorkflows = LeaveApprovalWorkflow::with('levels')
+                ->where('is_active', true)
+                ->whereHas('levels', fn ($q) => $q->where('approver_employee_id', $employee->id))
+                ->get()
+                ->sortByDesc(fn (LeaveApprovalWorkflow $flow): array => [$flow->specificity(), (int) $flow->id])
+                ->values();
+
+            if ($approverWorkflows->isNotEmpty()) {
+                // First, prefer any workflow where a higher active approver exists above the requester
+                foreach ($approverWorkflows as $flow) {
+                    $steps = $this->buildStepsFromWorkflow($flow, $employee, allowHrFallbackWhenLastApprover: false);
+                    if (count($steps) > 0) {
+                        return $steps;
+                    }
+                }
+
+                // If no higher active approver exists in any workflow where the requester is an approver,
+                // route directly to HR for final approval.
+                foreach ($approverWorkflows as $flow) {
+                    $steps = $this->buildStepsFromWorkflow($flow, $employee, allowHrFallbackWhenLastApprover: true);
+                    if (count($steps) > 0) {
+                        return $steps;
+                    }
+                }
+            }
         }
 
         throw ValidationException::withMessages([
             'payroll_period_id' => 'No active approval workflow with an eligible approver is configured for your branch or scope. Contact HR before submitting this request.',
         ]);
+    }
+
+    /**
+     * @return array<int, array{level: int, label: string, approver_employee_id: int|null, approver_name: string, is_hr?: bool}>
+     */
+    protected function buildStepsFromWorkflow(
+        LeaveApprovalWorkflow $flow,
+        Employee $employee,
+        bool $allowHrFallbackWhenLastApprover = true,
+    ): array {
+        $orderedLevels = $flow->levels->values();
+        $requesterHighestIndex = -1;
+
+        foreach ($orderedLevels as $idx => $level) {
+            if ((int) $level->approver_employee_id === (int) $employee->id) {
+                $requesterHighestIndex = $idx;
+            }
+        }
+
+        $candidateSteps = [];
+        $hasAnyActiveApproverInFlow = false;
+
+        foreach ($orderedLevels as $idx => $level) {
+            $approver = Employee::with('user')->find($level->approver_employee_id);
+            $isActiveApprover = $approver && StationManagementAccess::isActiveApproverAccount($approver);
+
+            if ($isActiveApprover) {
+                $hasAnyActiveApproverInFlow = true;
+            }
+
+            if ($idx <= $requesterHighestIndex || (int) $level->approver_employee_id === (int) $employee->id) {
+                continue; // Skip self-approval and levels at or below requester's level
+            }
+
+            if ($isActiveApprover) {
+                $candidateSteps[] = [
+                    'level' => count($candidateSteps) + 1,
+                    'label' => (string) $level->label,
+                    'approver_employee_id' => (int) $approver->id,
+                    'approver_name' => (string) $approver->full_name,
+                    'is_hr' => false,
+                ];
+            }
+        }
+
+        if (count($candidateSteps) > 0) {
+            return $candidateSteps;
+        }
+
+        if ($allowHrFallbackWhenLastApprover && $requesterHighestIndex >= 0 && $hasAnyActiveApproverInFlow) {
+            return [
+                [
+                    'level' => 1,
+                    'label' => 'HR Final Approval',
+                    'approver_employee_id' => null,
+                    'approver_name' => 'HR',
+                    'is_hr' => true,
+                ],
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{employee: ?Employee, user: ?User, actor_id: ?int, actor_name: string}
+     */
+    protected function resolveReviewerIdentity(Employee|User $reviewer): array
+    {
+        if ($reviewer instanceof Employee) {
+            $user = $reviewer->relationLoaded('user') ? $reviewer->user : $reviewer->user()->first();
+
+            return [
+                'employee' => $reviewer,
+                'user' => $user,
+                'actor_id' => (int) $reviewer->id,
+                'actor_name' => (string) $reviewer->full_name,
+            ];
+        }
+
+        $employee = $reviewer->relationLoaded('employee') ? $reviewer->employee : $reviewer->employee()->first();
+
+        return [
+            'employee' => $employee,
+            'user' => $reviewer,
+            'actor_id' => $employee ? (int) $employee->id : (int) $reviewer->id,
+            'actor_name' => $employee ? (string) $employee->full_name : (string) ($reviewer->name ?: ($reviewer->username ?: 'HR')),
+        ];
     }
 
     /**
@@ -690,7 +795,7 @@ class DtrChangeRequestService
                 ]);
             }
 
-            if ($period->is_locked) {
+            if ($period->is_locked || (bool) $record->is_locked || $record->isPayrollPeriodLocked()) {
                 throw ValidationException::withMessages([
                     'request_type' => "Cannot submit a change request for locked payroll period ({$period->title}).",
                 ]);
@@ -895,9 +1000,9 @@ class DtrChangeRequestService
     }
 
     /**
-     * Save proposed corrections performed by the first-level approver.
+     * Save proposed corrections performed by the first-level approver or HR final reviewer.
      */
-    public function saveCorrections(DtrChangeRequest $request, Employee $editor, array $data): DtrChangeRequest
+    public function saveCorrections(DtrChangeRequest $request, Employee|User $editor, array $data): DtrChangeRequest
     {
         return DB::transaction(function () use ($request, $editor, $data): DtrChangeRequest {
             $request = DtrChangeRequest::query()
@@ -911,8 +1016,14 @@ class DtrChangeRequestService
                 ]);
             }
 
-            if (! $request->is_first_level) {
-                throw new AuthorizationException('Only the first-level approver can edit DTR information.');
+            if ($request->payrollPeriod?->is_locked) {
+                throw ValidationException::withMessages([
+                    'status' => 'Corrections cannot be saved because the payroll period is locked.',
+                ]);
+            }
+
+            if (! $request->is_first_level && ! $request->isPendingHrApproval()) {
+                throw new AuthorizationException('Only the first-level approver or HR can edit DTR information.');
             }
 
             if (! $request->is_editable_type) {
@@ -924,6 +1035,8 @@ class DtrChangeRequestService
             if (! $request->canBeEditedBy($editor)) {
                 throw new AuthorizationException('You are not authorized to edit DTR information for this request.');
             }
+
+            $editorIdentity = $this->resolveReviewerIdentity($editor);
 
             // 1. Verify employee and assigned station/branch ownership
             $employee = $request->employee ?: Employee::query()->find($request->employee_id);
@@ -1067,7 +1180,7 @@ class DtrChangeRequestService
 
             $request->update([
                 'proposed_values' => $proposedValues,
-                'first_level_editor_id' => $editor->id,
+                'first_level_editor_id' => $editorIdentity['employee']?->id ?? $request->first_level_editor_id,
                 'first_level_edited_at' => now(),
             ]);
 
@@ -1080,7 +1193,7 @@ class DtrChangeRequestService
      */
     public function approve(
         DtrChangeRequest $request,
-        Employee $reviewer,
+        Employee|User $reviewer,
         ?string $remarks = null,
         array $approvalData = [],
     ): DtrChangeRequest {
@@ -1114,6 +1227,7 @@ class DtrChangeRequestService
                 ]);
             }
 
+            $identity = $this->resolveReviewerIdentity($reviewer);
             $proposed = $request->proposed_values ?? [];
 
             if ($request->is_overtime_type) {
@@ -1164,12 +1278,16 @@ class DtrChangeRequestService
                 $proposed['credited_early_clock_in'] = $creditedEarly;
             }
 
+            $isHrStage = $request->isCurrentStepHr();
+
             $historyEntry = [
                 'level' => (int) $request->current_level,
-                'label' => (string) ($request->current_step_label ?? "Level {$request->current_level}"),
+                'label' => $isHrStage
+                    ? 'HR Final Approval'
+                    : (string) ($request->current_step_label ?? "Level {$request->current_level}"),
                 'action' => 'Approved',
-                'actor_id' => $reviewer->id,
-                'actor_name' => $reviewer->full_name,
+                'actor_id' => $identity['actor_id'],
+                'actor_name' => $identity['actor_name'],
                 'acted_at' => now()->toDateTimeString(),
                 'remarks' => $remarks !== '' ? $remarks : null,
             ];
@@ -1188,7 +1306,7 @@ class DtrChangeRequestService
             $isFinal = (int) $request->current_level >= (int) $request->total_levels;
 
             if (! $isFinal) {
-                // Multi-level workflow: Advance to next level
+                // Multi-level workflow: Advance to next configured level (which may be another employee or HR Final Approval)
                 $nextLevel = (int) $request->current_level + 1;
                 $snapshot = $request->workflow_snapshot ?? [];
                 $nextStep = collect($snapshot)->firstWhere('level', $nextLevel);
@@ -1204,13 +1322,13 @@ class DtrChangeRequestService
                 return $request->refresh();
             }
 
-            // Final Approval: Officially finalize DTR
+            // Final Approval (last workflow approver or HR Final Approval): Officially finalize DTR
             $request->proposed_values = $proposed;
-            $this->finalizeApprovedRequest($request, $reviewer);
+            $this->finalizeApprovedRequest($request, $identity['employee']);
 
             $request->update([
                 'status' => DtrChangeRequest::STATUS_APPROVED,
-                'reviewed_by_employee_id' => $reviewer->id,
+                'reviewed_by_employee_id' => $identity['employee']?->id,
                 'reviewed_at' => now(),
                 'reviewer_remarks' => $remarks !== '' ? $remarks : null,
                 'approvals_history' => $history,
@@ -1224,7 +1342,7 @@ class DtrChangeRequestService
     /**
      * Reject the change request.
      */
-    public function reject(DtrChangeRequest $request, Employee $reviewer, string $remarks): DtrChangeRequest
+    public function reject(DtrChangeRequest $request, Employee|User $reviewer, string $remarks): DtrChangeRequest
     {
         return DB::transaction(function () use ($request, $reviewer, $remarks): DtrChangeRequest {
             $request = DtrChangeRequest::query()
@@ -1255,21 +1373,26 @@ class DtrChangeRequestService
                 ]);
             }
 
+            $identity = $this->resolveReviewerIdentity($reviewer);
+            $isHrStage = $request->isCurrentStepHr();
+
             $history = $request->approvals_history ?? [];
             $history[] = [
                 'level' => (int) $request->current_level,
-                'label' => (string) ($request->current_step_label ?? "Level {$request->current_level}"),
+                'label' => $isHrStage
+                    ? 'HR Final Approval'
+                    : (string) ($request->current_step_label ?? "Level {$request->current_level}"),
                 'action' => 'Rejected',
-                'actor_id' => $reviewer->id,
-                'actor_name' => $reviewer->full_name,
+                'actor_id' => $identity['actor_id'],
+                'actor_name' => $identity['actor_name'],
                 'acted_at' => now()->toDateTimeString(),
                 'remarks' => $remarks,
             ];
 
             // Rejection stops the workflow immediately without modifying DTR.
-            if ($request->is_editable_type && filled($request->original_values)) {
+            if ($request->is_editable_type && filled($request->original_values) && ! $request->payrollPeriod?->is_locked) {
                 $targetRecord = $request->targetDtrRecord();
-                if ($targetRecord instanceof Dtr) {
+                if ($targetRecord instanceof Dtr && ! $targetRecord->is_locked) {
                     $this->revertDtrToOriginal($targetRecord, $request->original_values);
                 }
             }
@@ -1278,7 +1401,7 @@ class DtrChangeRequestService
                 'status' => DtrChangeRequest::STATUS_REJECTED,
                 'rejection_reason' => $remarks,
                 'reviewer_remarks' => $remarks,
-                'reviewed_by_employee_id' => $reviewer->id,
+                'reviewed_by_employee_id' => $identity['employee']?->id,
                 'reviewed_at' => now(),
                 'approvals_history' => $history,
             ]);
@@ -1304,6 +1427,12 @@ class DtrChangeRequestService
                 ]);
             }
 
+            if ($request->payrollPeriod?->is_locked) {
+                throw ValidationException::withMessages([
+                    'status' => 'Cannot cancel a change request for a locked payroll period.',
+                ]);
+            }
+
             if (! $request->canBeCancelledBy($employee)) {
                 throw new AuthorizationException('You are not authorized to cancel this change request.');
             }
@@ -1319,9 +1448,9 @@ class DtrChangeRequestService
                 'remarks' => 'Cancelled by employee.',
             ];
 
-            if ($request->is_editable_type && filled($request->original_values)) {
+            if ($request->is_editable_type && filled($request->original_values) && ! $request->payrollPeriod?->is_locked) {
                 $targetRecord = $request->targetDtrRecord();
-                if ($targetRecord instanceof Dtr) {
+                if ($targetRecord instanceof Dtr && ! $targetRecord->is_locked) {
                     $this->revertDtrToOriginal($targetRecord, $request->original_values);
                 }
             }
@@ -1339,8 +1468,13 @@ class DtrChangeRequestService
     /**
      * Apply final approval mutations and recalculate DTR records.
      */
-    protected function finalizeApprovedRequest(DtrChangeRequest $request, Employee $reviewer): void
+    protected function finalizeApprovedRequest(DtrChangeRequest $request, ?Employee $reviewer = null): void
     {
+        $period = $request->payrollPeriod ?: PayrollPeriod::query()->find($request->payroll_period_id);
+        if (! $period || $period->is_locked) {
+            throw new \DomainException("Cannot finalize approval: The payroll period ({$request->payroll_period_title_snapshot}) is locked.");
+        }
+
         // 1. Overtime Approval Request
         if ($request->is_overtime_type) {
             $targetRecord = $request->targetDtrRecord();
@@ -1360,49 +1494,62 @@ class DtrChangeRequestService
                 default => (int) ($request->proposed_values['credited_early_clock_in'] ?? $earlyCalculated),
             };
 
-            if ($targetRecord instanceof Dtr) {
-                app(OvertimeApprovalService::class)->approve(
-                    $targetRecord,
-                    $creditedOt,
-                    $creditedEarly,
-                );
-            }
-
             if ($targetRecord instanceof EmployeeVisibleDtr) {
-                $baseCreditedMinutes = max(0, (int) $targetRecord->credited_work_hrs - (int) $targetRecord->credited_overtime);
-                $totalCredited = $creditedOt + $creditedEarly;
-                $targetRecord->forceFill([
-                    'early_clock_in_approved' => $creditedEarly >= 30,
-                    'overtime_approved' => $creditedOt >= 30,
-                    'overtime_status' => 'Approved',
-                    'credited_early_clock_in' => $creditedEarly,
-                    'credited_overtime' => $totalCredited,
-                    'credited_work_hrs' => $baseCreditedMinutes + $totalCredited,
-                    'is_manually_edited' => true,
-                    'manual_edited_at' => now(),
-                    'manual_edited_by_employee_id' => $reviewer->id,
-                ])->save();
-            }
+                if (app(OvertimeApprovalService::class)->hasApprovableOvertime($targetRecord)) {
+                    app(OvertimeApprovalService::class)->approve(
+                        $targetRecord,
+                        $creditedOt,
+                        $creditedEarly,
+                    );
+                } else {
+                    $baseCreditedMinutes = max(0, (int) $targetRecord->credited_work_hrs - (int) $targetRecord->credited_overtime);
+                    $totalCredited = $creditedOt + $creditedEarly;
+                    $targetRecord->forceFill([
+                        'early_clock_in_approved' => $creditedEarly >= 30,
+                        'overtime_approved' => $creditedOt >= 30,
+                        'overtime_status' => 'Approved',
+                        'credited_early_clock_in' => $creditedEarly,
+                        'credited_overtime' => $totalCredited,
+                        'credited_work_hrs' => $baseCreditedMinutes + $totalCredited,
+                    ])->save();
+                }
 
-            $visibleRecord = EmployeeVisibleDtr::query()
-                ->where('employee_id', $request->employee_id)
-                ->where('payroll_period_id', $request->payroll_period_id)
-                ->whereDate('date_in', $request->dtr_date)
-                ->first();
-            if ($visibleRecord && ! ($targetRecord instanceof EmployeeVisibleDtr)) {
-                $baseCreditedMinutes = max(0, (int) $visibleRecord->credited_work_hrs - (int) $visibleRecord->credited_overtime);
-                $totalCredited = $creditedOt + $creditedEarly;
-                $visibleRecord->forceFill([
-                    'early_clock_in_approved' => $creditedEarly >= 30,
-                    'overtime_approved' => $creditedOt >= 30,
-                    'overtime_status' => 'Approved',
-                    'credited_early_clock_in' => $creditedEarly,
-                    'credited_overtime' => $totalCredited,
-                    'credited_work_hrs' => $baseCreditedMinutes + $totalCredited,
+                $targetRecord->forceFill([
                     'is_manually_edited' => true,
                     'manual_edited_at' => now(),
-                    'manual_edited_by_employee_id' => $reviewer->id,
+                    'manual_edited_by_employee_id' => $reviewer?->id,
                 ])->save();
+
+                app(DtrSynchronizationService::class)->syncVisibleToOfficial(
+                    $targetRecord->refresh(),
+                    'change_request_overtime_approval',
+                    $reviewer,
+                );
+            } elseif ($targetRecord instanceof Dtr) {
+                if (app(OvertimeApprovalService::class)->hasApprovableOvertime($targetRecord)) {
+                    app(OvertimeApprovalService::class)->approve(
+                        $targetRecord,
+                        $creditedOt,
+                        $creditedEarly,
+                    );
+                } else {
+                    $baseCreditedMinutes = max(0, (int) $targetRecord->credited_work_hrs - (int) $targetRecord->credited_overtime);
+                    $totalCredited = $creditedOt + $creditedEarly;
+                    $targetRecord->forceFill([
+                        'early_clock_in_approved' => $creditedEarly >= 30,
+                        'overtime_approved' => $creditedOt >= 30,
+                        'overtime_status' => 'Approved',
+                        'credited_early_clock_in' => $creditedEarly,
+                        'credited_overtime' => $totalCredited,
+                        'credited_work_hrs' => $baseCreditedMinutes + $totalCredited,
+                    ])->save();
+                }
+
+                app(DtrSynchronizationService::class)->syncOfficialToVisible(
+                    $targetRecord->refresh(),
+                    'change_request_overtime_approval',
+                    $reviewer,
+                );
             }
 
             return;
@@ -1411,42 +1558,71 @@ class DtrChangeRequestService
         // 2. Editable Request Types (Forgot to Punch / Time Discrepancy)
         if ($request->is_editable_type && filled($request->proposed_values)) {
             $targetRecord = $request->targetDtrRecord();
-            if ($targetRecord instanceof Dtr || $targetRecord instanceof EmployeeVisibleDtr) {
-                $this->applyAndRecalculateDtr($targetRecord, $request->proposed_values, $reviewer);
-            }
 
-            if ($targetRecord instanceof Dtr) {
-                $visibleQuery = EmployeeVisibleDtr::query()
-                    ->where('employee_id', $request->employee_id)
-                    ->where('payroll_period_id', $request->payroll_period_id)
-                    ->whereDate('date_in', $request->dtr_date);
-                if (filled($targetRecord->schedule_type)) {
-                    $visible = (clone $visibleQuery)->where('schedule_type', $targetRecord->schedule_type)->first()
-                        ?: $visibleQuery->first();
+            if ($targetRecord instanceof EmployeeVisibleDtr) {
+                $originalAnchor = [
+                    'date_in' => $request->original_values['date_in'] ?? $targetRecord->date_in,
+                    'schedule_type' => $request->original_values['schedule_type'] ?? $targetRecord->schedule_type,
+                    'day_part' => $request->original_values['day_part'] ?? $targetRecord->day_part,
+                    'time_in' => $request->original_values['time_in'] ?? $targetRecord->time_in,
+                ];
+                $counterpartOfficial = app(DtrSynchronizationService::class)->findCounterpartOfficial($targetRecord);
+
+                $this->applyAndRecalculateDtr($targetRecord, $request->proposed_values, $reviewer);
+
+                if ($counterpartOfficial) {
+                    $this->applyAndRecalculateDtr($counterpartOfficial, $request->proposed_values, $reviewer);
                 } else {
-                    $visible = $visibleQuery->first();
+                    app(DtrSynchronizationService::class)->syncVisibleToOfficial(
+                        $targetRecord->refresh(),
+                        'change_request_correction',
+                        $reviewer,
+                        $originalAnchor,
+                    );
                 }
-                if ($visible) {
-                    $this->applyAndRecalculateDtr($visible, $request->proposed_values, $reviewer);
+
+                app(DtrSynchronizationService::class)->recordAudit(
+                    'change_request_finalized',
+                    $targetRecord,
+                    [
+                        'request_id' => $request->id,
+                        'request_type' => $request->request_type,
+                        'proposed_values' => $request->proposed_values,
+                    ],
+                    $reviewer,
+                );
+            } elseif ($targetRecord instanceof Dtr) {
+                $originalAnchor = [
+                    'date_in' => $request->original_values['date_in'] ?? $targetRecord->date_in,
+                    'schedule_type' => $request->original_values['schedule_type'] ?? $targetRecord->schedule_type,
+                    'day_part' => $request->original_values['day_part'] ?? $targetRecord->day_part,
+                    'time_in' => $request->original_values['time_in'] ?? $targetRecord->time_in,
+                ];
+                $counterpartVisible = app(DtrSynchronizationService::class)->findCounterpartVisible($targetRecord, (int) $request->employee_id);
+
+                $this->applyAndRecalculateDtr($targetRecord, $request->proposed_values, $reviewer);
+
+                if ($counterpartVisible) {
+                    $this->applyAndRecalculateDtr($counterpartVisible, $request->proposed_values, $reviewer);
+                } else {
+                    app(DtrSynchronizationService::class)->syncOfficialToVisible(
+                        $targetRecord->refresh(),
+                        'change_request_correction',
+                        $reviewer,
+                        $originalAnchor,
+                    );
                 }
-            } elseif ($targetRecord instanceof EmployeeVisibleDtr) {
-                $employee = $request->employee ?: Employee::query()->find($request->employee_id);
-                $fingerprintId = (string) ($employee?->fingerprint_id ?: $employee?->uid ?: $employee?->company_id);
-                if ($fingerprintId !== '') {
-                    $officialQuery = Dtr::query()
-                        ->where('fingerprint_id', $fingerprintId)
-                        ->where('payroll_period_id', $request->payroll_period_id)
-                        ->whereDate('date_in', $request->dtr_date);
-                    if (filled($targetRecord->schedule_type)) {
-                        $official = (clone $officialQuery)->where('schedule_type', $targetRecord->schedule_type)->first()
-                            ?: $officialQuery->first();
-                    } else {
-                        $official = $officialQuery->first();
-                    }
-                    if ($official) {
-                        $this->applyAndRecalculateDtr($official, $request->proposed_values, $reviewer);
-                    }
-                }
+
+                app(DtrSynchronizationService::class)->recordAudit(
+                    'change_request_finalized',
+                    $targetRecord,
+                    [
+                        'request_id' => $request->id,
+                        'request_type' => $request->request_type,
+                        'proposed_values' => $request->proposed_values,
+                    ],
+                    $reviewer,
+                );
             }
 
             return;
@@ -1578,33 +1754,17 @@ class DtrChangeRequestService
             }
 
             // Step 9: Permanently delete the counterpart record in the other table to avoid orphaned records/discrepancies
-            if ($targetRecord instanceof EmployeeVisibleDtr) {
-                if ($fingerprintId !== '') {
-                    $counterpartOfficial = Dtr::query()
-                        ->where('fingerprint_id', $fingerprintId)
-                        ->where('payroll_period_id', $targetRecord->payroll_period_id)
-                        ->whereDate('date_in', $targetRecord->date_in)
-                        ->where('schedule_type', $targetRecord->schedule_type);
+            app(DtrSynchronizationService::class)->deleteCounterpart($targetRecord);
 
-                    if (filled($targetRecord->time_in)) {
-                        $counterpartOfficial->where('time_in', $targetRecord->time_in);
-                    }
-
-                    $counterpartOfficial->forceDelete();
-                }
-            } elseif ($targetRecord instanceof Dtr) {
-                $counterpartVisible = EmployeeVisibleDtr::query()
-                    ->where('employee_id', $request->employee_id)
-                    ->where('payroll_period_id', $targetRecord->payroll_period_id)
-                    ->whereDate('date_in', $targetRecord->date_in)
-                    ->where('schedule_type', $targetRecord->schedule_type);
-
-                if (filled($targetRecord->time_in)) {
-                    $counterpartVisible->where('time_in', $targetRecord->time_in);
-                }
-
-                $counterpartVisible->forceDelete();
-            }
+            app(DtrSynchronizationService::class)->recordAudit(
+                'change_request_delete_dtr',
+                $targetRecord,
+                [
+                    'request_id' => $request->id,
+                    'deleted_record_id' => $exactId,
+                ],
+                $reviewer,
+            );
 
             return;
         }
@@ -1613,7 +1773,7 @@ class DtrChangeRequestService
     /**
      * Create official and visible DTR records for an approved missing DTR entry.
      */
-    protected function createMissingDtrEntry(DtrChangeRequest $request, array $entry, Employee $reviewer): void
+    protected function createMissingDtrEntry(DtrChangeRequest $request, array $entry, ?Employee $reviewer = null): void
     {
         $employee = Employee::query()->find($request->employee_id);
         $branch = Branch::query()->find($request->branch_id);
@@ -1707,7 +1867,7 @@ class DtrChangeRequestService
             'employee_id' => $employee->id,
             'is_manually_edited' => true,
             'manual_edited_at' => now(),
-            'manual_edited_by_employee_id' => $reviewer->id,
+            'manual_edited_by_employee_id' => $reviewer?->id,
             'needs_review' => false,
         ]);
     }

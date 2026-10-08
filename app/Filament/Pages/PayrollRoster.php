@@ -65,7 +65,7 @@ class PayrollRoster extends Page
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->periodId)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period?->publicKey()])
+                    ? Payroll::getUrl(['periodId' => $this->period?->publicKey()])
                     : Payroll::getUrl()),
         ];
     }

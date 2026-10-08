@@ -24,7 +24,7 @@ return new class extends Migration
         DB::table('employee_loans')
             ->where('payment_amount', '<=', 0)
             ->update([
-                'payment_amount' => DB::raw('ROUND((loan_amount + loan_interest) / GREATEST(loan_terms_months, 1), 2)'),
+                'payment_amount' => DB::raw('ROUND((loan_amount + loan_interest) / (CASE WHEN loan_terms_months > 1 THEN loan_terms_months ELSE 1 END), 2)'),
             ]);
     }
 

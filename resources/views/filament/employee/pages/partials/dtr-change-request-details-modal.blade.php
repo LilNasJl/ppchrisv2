@@ -5,6 +5,7 @@
     $history = $record->approvals_history ?? [];
     $orig = $record->original_values ?? [];
     $prop = $record->proposed_values ?? [];
+    $employeeName = $record->employee_name_snapshot ?: ($record->employee?->full_name ?: 'Employee');
 
     $statusClass = match ($record->status) {
         \App\Models\DtrChangeRequest::STATUS_APPROVED => 'status-approved',
@@ -188,6 +189,17 @@
     .dark .crd-step-pill.is-passed {
         background-color: rgba(34, 197, 94, 0.15);
         color: #86efac;
+    }
+
+    .crd-step-pill.is-rejected {
+        border-color: #fecaca;
+        background-color: #fef2f2;
+        color: #991b1b;
+        font-weight: 700;
+    }
+    .dark .crd-step-pill.is-rejected {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
     }
 
     @media (max-width: 640px) {
@@ -454,18 +466,32 @@
         <div style="padding:10px 12px;">
             @if (!empty($workflow))
                 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px;">
+                    <div class="crd-step-pill is-passed">
+                        <span>{{ $employeeName }}</span>
+                        <span style="font-weight:bold;">✓</span>
+                    </div>
+                    <span style="color:var(--crd-text-muted);">→</span>
                     @foreach ($workflow as $idx => $step)
                         @php
                             $stepLevel = (int) ($step['level'] ?? ($idx + 1));
+                            $isHrStep = !empty($step['is_hr']) || ($step['label'] ?? null) === 'HR Final Approval';
                             $isCurrent = ($record->status === \App\Models\DtrChangeRequest::STATUS_PENDING && (int)$record->current_level === $stepLevel);
-                            $isPassed = ((int)$record->current_level > $stepLevel || $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED);
+                            $isRejected = ($record->status === \App\Models\DtrChangeRequest::STATUS_REJECTED && (int)$record->current_level === $stepLevel);
+                            $isPassed = (!$isRejected && ((int)$record->current_level > $stepLevel || $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED));
+                            $pillClass = $isRejected ? 'is-rejected' : ($isCurrent ? 'is-active' : ($isPassed ? 'is-passed' : ''));
                         @endphp
-                        <div class="crd-step-pill {{ $isCurrent ? 'is-active' : ($isPassed ? 'is-passed' : '') }}">
-                            <span>Level {{ $stepLevel }}: {{ $step['label'] ?? 'Approver' }} ({{ $step['approver_name'] ?? 'Assigned' }})</span>
+                        <div class="crd-step-pill {{ $pillClass }}">
+                            @if ($isHrStep)
+                                <span>HR Final Approval</span>
+                            @else
+                                <span>Level {{ $stepLevel }} – {{ $step['label'] ?? 'Approver' }} ({{ $step['approver_name'] ?? 'Assigned' }})</span>
+                            @endif
                             @if ($isPassed)
-                                <span style="font-weight:bold;">✓</span>
+                                <span style="font-weight:bold;">✓ Approved</span>
+                            @elseif ($isRejected)
+                                <span style="font-size:10px;font-weight:800;">✕ Rejected</span>
                             @elseif ($isCurrent)
-                                <span style="font-size:10px;font-weight:800;">● Active</span>
+                                <span style="font-size:10px;font-weight:800;">● Pending</span>
                             @endif
                         </div>
                         @if ($idx < count($workflow) - 1)

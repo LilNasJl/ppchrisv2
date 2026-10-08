@@ -79,11 +79,29 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected array $rowCache = [];
 
+    protected array $employeeRowCache = [];
+
+    protected bool $employeeRowsWarmed = false;
+
     protected array $totalsCache = [];
+
+    protected array $summaryRecordsCache = [];
 
     protected array $overtimeSummaryCache = [];
 
     protected bool $overtimeSummariesLoaded = false;
+
+    protected bool $adjustmentRowsEnsured = false;
+
+    protected ?Collection $cachedIncludedEmployeeIds = null;
+
+    protected ?PayrollPeriod $resolvedPeriod = null;
+
+    protected bool $periodLoaded = false;
+
+    protected ?Branch $resolvedBranch = null;
+
+    protected bool $branchLoaded = false;
 
     public function mount(
         ?int $periodId = null,
@@ -122,6 +140,15 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         return null;
     }
 
+    protected function invalidateRowCaches(): void
+    {
+        $this->rowCache = [];
+        $this->employeeRowCache = [];
+        $this->employeeRowsWarmed = false;
+        $this->totalsCache = [];
+        $this->summaryRecordsCache = [];
+    }
+
     public function table(Table $table): Table
     {
         return $table
@@ -132,7 +159,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 pageCondition: false,
                 allTableCondition: fn (): bool => $this->showTotals,
             )
-            ->headerActions([
+            ->toolbarActions([
                 ActionGroup::make([
                     Action::make('showSummaryColumns')
                         ->label('Summary')
@@ -179,6 +206,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                         query: fn (Builder $query, string $search): Builder => $this->searchEmployeeId($query, $search),
                     ),
                 $this->textColumn('name', 'Name')
+                    ->url(fn (PayrollPeriodEmployeeAdjustment $record): ?string => $this->employeePayrollUrl($record))
                     ->searchable(
                         condition: $this->enableSearch,
                         query: fn (Builder $query, string $search): Builder => $this->searchEmployeeName($query, $search),
@@ -203,8 +231,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     ->rules(['nullable', 'numeric', 'min:0'])
                     ->disabled(fn (): bool => $this->isLocked())
                     ->afterStateUpdated(function (): void {
-                        $this->rowCache = [];
-                        $this->totalsCache = [];
+                        $this->invalidateRowCaches();
                         $this->dispatch('payroll-adjustment-updated');
                     })
                     ->alignEnd()
@@ -237,8 +264,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     ->rules(['nullable', 'numeric', 'min:0'])
                     ->disabled(fn (): bool => $this->isLocked())
                     ->afterStateUpdated(function (): void {
-                        $this->rowCache = [];
-                        $this->totalsCache = [];
+                        $this->invalidateRowCaches();
                         $this->dispatch('payroll-adjustment-updated');
                     })
                     ->alignEnd()
@@ -286,6 +312,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     public function updatedTableSearch(): void
     {
         $this->totalsCache = [];
+        $this->summaryRecordsCache = [];
     }
 
     public function render()
@@ -316,14 +343,34 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function ensureAdjustmentRows(): void
     {
+        if ($this->adjustmentRowsEnsured) {
+            return;
+        }
+
+        $this->adjustmentRowsEnsured = true;
         $period = $this->period();
 
         if (! $period) {
             return;
         }
 
-        $this->includedEmployeeIds()
-            ->each(fn (int $employeeId): PayrollPeriodEmployeeAdjustment => PayrollPeriodEmployeeAdjustment::firstOrCreate(
+        $employeeIds = $this->includedEmployeeIds();
+
+        if ($employeeIds->isEmpty()) {
+            return;
+        }
+
+        $existingEmployeeIds = PayrollPeriodEmployeeAdjustment::query()
+            ->where('payroll_period_id', $period->id)
+            ->whereIn('employee_id', $employeeIds->all())
+            ->pluck('employee_id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+
+        $missingEmployeeIds = array_diff($employeeIds->all(), $existingEmployeeIds);
+
+        foreach ($missingEmployeeIds as $employeeId) {
+            PayrollPeriodEmployeeAdjustment::firstOrCreate(
                 [
                     'payroll_period_id' => $period->id,
                     'employee_id' => $employeeId,
@@ -332,15 +379,20 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     'salary_adjustment' => 0,
                     'shortages' => 0,
                 ],
-            ));
+            );
+        }
     }
 
     protected function includedEmployeeIds(): Collection
     {
+        if ($this->cachedIncludedEmployeeIds !== null) {
+            return $this->cachedIncludedEmployeeIds;
+        }
+
         $period = $this->period();
 
         if (! $period) {
-            return collect();
+            return $this->cachedIncludedEmployeeIds = collect();
         }
 
         $calculator = app(PayrollCalculator::class);
@@ -349,7 +401,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             $snapshotEmployeeIds = $this->snapshotEmployeeIds($period);
 
             if ($snapshotEmployeeIds->isNotEmpty()) {
-                return $snapshotEmployeeIds;
+                return $this->cachedIncludedEmployeeIds = $snapshotEmployeeIds;
             }
         }
 
@@ -360,23 +412,23 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 ->find($this->employeeId);
 
             if (! $employee || $calculator->isEmployeePayrollExcluded($period, $employee)) {
-                return collect();
+                return $this->cachedIncludedEmployeeIds = collect();
             }
 
             if (filled($this->branchId) && (int) $employee->branch_id !== (int) $this->branchId) {
-                return collect();
+                return $this->cachedIncludedEmployeeIds = collect();
             }
 
-            return collect([(int) $employee->id]);
+            return $this->cachedIncludedEmployeeIds = collect([(int) $employee->id]);
         }
 
         $employeeIds = $calculator->includedEmployeeIds($period, filled($this->branchId) ? (int) $this->branchId : null);
 
         if (blank($this->paymentType) || $employeeIds->isEmpty()) {
-            return $employeeIds->map(fn (mixed $id): int => (int) $id)->values();
+            return $this->cachedIncludedEmployeeIds = $employeeIds->map(fn (mixed $id): int => (int) $id)->values();
         }
 
-        return Employee::query()
+        return $this->cachedIncludedEmployeeIds = Employee::query()
             ->whereIn('id', $employeeIds->all())
             ->when(
                 $this->paymentType === 'atm',
@@ -420,27 +472,73 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->values();
     }
 
+    protected function warmEmployeeRows(): void
+    {
+        if ($this->employeeRowsWarmed) {
+            return;
+        }
+
+        $this->employeeRowsWarmed = true;
+        $period = $this->period();
+
+        if (! $period) {
+            return;
+        }
+
+        $calculator = app(PayrollCalculator::class);
+        $employeeIds = $this->includedEmployeeIds();
+
+        if ($employeeIds->isEmpty()) {
+            return;
+        }
+
+        if ((bool) $period->is_locked) {
+            $snapshots = PayrollSnapshot::query()
+                ->where('payroll_period_id', $period->id)
+                ->whereIn('employee_id', $employeeIds->all())
+                ->get();
+
+            foreach ($snapshots as $snapshot) {
+                $this->employeeRowCache[(int) $snapshot->employee_id] = $calculator->snapshotData($snapshot);
+            }
+        }
+
+        $missingIds = array_values(array_diff($employeeIds->all(), array_keys($this->employeeRowCache)));
+
+        if ($missingIds === []) {
+            return;
+        }
+
+        $employees = Employee::query()
+            ->with(['user', 'designation', 'department', 'branch', 'employeeDeductions.deduction'])
+            ->whereIn('id', $missingIds)
+            ->get();
+
+        $calculator->preloadEmployeesForPeriod($employees, $period);
+
+        foreach ($employees as $employee) {
+            $this->employeeRowCache[(int) $employee->id] = $calculator->row($employee, $period);
+        }
+    }
+
     protected function row(PayrollPeriodEmployeeAdjustment $record): array
     {
         if (array_key_exists($record->id, $this->rowCache)) {
             return $this->rowCache[$record->id];
         }
 
+        $this->warmEmployeeRows();
+
+        $employeeId = (int) $record->employee_id;
+
+        if (isset($this->employeeRowCache[$employeeId])) {
+            return $this->rowCache[$record->id] = $this->employeeRowCache[$employeeId];
+        }
+
         $period = $this->period();
 
         if (! $period || ! $record->employee) {
             return $this->rowCache[$record->id] = [];
-        }
-
-        if ((bool) $period->is_locked) {
-            $snapshot = PayrollSnapshot::query()
-                ->where('payroll_period_id', $period->id)
-                ->where('employee_id', $record->employee_id)
-                ->first();
-
-            if ($snapshot) {
-                return $this->rowCache[$record->id] = app(PayrollCalculator::class)->snapshotData($snapshot);
-            }
         }
 
         return $this->rowCache[$record->id] = app(PayrollCalculator::class)->employeeRow($record->employee, $period);
@@ -453,11 +551,32 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function period(): ?PayrollPeriod
     {
-        if (blank($this->periodId)) {
-            return null;
+        if ($this->periodLoaded) {
+            return $this->resolvedPeriod;
         }
 
-        return PayrollPeriod::query()->find($this->periodId);
+        $this->periodLoaded = true;
+
+        if (blank($this->periodId)) {
+            return $this->resolvedPeriod = null;
+        }
+
+        return $this->resolvedPeriod = PayrollPeriod::query()->find($this->periodId);
+    }
+
+    protected function branch(): ?Branch
+    {
+        if ($this->branchLoaded) {
+            return $this->resolvedBranch;
+        }
+
+        $this->branchLoaded = true;
+
+        if (blank($this->branchId)) {
+            return $this->resolvedBranch = null;
+        }
+
+        return $this->resolvedBranch = Branch::query()->find($this->branchId);
     }
 
     protected function isLocked(): bool
@@ -628,7 +747,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         $summary = $this->overtimeApprovalSummary($record);
         $employee = $record->employee;
         $period = $this->period();
-        $branch = filled($this->branchId) ? Branch::query()->find($this->branchId) : null;
+        $branch = $this->branch();
 
         if ($summary['total'] < 1 || ! $employee || ! $period || ! $branch) {
             return null;
@@ -642,6 +761,23 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             'returnPage' => $this->getTablePage(),
             'returnPerPage' => $this->getTableRecordsPerPage(),
             'returnPreset' => $this->columnPreset,
+        ]);
+    }
+
+    protected function employeePayrollUrl(PayrollPeriodEmployeeAdjustment $record): ?string
+    {
+        $employee = $record->employee;
+        $period = $this->period();
+        $branch = $this->branch() ?? $employee?->branch;
+
+        if (! $employee || ! $period || ! $branch) {
+            return null;
+        }
+
+        return \App\Filament\Pages\EmployeePayroll::getUrl([
+            'employeeId' => $employee->publicKey(),
+            'branchId' => $branch->publicKey(),
+            'periodId' => $period->publicKey(),
         ]);
     }
 
@@ -683,21 +819,21 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function payrollTotal(string $key): float
     {
-        $cacheKey = $this->tableSearch.'|'.$key;
+        $searchKey = (string) $this->tableSearch;
+        $cacheKey = $searchKey.'|'.$key;
 
         if (array_key_exists($cacheKey, $this->totalsCache)) {
             return $this->totalsCache[$cacheKey];
         }
 
-        $query = $this->getAllTableSummaryQuery();
-
-        if (! $query) {
-            return $this->totalsCache[$cacheKey] = 0.0;
+        if (! array_key_exists($searchKey, $this->summaryRecordsCache)) {
+            $query = $this->getAllTableSummaryQuery();
+            $this->summaryRecordsCache[$searchKey] = $query ? $query->get() : collect();
         }
 
         $total = 0.0;
 
-        foreach ($query->get() as $record) {
+        foreach ($this->summaryRecordsCache[$searchKey] as $record) {
             $total += (float) ($this->rowValue($record, $key) ?? 0);
         }
 

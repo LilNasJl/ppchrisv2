@@ -46,7 +46,7 @@ class DtrProofSubmissions extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => DtrSubmission::query()
-                ->with(['payrollPeriod', 'branch', 'employee', 'sicRcAccount'])
+                ->with(['payrollPeriod', 'branch', 'employee', 'submittedByEmployee'])
                 ->where('submission_type', DtrSubmission::TYPE_PROOF)
                 ->latest())
             ->heading('On Field DTR Requests')

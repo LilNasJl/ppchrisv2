@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Filament\SicRc\Widgets\SicRcDtrManageTable;
+use App\Filament\Employee\Widgets\StationDtrManageTable;
 use App\Filament\Widgets\DtrManageTable;
 use App\Services\DtrCalculator;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -107,7 +107,7 @@ class DtrCorrectionCalculationTest extends TestCase
     public function test_hr_and_sicrc_use_a_success_aware_repeatable_edit_contract(): void
     {
         $hrMethod = new ReflectionMethod(DtrManageTable::class, 'updateDtr');
-        $sicRcMethod = new ReflectionMethod(SicRcDtrManageTable::class, 'updateDtr');
+        $sicRcMethod = new ReflectionMethod(StationDtrManageTable::class, 'updateDtr');
 
         $this->assertSame('bool', (string) $hrMethod->getReturnType());
         $this->assertSame('bool', (string) $sicRcMethod->getReturnType());

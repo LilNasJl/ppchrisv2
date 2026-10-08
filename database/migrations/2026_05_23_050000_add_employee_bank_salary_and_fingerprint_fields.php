@@ -33,7 +33,7 @@ return new class extends Migration
             }
         });
 
-        if (Schema::hasColumn('employees', 'fingerprint_id')) {
+        if (Schema::hasColumn('employees', 'fingerprint_id') && DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE employees MODIFY fingerprint_id VARCHAR(191) NULL');
         }
 

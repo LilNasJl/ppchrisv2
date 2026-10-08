@@ -20,32 +20,19 @@ class SicRcDtrImportDeletionService
                 && filled($import->branch_id)
                 && filled($import->payroll_period_id);
 
-            if (! $isCompletedBatch) {
-                $import->delete();
-
+            if ($isCompletedBatch) {
+                // Imported DTR batches and records must remain protected once saved.
                 return [
                     'entries' => 0,
-                    'histories' => 1,
+                    'histories' => 0,
                 ];
             }
 
-            $scope = [
-                'branch_id' => $import->branch_id,
-                'payroll_period_id' => $import->payroll_period_id,
-                'batch_id' => $import->batch_id,
-            ];
-
-            $deletedEntries = EmployeeVisibleDtr::withTrashed()
-                ->where($scope)
-                ->forceDelete();
-
-            $deletedHistories = SicRcDtrImport::query()
-                ->where($scope)
-                ->delete();
+            $import->delete();
 
             return [
-                'entries' => $deletedEntries,
-                'histories' => $deletedHistories,
+                'entries' => 0,
+                'histories' => 1,
             ];
         });
     }

@@ -61,6 +61,10 @@ class StationDtrImport extends Page
         if (! $this->period) {
             throw new HttpException(404, 'No payroll period was selected.');
         }
+
+        if ($this->period->is_locked) {
+            throw new HttpException(403, 'Cannot import D.T.R entries into a locked payroll period.');
+        }
     }
 
     public function getTitle(): string
@@ -103,14 +107,6 @@ class StationDtrImport extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('importHistory')
-                ->label('DTR Import History')
-                ->icon(Heroicon::Clock)
-                ->url(fn (): string => StationDtrImportHistory::getUrl([
-                    'branchId' => $this->branch?->publicKey(),
-                    'periodId' => $this->period?->publicKey(),
-                ])),
-
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)

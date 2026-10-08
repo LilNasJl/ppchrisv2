@@ -15,16 +15,23 @@
     .payroll-table {
         width: 100%;
         min-width: 2280px;
-        border-collapse: collapse;
+        border-collapse: separate;
+        border-spacing: 0;
         font-size: 12px;
+        font-variant-numeric: tabular-nums;
     }
 
     .payroll-table th,
     .payroll-table td {
-        border: 1px solid rgba(148, 163, 184, .35);
+        border-bottom: 1px solid rgba(148, 163, 184, .35);
+        border-right: 1px solid rgba(148, 163, 184, .35);
         padding: 7px 8px;
         vertical-align: middle;
         white-space: nowrap;
+    }
+
+    .payroll-table thead tr:first-child th {
+        border-top: 1px solid rgba(148, 163, 184, .35);
     }
 
     .payroll-table th {
@@ -37,6 +44,7 @@
     .dark .payroll-table th {
         background: rgb(31, 41, 55);
         color: #f8fafc;
+        border-color: rgba(71, 85, 105, .45);
     }
 
     .payroll-table td {
@@ -45,22 +53,23 @@
 
     .dark .payroll-table td {
         color: #e5e7eb;
+        border-color: rgba(71, 85, 105, .45);
     }
 
     .payroll-table tbody tr:nth-child(odd) td {
-        background: rgba(255, 255, 255, .96);
+        background: rgb(255, 255, 255);
     }
 
     .payroll-table tbody tr:nth-child(even) td {
-        background: rgba(248, 250, 252, .96);
+        background: rgb(248, 250, 252);
     }
 
     .dark .payroll-table tbody tr:nth-child(odd) td {
-        background: rgba(17, 24, 39, .36);
+        background: rgb(15, 23, 42);
     }
 
     .dark .payroll-table tbody tr:nth-child(even) td {
-        background: rgba(30, 41, 59, .58);
+        background: rgb(30, 41, 59);
     }
 
     .payroll-table tbody tr:hover td {
@@ -92,6 +101,120 @@
         color: #f8fafc;
     }
 
+    /* Sticky Columns (1: Index, 2: Bank ID, 3: Name) */
+    .payroll-col-index {
+        position: sticky !important;
+        left: 0 !important;
+        inset-inline-start: 0 !important;
+        width: 2.75rem !important;
+        min-width: 2.75rem !important;
+        max-width: 2.75rem !important;
+        text-align: center !important;
+        border-right: 1px solid rgba(203, 213, 225, 0.95) !important;
+        z-index: 5;
+    }
+
+    .payroll-col-bank-id {
+        position: sticky !important;
+        left: 2.75rem !important;
+        inset-inline-start: 2.75rem !important;
+        width: 6.5rem !important;
+        min-width: 6.5rem !important;
+        max-width: 6.5rem !important;
+        border-right: 1px solid rgba(203, 213, 225, 0.95) !important;
+        z-index: 5;
+    }
+
+    .payroll-col-name {
+        position: sticky !important;
+        left: 9.25rem !important;
+        inset-inline-start: 9.25rem !important;
+        width: 13rem !important;
+        min-width: 13rem !important;
+        max-width: 13rem !important;
+        border-right: 2px solid rgba(148, 163, 184, 0.85) !important;
+        box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.2) !important;
+        z-index: 5;
+    }
+
+    .dark .payroll-col-index,
+    .dark .payroll-col-bank-id {
+        border-right: 1px solid rgba(51, 65, 85, 0.95) !important;
+    }
+
+    .dark .payroll-col-name {
+        border-right: 2px solid rgba(71, 85, 105, 0.95) !important;
+        box-shadow: 4px 0 10px -2px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    /* Opaque backgrounds for sticky headers to prevent scrolled text bleed-through */
+    .payroll-table thead th.payroll-col-index,
+    .payroll-table thead th.payroll-col-bank-id,
+    .payroll-table thead th.payroll-col-name {
+        background: rgb(241, 245, 249) !important;
+        z-index: 10 !important;
+    }
+
+    .dark .payroll-table thead th.payroll-col-index,
+    .dark .payroll-table thead th.payroll-col-bank-id,
+    .dark .payroll-table thead th.payroll-col-name {
+        background: rgb(30, 41, 59) !important;
+        z-index: 10 !important;
+    }
+
+    /* Opaque backgrounds for sticky body cells to prevent scrolled text bleed-through */
+    .payroll-table tbody tr:nth-child(odd) td.payroll-col-index,
+    .payroll-table tbody tr:nth-child(odd) td.payroll-col-bank-id,
+    .payroll-table tbody tr:nth-child(odd) td.payroll-col-name {
+        background: #ffffff !important;
+    }
+
+    .payroll-table tbody tr:nth-child(even) td.payroll-col-index,
+    .payroll-table tbody tr:nth-child(even) td.payroll-col-bank-id,
+    .payroll-table tbody tr:nth-child(even) td.payroll-col-name {
+        background: #f8fafc !important;
+    }
+
+    .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-index,
+    .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-bank-id,
+    .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-name {
+        background: rgb(15, 23, 42) !important;
+    }
+
+    .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-index,
+    .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-bank-id,
+    .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-name {
+        background: rgb(30, 41, 59) !important;
+    }
+
+    /* Opaque backgrounds on hover for sticky cells */
+    .payroll-table tbody tr:hover td.payroll-col-index,
+    .payroll-table tbody tr:hover td.payroll-col-bank-id,
+    .payroll-table tbody tr:hover td.payroll-col-name {
+        background: rgb(239, 246, 255) !important;
+    }
+
+    .dark .payroll-table tbody tr:hover td.payroll-col-index,
+    .dark .payroll-table tbody tr:hover td.payroll-col-bank-id,
+    .dark .payroll-table tbody tr:hover td.payroll-col-name {
+        background: rgb(30, 58, 138) !important;
+    }
+
+    /* Opaque backgrounds on summary/total row for sticky cells */
+    .payroll-table tfoot td.payroll-col-index,
+    .payroll-table tfoot td.payroll-col-bank-id,
+    .payroll-table tfoot td.payroll-col-name {
+        background: rgb(219, 234, 254) !important;
+        z-index: 8 !important;
+    }
+
+    .dark .payroll-table tfoot td.payroll-col-index,
+    .dark .payroll-table tfoot td.payroll-col-bank-id,
+    .dark .payroll-table tfoot td.payroll-col-name {
+        background: rgb(30, 58, 138) !important;
+        z-index: 8 !important;
+    }
+
     @media print {
         @page {
             size: landscape;
@@ -121,16 +244,25 @@
             table-layout: fixed;
             font-size: 5.5px;
             width: 100%;
+            border-collapse: collapse;
         }
 
         .payroll-table th,
         .payroll-table td {
             background: #fff !important;
-            border-color: #000 !important;
+            border: 1px solid #000 !important;
             color: #000 !important;
             padding: 2px 3px;
             white-space: normal;
             overflow-wrap: anywhere;
+        }
+
+        .payroll-col-index,
+        .payroll-col-bank-id,
+        .payroll-col-name {
+            position: static !important;
+            box-shadow: none !important;
+            border-right-color: #000 !important;
         }
 
         .payroll-table th {
@@ -149,9 +281,9 @@
     <table class="payroll-table">
         <thead>
             <tr>
-                <th rowspan="2">#</th>
-                <th rowspan="2">Bank ID No.</th>
-                <th rowspan="2">Name</th>
+                <th rowspan="2" class="payroll-col-index">#</th>
+                <th rowspan="2" class="payroll-col-bank-id">Bank ID No.</th>
+                <th rowspan="2" class="payroll-col-name">Name</th>
                 <th rowspan="2">Designation</th>
                 <th rowspan="2">Branch</th>
                 <th rowspan="2">Rate</th>
@@ -195,9 +327,9 @@
         <tbody>
             @forelse ($rows as $row)
                 <tr>
-                    <td class="text-center">{{ $row['number'] }}</td>
-                    <td>{{ $row['bank_id_no'] }}</td>
-                    <td>{{ $row['name'] }}</td>
+                    <td class="text-center payroll-col-index">{{ $row['number'] }}</td>
+                    <td class="payroll-col-bank-id">{{ $row['bank_id_no'] }}</td>
+                    <td class="payroll-col-name font-semibold">{{ $row['name'] }}</td>
                     <td>{{ $row['designation'] }}</td>
                     <td>{{ $row['branch'] }}</td>
                     <td class="text-center">{{ $row['rate'] }}</td>
@@ -229,7 +361,7 @@
                     <td class="text-right">{{ $money($row['hdmf_ee']) }}</td>
                     <td class="text-right">{{ $money($row['phic_ee']) }}</td>
                     <td class="text-right">{{ $money($row['total_deductions']) }}</td>
-                    <td class="text-right">{{ $money($row['net_pay']) }}</td>
+                    <td class="text-right font-semibold">{{ $money($row['net_pay']) }}</td>
                     <td>{{ $row['signature'] }}</td>
                 </tr>
             @empty
@@ -242,9 +374,9 @@
         @if ($rows->isNotEmpty())
             <tfoot>
                 <tr>
-                    <td class="text-center">TOTAL</td>
-                    <td></td>
-                    <td></td>
+                    <td class="text-center payroll-col-index">TOTAL</td>
+                    <td class="payroll-col-bank-id"></td>
+                    <td class="payroll-col-name"></td>
                     <td></td>
                     <td></td>
                     <td></td>

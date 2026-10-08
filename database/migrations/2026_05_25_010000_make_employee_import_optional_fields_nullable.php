@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -8,6 +9,30 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            if (Schema::hasTable('users') && Schema::hasColumn('users', 'email')) {
+                Schema::table('users', function (Blueprint $table): void {
+                    $table->string('email', 255)->nullable()->change();
+                });
+            }
+
+            if (Schema::hasTable('employees')) {
+                Schema::table('employees', function (Blueprint $table): void {
+                    if (Schema::hasColumn('employees', 'user_id')) {
+                        $table->integer('user_id')->nullable()->change();
+                    }
+
+                    foreach (array_keys($this->employeeNullableColumns()) as $column) {
+                        if (Schema::hasColumn('employees', $column)) {
+                            $table->string($column)->nullable()->change();
+                        }
+                    }
+                });
+            }
+
+            return;
+        }
+
         if (Schema::hasTable('users') && Schema::hasColumn('users', 'email')) {
             DB::statement('ALTER TABLE users MODIFY email VARCHAR(255) NULL');
         }
@@ -25,6 +50,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if (Schema::hasTable('users') && Schema::hasColumn('users', 'email')) {
             DB::table('users')
                 ->whereNull('email')

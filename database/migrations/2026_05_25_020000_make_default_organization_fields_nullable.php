@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -8,6 +9,28 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            if (Schema::hasTable('designations')) {
+                Schema::table('designations', function (Blueprint $table): void {
+                    if (Schema::hasColumn('designations', 'description')) {
+                        $table->text('description')->nullable()->change();
+                    }
+
+                    if (Schema::hasColumn('designations', 'specification')) {
+                        $table->string('specification')->nullable()->change();
+                    }
+                });
+            }
+
+            if (Schema::hasTable('departments') && Schema::hasColumn('departments', 'description')) {
+                Schema::table('departments', function (Blueprint $table): void {
+                    $table->text('description')->nullable()->change();
+                });
+            }
+
+            return;
+        }
+
         if (Schema::hasTable('designations')) {
             if (Schema::hasColumn('designations', 'description')) {
                 DB::statement('ALTER TABLE designations MODIFY description TEXT NULL');
@@ -25,6 +48,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if (Schema::hasTable('designations')) {
             DB::table('designations')
                 ->whereNull('description')

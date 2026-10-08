@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\PayrollPeriods;
 
+use App\Filament\Resources\PayrollPeriods\Pages\CreatePayrollPeriod;
+use App\Filament\Resources\PayrollPeriods\Pages\EditPayrollPeriod;
 use App\Filament\Resources\PayrollPeriods\Pages\ListPayrollPeriods;
 use App\Filament\Resources\PayrollPeriods\Pages\ViewPayrollPeriod;
 use App\Filament\Resources\PayrollPeriods\Schemas\PayrollPeriodForm;
@@ -35,7 +37,9 @@ class PayrollPeriodResource extends Resource
     {
         return [
             'index' => ListPayrollPeriods::route('/'),
+            'create' => CreatePayrollPeriod::route('/create'),
             'view' => ViewPayrollPeriod::route('/{record}'),
+            'edit' => EditPayrollPeriod::route('/{record}/edit'),
         ];
     }
 }

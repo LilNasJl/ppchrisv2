@@ -34,6 +34,10 @@ class DtrSubmission extends Model
         'time_in',
         'date_out',
         'time_out',
+        'schedule_type',
+        'schedule_start',
+        'schedule_end',
+        'entries',
         'file_path',
         'file_name',
         'file_size',
@@ -60,9 +64,42 @@ class DtrSubmission extends Model
         'viewed_at' => 'datetime',
         'date_in' => 'date',
         'date_out' => 'date',
+        'entries' => 'array',
         'reviewed_at' => 'datetime',
         'generated_dtr_deleted_at' => 'datetime',
     ];
+
+    /**
+     * Return normalized array of entries for both multi-entry and single-entry submissions.
+     *
+     * @return array<int, array{date_in: string, time_in: string, date_out: string, time_out: string, schedule_type: ?string, schedule_start: ?string, schedule_end: ?string}>
+     */
+    public function normalizedEntries(): array
+    {
+        if (is_array($this->entries) && count($this->entries) > 0) {
+            return array_values(array_map(function (array $entry): array {
+                return [
+                    'date_in' => (string) ($entry['date_in'] ?? optional($this->date_in)->toDateString() ?? ''),
+                    'time_in' => (string) ($entry['time_in'] ?? $this->time_in ?? ''),
+                    'date_out' => (string) ($entry['date_out'] ?? optional($this->date_out)->toDateString() ?? ''),
+                    'time_out' => (string) ($entry['time_out'] ?? $this->time_out ?? ''),
+                    'schedule_type' => filled($entry['schedule_type'] ?? null) ? (string) $entry['schedule_type'] : $this->schedule_type,
+                    'schedule_start' => filled($entry['schedule_start'] ?? null) ? (string) $entry['schedule_start'] : $this->schedule_start,
+                    'schedule_end' => filled($entry['schedule_end'] ?? null) ? (string) $entry['schedule_end'] : $this->schedule_end,
+                ];
+            }, $this->entries));
+        }
+
+        return [[
+            'date_in' => optional($this->date_in)->toDateString() ?? (string) $this->getRawOriginal('date_in'),
+            'time_in' => (string) ($this->time_in ?? ''),
+            'date_out' => optional($this->date_out)->toDateString() ?? (string) $this->getRawOriginal('date_out'),
+            'time_out' => (string) ($this->time_out ?? ''),
+            'schedule_type' => $this->schedule_type,
+            'schedule_start' => $this->schedule_start,
+            'schedule_end' => $this->schedule_end,
+        ]];
+    }
 
     public function submittedByEmployee(): BelongsTo
     {

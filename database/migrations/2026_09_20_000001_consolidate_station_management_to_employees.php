@@ -132,11 +132,17 @@ return new class extends Migration
             Schema::table('dtr_change_requests', function (Blueprint $table): void {
                 $table->dropForeign(['assigned_sic_rc_account_id']);
                 $table->dropForeign(['reviewed_by_sic_rc_account_id']);
+                if (Schema::hasIndex('dtr_change_requests', 'dtr_change_requests_assigned_sic_rc_account_id_status_index')) {
+                    $table->dropIndex('dtr_change_requests_assigned_sic_rc_account_id_status_index');
+                }
                 $table->dropColumn(['assigned_sic_rc_account_id', 'reviewed_by_sic_rc_account_id']);
             });
 
             Schema::table('dtr_submissions', function (Blueprint $table): void {
                 $table->dropForeign(['sic_rc_account_id']);
+                if (Schema::hasIndex('dtr_submissions', 'dtr_submissions_sic_rc_account_id_created_at_index')) {
+                    $table->dropIndex('dtr_submissions_sic_rc_account_id_created_at_index');
+                }
                 $table->dropColumn('sic_rc_account_id');
             });
 

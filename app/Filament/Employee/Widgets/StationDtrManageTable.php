@@ -65,7 +65,7 @@ class StationDtrManageTable extends DtrManageTable
                     ->icon('heroicon-m-chevron-down')
                     ->button(),
             ])
-            ->description('Employee-visible D.T.R preview records managed by Station Manager. These records do not affect HR payroll until HR performs the official import/process.');
+            ->description('Synchronized station D.T.R records managed by authorized station managers. Approved attendance and overtime updates are automatically reflected in the HR Panel.');
     }
 
     protected function getDtrQuery(): Builder

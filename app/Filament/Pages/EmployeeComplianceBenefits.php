@@ -8,7 +8,6 @@ use App\Models\EmployeeDeduction;
 use App\Services\EmployeeDeductionService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Actions\Action;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -19,6 +18,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -68,23 +68,15 @@ class EmployeeComplianceBenefits extends Page implements HasForms
     protected function getFormSchema(): array
     {
         return [
-            Placeholder::make('employee_summary')
-                ->hiddenLabel()
-                ->content(fn (): HtmlString => new HtmlString(
-                    '<div style="display:grid;gap:4px;">'
-                    .'<div style="font-weight:700;">'.e($this->employee?->company_id.' - '.$this->employee?->full_name).'</div>'
-                    .'<div style="color:#64748b;font-size:13px;">'.e(($this->employee?->designation?->title ?: 'No designation').' | '.($this->employee?->branch?->branch_name ?: 'No branch')).'</div>'
-                    .'</div>'
-                ))
-                ->columnSpanFull(),
-
             Fieldset::make('Company Deductions')
                 ->schema(fn (): array => $this->employeeDeductionFields(Deduction::CATEGORY_COMPANY))
-                ->columns(1),
+                ->columns(['default' => 1, 'md' => 2])
+                ->columnSpanFull(),
 
             Fieldset::make('Remittances')
                 ->schema(fn (): array => $this->employeeDeductionFields(Deduction::CATEGORY_REMITTANCE))
-                ->columns(1),
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
+                ->columnSpanFull(),
 
             Fieldset::make('Other Deductions')
                 ->schema(fn (Get $get): array => [
@@ -100,24 +92,32 @@ class EmployeeComplianceBenefits extends Page implements HasForms
 
                     ...$this->employeeDeductionFields(Deduction::CATEGORY_OTHER, $get('other_deduction_ids') ?? []),
                 ])
-                ->columns(1),
+                ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
+                ->columnSpanFull(),
         ];
     }
 
     #[Override]
-    protected function getHeaderActions(): array
+    public function getHeading(): string
     {
-        return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => $this->getReturnUrl()),
+        return '';
+    }
 
-            Action::make('save')
-                ->label('Save Deductions')
-                ->icon(Heroicon::Check)
-                ->action('save'),
-        ];
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    public function returnLink(): string
+    {
+        return $this->getReturnUrl();
     }
 
     protected function getReturnUrl(): string
@@ -264,9 +264,12 @@ class EmployeeComplianceBenefits extends Page implements HasForms
             ->map(fn (Deduction $deduction): Group => Group::make([
                 Placeholder::make("deduction_{$deduction->id}_details")
                     ->hiddenLabel()
+                    ->columnSpanFull()
                     ->content(fn (): HtmlString => new HtmlString(
-                        '<div style="font-weight:700;">'.e($deduction->title).'</div>'
-                        .'<div style="color:#64748b;font-size:12px;">'.e($deduction->description ?: 'No description').'</div>'
+                        '<div class="cb-row-title">'.e($deduction->title).'</div>'
+                        .($deduction->description && strcasecmp(trim($deduction->description), trim($deduction->title)) !== 0
+                            ? '<div class="cb-row-desc">'.e($deduction->description).'</div>'
+                            : '')
                     )),
 
                 TextInput::make("deductions.{$deduction->id}.amount")
@@ -293,10 +296,9 @@ class EmployeeComplianceBenefits extends Page implements HasForms
                     ->numeric()
                     ->minValue(0)
                     ->visible(fn (Get $get): bool => $get("deductions.{$deduction->id}.term_type") === Deduction::TERM_FIXED),
-            ])->columns([
-                'default' => 1,
-                'md' => 5,
-            ]))
+            ])
+                ->columns(2)
+                ->extraAttributes(['class' => 'cb-row']))
             ->all();
     }
 

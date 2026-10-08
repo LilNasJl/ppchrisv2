@@ -65,6 +65,11 @@ trait HasPublicUuid
     protected function hasPublicUuidColumn(): bool
     {
         $connection = $this->getConnectionName() ?: config('database.default');
+
+        if (app()->runningUnitTests()) {
+            return Schema::connection($connection)->hasColumn($this->getTable(), 'uuid');
+        }
+
         $cacheKey = $connection.'.'.$this->getTable();
 
         return static::$publicUuidColumnCache[$cacheKey] ??= Schema::connection($connection)

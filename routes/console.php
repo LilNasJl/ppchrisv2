@@ -57,6 +57,15 @@ Artisan::command('dtr:recalculate-daily {--period=}', function (DtrDailyAggregat
     $this->info("Recalculated {$groups} employee-day D.T.R group(s){$scope}.");
 })->purpose('Recalculate combined daily Regular attendance metrics');
 
+Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', function (\App\Services\DtrSynchronizationService $service): void {
+    $branchId = filled($this->option('branch')) ? (int) $this->option('branch') : null;
+    $periodId = filled($this->option('period')) ? (int) $this->option('period') : null;
+    $includeLocked = (bool) $this->option('include-locked');
+
+    $count = $service->reconcileUnsyncedRecords($branchId, $periodId, 'artisan_sync_station', $includeLocked);
+    $this->info("Synchronized {$count} station D.T.R record(s) to official HR D.T.R.");
+})->purpose('Reconcile and synchronize all station D.T.R records to the official HR D.T.R table');
+
 Artisan::command('auth:sync-masteradmin', function (): void {
     $account = \App\Models\User::syncMasterAdminFromConfig();
 

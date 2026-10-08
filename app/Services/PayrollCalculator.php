@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
+use App\Models\HolidayEmployeeExclusion;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodBranchExclusion;
@@ -90,10 +91,114 @@ class PayrollCalculator
 
     protected function liveRows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
-        return $this->employeesForPeriod($period, $branchId)
+        $employees = $this->employeesForPeriod($period, $branchId)
             ->get()
-            ->values()
+            ->values();
+
+        $this->preloadEmployeesForPeriod($employees, $period);
+
+        return $employees
             ->map(fn (Employee $employee, int $index): array => $this->row($employee, $period, $index + 1));
+    }
+
+    /**
+     * Batch-preload all period-specific payroll data onto a collection of Employee models
+     * to avoid N+1 queries when computing rows across a branch or full payroll period.
+     *
+     * @param  Collection<int, Employee>  $employees
+     */
+    public function preloadEmployeesForPeriod(Collection $employees, PayrollPeriod $period): void
+    {
+        if ($employees->isEmpty()) {
+            return;
+        }
+
+        $employeeIds = $employees
+            ->pluck('id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($employeeIds->isEmpty()) {
+            return;
+        }
+
+        $settings = PayrollCalculationSetting::forPeriod($period);
+        $defaultDeductions = app(EmployeeDeductionService::class)->defaultDeductions();
+
+        $branchIds = $employees
+            ->pluck('branch_id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        $fingerprintIds = $employees
+            ->map(fn (Employee $employee): string => (string) ($employee->fingerprint_id ?: $employee->uid))
+            ->filter(fn (string $fp): bool => $fp !== '')
+            ->unique()
+            ->values();
+
+        $dtrsByBranchAndFp = ($branchIds->isNotEmpty() && $fingerprintIds->isNotEmpty())
+            ? Dtr::query()
+                ->with(['holiday.type'])
+                ->where('payroll_period_id', $period->id)
+                ->whereIn('branch_id', $branchIds->all())
+                ->whereIn('fingerprint_id', $fingerprintIds->all())
+                ->get()
+                ->groupBy(fn (Dtr $dtr): string => (int) $dtr->branch_id.'|'.(string) $dtr->fingerprint_id)
+            : collect();
+
+        $adjustmentsByEmployee = PayrollPeriodEmployeeAdjustment::query()
+            ->where('payroll_period_id', $period->id)
+            ->whereIn('employee_id', $employeeIds->all())
+            ->get()
+            ->keyBy(fn (PayrollPeriodEmployeeAdjustment $adj): int => (int) $adj->employee_id);
+
+        $loansByEmployee = EmployeeLoan::query()
+            ->with(['amortizationStartPayrollPeriod', 'postedPayments'])
+            ->whereIn('employee_id', $employeeIds->all())
+            ->whereIn('status', [EmployeeLoan::STATUS_ACTIVE, EmployeeLoan::STATUS_PAID])
+            ->get()
+            ->groupBy(fn (EmployeeLoan $loan): int => (int) $loan->employee_id);
+
+        $exclusionsByEmployee = HolidayEmployeeExclusion::query()
+            ->whereIn('employee_id', $employeeIds->all())
+            ->get()
+            ->groupBy(fn (HolidayEmployeeExclusion $ex): int => (int) $ex->employee_id);
+
+        $holidaysByBranch = [];
+
+        if (filled($period->date_start) && filled($period->date_end) && $branchIds->isNotEmpty()) {
+            $holidaysByBranch = app(HolidayResolver::class)->holidaysForRangeByBranches(
+                $period->date_start,
+                $period->date_end,
+                $branchIds->all(),
+            );
+        }
+
+        foreach ($employees as $employee) {
+            $empId = (int) $employee->id;
+            $fpId = (string) ($employee->fingerprint_id ?: $employee->uid);
+            $dtrKey = (int) $employee->branch_id.'|'.$fpId;
+
+            $employee->setRelation('preloadedPayrollSettings', $settings);
+            $employee->setRelation('preloadedDefaultDeductions', $defaultDeductions);
+            $employee->setRelation(
+                'preloadedDtrs',
+                (filled($fpId) && filled($employee->branch_id))
+                    ? ($dtrsByBranchAndFp->get($dtrKey) ?? collect())
+                    : collect()
+            );
+            $employee->setRelation('preloadedPayrollAdjustment', $adjustmentsByEmployee->get($empId));
+            $employee->setRelation('preloadedPayrollLoans', $loansByEmployee->get($empId) ?? collect());
+            $employee->setRelation('preloadedHolidayExclusions', $exclusionsByEmployee->get($empId) ?? collect());
+
+            if (isset($holidaysByBranch[(int) $employee->branch_id])) {
+                $employee->setRelation('preloadedBranchHolidays', $holidaysByBranch[(int) $employee->branch_id]);
+            }
+        }
     }
 
     public function includedEmployeeIds(PayrollPeriod $period, ?int $branchId = null): Collection
@@ -211,8 +316,12 @@ class PayrollCalculator
     {
         $employee->loadMissing(['designation', 'department', 'branch', 'employeeDeductions.deduction']);
 
-        $settings = PayrollCalculationSetting::forPeriod($period);
-        $dtrs = $this->finalizedDtrs($this->dtrs($employee, $period));
+        /** @var PayrollCalculationSetting $settings */
+        $settings = $employee->relationLoaded('preloadedPayrollSettings')
+            ? $employee->getRelation('preloadedPayrollSettings')
+            : PayrollCalculationSetting::forPeriod($period);
+
+        $dtrs = $this->finalizedDtrs($this->dtrs($employee, $period), $employee, $period);
         $rateType = $this->rateType($employee);
         $isDaily = $rateType === 'Daily';
         $workDaysPerMonth = $settings->divisor('regular_work_days_per_month');
@@ -458,6 +567,10 @@ class PayrollCalculator
 
     protected function dtrs(Employee $employee, PayrollPeriod $period): Collection
     {
+        if ($employee->relationLoaded('preloadedDtrs')) {
+            return $employee->getRelation('preloadedDtrs') ?? collect();
+        }
+
         $fingerprintId = $employee->fingerprint_id ?: $employee->uid;
 
         if (blank($fingerprintId) || blank($employee->branch_id)) {
@@ -472,11 +585,56 @@ class PayrollCalculator
             ->get();
     }
 
-    protected function finalizedDtrs(Collection $dtrs): Collection
+    protected function finalizedDtrs(Collection $dtrs, ?Employee $employee = null, ?PayrollPeriod $period = null): Collection
     {
-        return $dtrs
+        $finalized = $dtrs
             ->reject(fn (Dtr $dtr): bool => $dtr->requiresAttendanceApproval())
             ->values();
+
+        if ($employee && $period) {
+            return $this->syncDtrHolidaysFromCalendar($employee, $period, $finalized);
+        }
+
+        return $finalized;
+    }
+
+    protected function syncDtrHolidaysFromCalendar(Employee $employee, PayrollPeriod $period, Collection $dtrs): Collection
+    {
+        if ($dtrs->isEmpty()) {
+            return $dtrs;
+        }
+
+        /** @var Collection<string, \App\Models\Holiday>|null $branchHolidays */
+        $branchHolidays = $employee->relationLoaded('preloadedBranchHolidays')
+            ? $employee->getRelation('preloadedBranchHolidays')
+            : ((filled($period->date_start) && filled($period->date_end) && filled($employee->branch_id))
+                ? app(HolidayResolver::class)->holidaysForRange($period->date_start, $period->date_end, (int) $employee->branch_id)
+                : null);
+
+        if (! $branchHolidays || $branchHolidays->isEmpty()) {
+            return $dtrs;
+        }
+
+        foreach ($dtrs as $dtr) {
+            if ((bool) $dtr->is_holiday || (bool) $dtr->holiday_excluded || blank($dtr->date_in)) {
+                continue;
+            }
+
+            $dateKey = Carbon::parse($dtr->date_in)->toDateString();
+            $holiday = $branchHolidays->get($dateKey);
+
+            if (! $holiday) {
+                continue;
+            }
+
+            $dtr->is_holiday = true;
+            $dtr->holiday_id = $holiday->id;
+            $dtr->holiday_type = $holiday->type?->type;
+            $dtr->holiday_rate = $holiday->type?->rate;
+            $dtr->setRelation('holiday', $holiday);
+        }
+
+        return $dtrs;
     }
 
     protected function rateType(Employee $employee): string
@@ -709,9 +867,19 @@ class PayrollCalculator
             ->unique()
             ->values();
 
+        $preloadedBranchHolidays = $employee->relationLoaded('preloadedBranchHolidays')
+            ? $employee->getRelation('preloadedBranchHolidays')
+            : null;
+
         return $this->money(
             app(HolidayEntitlementService::class)
-                ->regularHolidaysForEmployeeRange($employee, $period->date_start, $period->date_end, $employee->branch_id)
+                ->regularHolidaysForEmployeeRange(
+                    $employee,
+                    $period->date_start,
+                    $period->date_end,
+                    $employee->branch_id,
+                    $preloadedBranchHolidays,
+                )
                 ->reject(fn ($holiday): bool => $dtrDates->contains((string) $holiday->occurrence_date))
                 ->count() * $ratePerDay
         );
@@ -741,7 +909,11 @@ class PayrollCalculator
             ->mapWithKeys(fn (string $title, string $key): array => [$this->normalizeTitle($title) => $key])
             ->all();
 
-        foreach (app(EmployeeDeductionService::class)->activeEmployeeDeductions($employee) as $employeeDeduction) {
+        $defaultDeductions = $employee->relationLoaded('preloadedDefaultDeductions')
+            ? $employee->getRelation('preloadedDefaultDeductions')
+            : null;
+
+        foreach (app(EmployeeDeductionService::class)->activeEmployeeDeductions($employee, $defaultDeductions) as $employeeDeduction) {
             $title = $this->normalizeTitle((string) $employeeDeduction->deduction?->title);
             $amount = $this->money($employeeDeduction->amount ?? 0);
 
@@ -769,6 +941,10 @@ class PayrollCalculator
 
     protected function payrollAdjustment(Employee $employee, PayrollPeriod $period): ?PayrollPeriodEmployeeAdjustment
     {
+        if ($employee->relationLoaded('preloadedPayrollAdjustment')) {
+            return $employee->getRelation('preloadedPayrollAdjustment');
+        }
+
         return PayrollPeriodEmployeeAdjustment::query()
             ->where('payroll_period_id', $period->id)
             ->where('employee_id', $employee->id)
@@ -777,9 +953,18 @@ class PayrollCalculator
 
     protected function loanPaymentDeduction(Employee $employee, PayrollPeriod $period): float
     {
+        if ($employee->relationLoaded('preloadedPayrollLoans')) {
+            /** @var Collection<int, EmployeeLoan> $loans */
+            $loans = $employee->getRelation('preloadedPayrollLoans');
+
+            return $this->money(
+                $loans->sum(fn (EmployeeLoan $loan): float => $loan->paymentAmountForPeriod($period))
+            );
+        }
+
         return $this->money(
             EmployeeLoan::query()
-                ->with(['amortizationStartPayrollPeriod'])
+                ->with(['amortizationStartPayrollPeriod', 'postedPayments'])
                 ->where('employee_id', $employee->id)
                 ->whereIn('status', [EmployeeLoan::STATUS_ACTIVE, EmployeeLoan::STATUS_PAID])
                 ->get()

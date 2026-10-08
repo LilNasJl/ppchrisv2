@@ -275,6 +275,10 @@ class OnFieldDtrWorkflowTest extends TestCase
             $table->time('time_in')->nullable();
             $table->date('date_out')->nullable();
             $table->time('time_out')->nullable();
+            $table->string('schedule_type', 50)->nullable();
+            $table->time('schedule_start')->nullable();
+            $table->time('schedule_end')->nullable();
+            $table->json('entries')->nullable();
             $table->string('file_path')->nullable();
             $table->string('file_name')->nullable();
             $table->string('mime_type')->nullable();
@@ -290,10 +294,101 @@ class OnFieldDtrWorkflowTest extends TestCase
             $table->timestamp('reviewed_at')->nullable();
             $table->unsignedBigInteger('generated_dtr_id')->nullable();
             $table->unsignedBigInteger('generated_visible_dtr_id')->nullable();
+            $table->timestamp('generated_dtr_deleted_at')->nullable();
+            $table->unsignedBigInteger('generated_dtr_deleted_by_user_id')->nullable();
             $table->string('employee_name_snapshot')->nullable();
             $table->string('employee_company_id_snapshot')->nullable();
             $table->string('branch_name_snapshot')->nullable();
             $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('deductions', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->decimal('amount', 10, 2)->default(0);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('employee_deductions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('deduction_id');
+            $table->decimal('custom_amount', 10, 2)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('loans', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->string('type')->nullable();
+            $table->decimal('amount', 10, 2)->default(0);
+            $table->decimal('amortization', 10, 2)->default(0);
+            $table->string('status')->default('active');
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('leaves', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->string('leave_type')->nullable();
+            $table->date('date_from')->nullable();
+            $table->date('date_to')->nullable();
+            $table->string('status')->default('approved');
+            $table->boolean('is_paid')->default(true);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_period_branch_exclusions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id');
+            $table->unsignedBigInteger('branch_id');
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_period_employee_exclusions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id');
+            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_period_employee_adjustments', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id');
+            $table->unsignedBigInteger('employee_id');
+            $table->decimal('allowance', 10, 2)->nullable();
+            $table->decimal('salary_adjustment', 10, 2)->nullable();
+            $table->string('salary_adjustment_type', 20)->nullable();
+            $table->decimal('cash_advance', 10, 2)->nullable();
+            $table->decimal('loan_payment', 10, 2)->nullable();
+            $table->decimal('tax', 10, 2)->nullable();
+            $table->json('deduction_overrides')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('employee_loans', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->string('loan_type')->nullable();
+            $table->decimal('principal_amount', 10, 2)->default(0);
+            $table->decimal('amortization_amount', 10, 2)->default(0);
+            $table->unsignedBigInteger('amortization_start_payroll_period_id')->nullable();
+            $table->string('status')->default('active');
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('employee_loan_payments', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_loan_id');
+            $table->unsignedBigInteger('payroll_period_id')->nullable();
+            $table->decimal('amount', 10, 2)->default(0);
+            $table->string('status')->default('posted');
             $table->timestamps();
         });
 
@@ -441,6 +536,182 @@ class OnFieldDtrWorkflowTest extends TestCase
             'employee_id' => $employee->id,
             'date_in' => '2026-08-20',
         ]);
+    }
+
+    public function test_multi_entry_on_field_dtr_submission_with_schedule_fields_and_automatic_payroll_calculation(): void
+    {
+        [$branch, $employee, $period] = $this->context();
+        $reviewer = User::factory()->create(['role' => 'hr']);
+
+        $submission = app(OnFieldDtrService::class)->submit($employee, [
+            'payroll_period_id' => $period->id,
+            'entries' => [
+                [
+                    'date_in' => '2026-08-18',
+                    'time_in' => '08:00:00',
+                    'date_out' => '2026-08-18',
+                    'time_out' => '17:00:00',
+                    'schedule_type' => 'Regular',
+                    'schedule_start' => '08:00:00',
+                    'schedule_end' => '17:00:00',
+                ],
+                [
+                    'date_in' => '2026-08-19',
+                    'time_in' => '09:00:00',
+                    'date_out' => '2026-08-19',
+                    'time_out' => '18:00:00',
+                    'schedule_type' => 'Flexible',
+                    'schedule_start' => '09:00:00',
+                    'schedule_end' => '18:00:00',
+                ],
+            ],
+            'proof_file' => 'dtr-proof-submissions/on-field.pdf',
+            'description' => 'Two-day field inspection assignment.',
+        ]);
+
+        $this->assertCount(2, $submission->normalizedEntries());
+        $this->assertSame('Regular', $submission->schedule_type);
+        $this->assertSame('08:00:00', $submission->schedule_start);
+        $this->assertSame('17:00:00', $submission->schedule_end);
+
+        $approved = app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Verified multi-day field log.');
+
+        $this->assertSame(DtrSubmission::STATUS_APPROVED, $approved->status);
+        $this->assertDatabaseCount('dtrs', 2);
+        $this->assertDatabaseCount('employee_visible_dtrs', 2);
+
+        $this->assertDatabaseHas('dtrs', [
+            'on_field_dtr_submission_id' => $submission->id,
+            'date_in' => '2026-08-18',
+            'schedule_type' => 'Regular',
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '17:00:00',
+        ]);
+
+        $this->assertDatabaseHas('dtrs', [
+            'on_field_dtr_submission_id' => $submission->id,
+            'date_in' => '2026-08-19',
+            'schedule_type' => 'Flexible',
+            'schedule_start' => '09:00:00',
+            'schedule_end' => '18:00:00',
+        ]);
+
+        // Verify automatic real-time payroll calculation picks up both approved On-Field DTR days
+        $row = app(\App\Services\PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
+        $this->assertEquals(2.0, (float) $row['days_worked']);
+        $this->assertEquals(1000.0, (float) $row['gross_pay']);
+        $this->assertEquals(1000.0, (float) $row['net_pay']);
+    }
+
+    public function test_multi_entry_on_field_dtr_requires_schedule_type_start_and_end_per_entry(): void
+    {
+        [, $employee, $period] = $this->context();
+
+        $this->expectException(ValidationException::class);
+
+        app(OnFieldDtrService::class)->submit($employee, [
+            'payroll_period_id' => $period->id,
+            'entries' => [
+                [
+                    'date_in' => '2026-08-18',
+                    'time_in' => '08:00:00',
+                    'date_out' => '2026-08-18',
+                    'time_out' => '17:00:00',
+                    // Missing schedule_type, schedule_start, schedule_end
+                ],
+            ],
+            'proof_file' => 'dtr-proof-submissions/on-field.pdf',
+            'description' => 'Incomplete entry schedule.',
+        ]);
+    }
+
+    public function test_locked_payroll_period_blocks_all_dtr_crud_operations(): void
+    {
+        [$branch, $employee, $period] = $this->context();
+        $reviewer = User::factory()->create(['role' => 'hr']);
+
+        $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
+        app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Approved before lock.');
+
+        $dtr = \App\Models\Dtr::query()->firstOrFail();
+        $visibleDtr = \App\Models\EmployeeVisibleDtr::query()->firstOrFail();
+
+        // Lock the payroll period
+        $period->update(['is_locked' => true]);
+
+        // 1. Updating existing DTR in locked period must be rejected
+        try {
+            $dtr->update(['comment' => 'Attempted retroactive edit']);
+            $this->fail('Expected DomainException when updating DTR in a locked payroll period.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('locked', strtolower($e->getMessage()));
+        }
+
+        // 2. Updating existing EmployeeVisibleDtr in locked period must be rejected
+        try {
+            $visibleDtr->update(['comment' => 'Attempted retroactive visible edit']);
+            $this->fail('Expected DomainException when updating EmployeeVisibleDtr in a locked payroll period.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('locked', strtolower($e->getMessage()));
+        }
+
+        // 3. Deleting DTR in locked period must be rejected
+        try {
+            $dtr->delete();
+            $this->fail('Expected DomainException when deleting DTR in a locked payroll period.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('locked', strtolower($e->getMessage()));
+        }
+
+        // 4. Creating new DTR in locked period must be rejected
+        try {
+            \App\Models\Dtr::query()->create([
+                'payroll_period_id' => $period->id,
+                'branch_id' => $branch->id,
+                'fingerprint_id' => $employee->fingerprint_id,
+                'date_in' => '2026-08-21',
+                'time_in' => '08:00:00',
+                'date_out' => '2026-08-21',
+                'time_out' => '17:00:00',
+            ]);
+            $this->fail('Expected DomainException when creating DTR in a locked payroll period.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('locked', strtolower($e->getMessage()));
+        }
+    }
+
+    public function test_employee_portal_payroll_hides_unlocked_periods_and_only_exposes_locked_periods(): void
+    {
+        [$branch, $employee, $unlockedPeriod] = $this->context();
+        $user = User::factory()->create([
+            'role' => 'employee',
+            'employee_id' => $employee->id,
+        ]);
+        $employee->update(['user_id' => $user->id]);
+
+        $lockedPeriod = PayrollPeriod::query()->create([
+            'title' => 'Jul 26 - Aug 10, 2026',
+            'date_start' => '2026-07-26',
+            'date_end' => '2026-08-10',
+            'date_payout' => '2026-08-15',
+            'description' => 'Locked finalized period',
+            'is_locked' => true,
+        ]);
+
+        $this->actingAs($user);
+
+        $page = new \App\Filament\Employee\Pages\Payroll();
+        $page->mount();
+
+        // Default mounted period must be the locked period, never the unlocked period
+        $this->assertSame((string) $lockedPeriod->id, $page->period_id);
+        $this->assertSame($lockedPeriod->id, $page->selectedPeriod?->id);
+
+        // Attempting to switch period_id to the unlocked period must be rejected
+        $page->updatedPeriodId($unlockedPeriod->id);
+        $this->assertNull($page->period_id);
+        $this->assertNull($page->selectedPeriod);
+        $this->assertNull($page->payrollRow);
     }
 
     private function context(): array

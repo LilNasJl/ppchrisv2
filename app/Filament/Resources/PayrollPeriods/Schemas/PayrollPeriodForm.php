@@ -15,31 +15,42 @@ class PayrollPeriodForm
     {
         return $schema
             ->components([
-                Section::make('Payroll Period')
+                Section::make('Payroll Period Details')
+                    ->description('Specify the dates for this cutoff cycle and configure period settings.')
+                    ->icon('heroicon-o-calendar-days')
                     ->schema([
                         TextInput::make('title')
+                            ->label('Period Title')
+                            ->placeholder('e.g., Oct 11 - 25, 2026')
                             ->required()
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->columnSpanFull(),
 
                         DatePicker::make('date_start')
-                            ->label('Date Start')
-                            ->required(),
+                            ->label('Cutoff Start Date')
+                            ->required()
+                            ->native(false),
 
                         DatePicker::make('date_end')
-                            ->label('Date End')
-                            ->required(),
+                            ->label('Cutoff End Date')
+                            ->required()
+                            ->native(false),
 
                         DatePicker::make('date_payout')
-                            ->label('Date Payout')
-                            ->required(),
+                            ->label('Scheduled Payout Date')
+                            ->required()
+                            ->native(false)
+                            ->helperText('Scheduled date for compensation payout.'),
 
                         Toggle::make('is_locked')
-                            ->label('Locked')
-                            ->helperText('Turn this on to restrict D.T.R changes for this payroll period. It can be turned off again when corrections are needed.')
+                            ->label('Lock Payroll Period')
+                            ->helperText('Restrict DTR changes and freeze calculation for this cutoff period.')
                             ->default(false),
 
                         Textarea::make('description')
-                            ->rows(4)
+                            ->label('Description / Notes')
+                            ->placeholder('Optional notes or remarks regarding this payroll cycle...')
+                            ->rows(3)
                             ->columnSpanFull(),
                     ])
                     ->columns(2),

@@ -373,35 +373,53 @@
         @endforeach
     </section>
 
+    @php
+        $entries = $submission->normalizedEntries();
+    @endphp
+
     <section class="ofd-section">
         <div class="ofd-heading">
             <div class="ofd-heading-icon">
                 <x-filament::icon icon="heroicon-o-clock" class="ofd-icon-svg" />
             </div>
             <div>
-                <h2 class="ofd-section-title">DTR Entries</h2>
-                <p class="ofd-section-copy">Submitted attendance interval for review.</p>
+                <h2 class="ofd-section-title">DTR Entries ({{ count($entries) }})</h2>
+                <p class="ofd-section-copy">Submitted attendance intervals and expected schedule details for review.</p>
             </div>
         </div>
 
-        <div class="ofd-entry-grid">
-            @foreach ([
-                ['title' => 'Time In', 'icon' => 'heroicon-o-arrow-right-on-rectangle', 'date' => $submission->date_in?->format('M d, Y'), 'time' => filled($submission->time_in) ? \Carbon\Carbon::parse($submission->time_in)->format('h:i A') : null],
-                ['title' => 'Time Out', 'icon' => 'heroicon-o-arrow-left-on-rectangle', 'date' => $submission->date_out?->format('M d, Y'), 'time' => filled($submission->time_out) ? \Carbon\Carbon::parse($submission->time_out)->format('h:i A') : null],
-            ] as $entry)
+        <div class="ofd-entry-grid" style="grid-template-columns: 1fr;">
+            @foreach ($entries as $idx => $entry)
+                @php
+                    $fmtDateIn = filled($entry['date_in'] ?? null) ? \Carbon\Carbon::parse($entry['date_in'])->format('M d, Y') : 'Not available';
+                    $fmtTimeIn = filled($entry['time_in'] ?? null) ? \Carbon\Carbon::parse($entry['time_in'])->format('h:i A') : 'Not available';
+                    $fmtDateOut = filled($entry['date_out'] ?? null) ? \Carbon\Carbon::parse($entry['date_out'])->format('M d, Y') : 'Not available';
+                    $fmtTimeOut = filled($entry['time_out'] ?? null) ? \Carbon\Carbon::parse($entry['time_out'])->format('h:i A') : 'Not available';
+                    $fmtSchedType = filled($entry['schedule_type'] ?? null) ? $entry['schedule_type'] : 'Auto / Branch Default';
+                    $fmtSchedStart = filled($entry['schedule_start'] ?? null) ? \Carbon\Carbon::parse($entry['schedule_start'])->format('h:i A') : '-';
+                    $fmtSchedEnd = filled($entry['schedule_end'] ?? null) ? \Carbon\Carbon::parse($entry['schedule_end'])->format('h:i A') : '-';
+                @endphp
                 <article class="ofd-entry-card">
                     <p class="ofd-entry-title">
-                        <x-filament::icon :icon="$entry['icon']" class="ofd-icon-svg" />
-                        {{ $entry['title'] }}
+                        <x-filament::icon icon="heroicon-o-calendar-days" class="ofd-icon-svg" />
+                        Entry #{{ $idx + 1 }} &mdash; {{ $fmtDateIn }}
                     </p>
-                    <div class="ofd-entry-values">
+                    <div class="ofd-entry-values" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
                         <div>
-                            <p class="ofd-label">Date</p>
-                            <p class="ofd-value">{{ $entry['date'] ?: 'Not available' }}</p>
+                            <p class="ofd-label">Time In</p>
+                            <p class="ofd-value">{{ $fmtDateIn }} &bull; {{ $fmtTimeIn }}</p>
                         </div>
                         <div>
-                            <p class="ofd-label">Time</p>
-                            <p class="ofd-value">{{ $entry['time'] ?: 'Not available' }}</p>
+                            <p class="ofd-label">Time Out</p>
+                            <p class="ofd-value">{{ $fmtDateOut }} &bull; {{ $fmtTimeOut }}</p>
+                        </div>
+                        <div>
+                            <p class="ofd-label">Sched Type</p>
+                            <p class="ofd-value">{{ $fmtSchedType }}</p>
+                        </div>
+                        <div>
+                            <p class="ofd-label">Sched Start / End</p>
+                            <p class="ofd-value">{{ $fmtSchedStart }} &ndash; {{ $fmtSchedEnd }}</p>
                         </div>
                     </div>
                 </article>

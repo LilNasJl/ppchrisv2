@@ -17,6 +17,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Group;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\On;
@@ -54,11 +55,46 @@ class PayrollByBranch extends Page implements HasForms
 
     public string $payroll_preset = 'summary';
 
+    protected ?PayrollPeriod $cachedSelectedPeriod = null;
+
+    protected ?string $cachedSelectedPeriodKey = null;
+
+    protected ?Branch $cachedSelectedBranch = null;
+
+    protected ?string $cachedSelectedBranchKey = null;
+
+    protected ?array $cachedBranchOptions = null;
+
+    protected ?string $cachedBranchOptionsKey = null;
+
+    protected ?Collection $cachedRows = null;
+
+    protected ?string $cachedRowsKey = null;
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    #[Override]
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     public function mount(): void
     {
-        $this->period_id = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $resolvedPeriodId = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
+        $this->period_id = filled($resolvedPeriodId) ? (string) $resolvedPeriodId : null;
         $this->branch_id = $this->resolveBranchId();
-        $this->period_display = PayrollPeriod::query()->find($this->period_id)?->title ?? 'No payroll period selected';
+        $this->period_display = $this->selectedPeriod?->title ?? 'No payroll period selected';
         $this->payroll_search = str(request()->query('payrollSearch', ''))->limit(120)->toString();
         $this->payroll_page = max(1, request()->integer('payrollPage', 1));
         $requestedPerPage = request()->integer('payrollPerPage', 10);
@@ -89,7 +125,7 @@ class PayrollByBranch extends Page implements HasForms
 
                 Select::make('branch_id')
                     ->label('Branch')
-                    ->options(fn (): array => app(PayrollCalculator::class)->branchOptionsForPeriod($this->selectedPeriod))
+                    ->options(fn (): array => $this->branchOptions())
                     ->searchable()
                     ->reactive(),
             ])
@@ -98,13 +134,147 @@ class PayrollByBranch extends Page implements HasForms
         ];
     }
 
+    /**
+     * @return Collection<int, PayrollPeriod>
+     */
+    public function payrollPeriods(): Collection
+    {
+        return PayrollPeriod::query()
+            ->newestFirst()
+            ->get();
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    public function branchOptions(): array
+    {
+        $key = (string) ($this->period_id ?? '');
+
+        if ($this->cachedBranchOptions !== null && $this->cachedBranchOptionsKey === $key) {
+            return $this->cachedBranchOptions;
+        }
+
+        $this->cachedBranchOptionsKey = $key;
+
+        return $this->cachedBranchOptions = app(PayrollCalculator::class)->branchOptionsForPeriod($this->selectedPeriod);
+    }
+
+    public function selectedBranch(): ?Branch
+    {
+        if (blank($this->branch_id)) {
+            return null;
+        }
+
+        $key = (string) $this->branch_id;
+
+        if ($this->cachedSelectedBranchKey === $key) {
+            return $this->cachedSelectedBranch;
+        }
+
+        $this->cachedSelectedBranchKey = $key;
+
+        return $this->cachedSelectedBranch = Branch::query()->find((int) $this->branch_id);
+    }
+
+    public function updatedPeriodId(): void
+    {
+        $this->cachedRows = null;
+        $this->cachedRowsKey = null;
+        $period = $this->selectedPeriod;
+        $this->period_display = $period?->title ?? 'No payroll period selected';
+
+        $branchOptions = $this->branchOptions();
+        if (! $this->branch_id || ! array_key_exists((int) $this->branch_id, $branchOptions)) {
+            $firstKey = array_key_first($branchOptions);
+            $this->branch_id = filled($firstKey) ? (string) $firstKey : null;
+        }
+
+        $this->payroll_page = 1;
+    }
+
+    public function updatedBranchId(): void
+    {
+        $this->cachedRows = null;
+        $this->cachedRowsKey = null;
+        $this->payroll_page = 1;
+    }
+
+    public function previousBranchId(): ?string
+    {
+        $keys = array_map('strval', array_keys($this->branchOptions()));
+        $index = array_search((string) $this->branch_id, $keys, true);
+
+        if ($index === false || $index <= 0) {
+            return null;
+        }
+
+        return $keys[$index - 1] ?? null;
+    }
+
+    public function nextBranchId(): ?string
+    {
+        $keys = array_map('strval', array_keys($this->branchOptions()));
+        $index = array_search((string) $this->branch_id, $keys, true);
+
+        if ($index === false || $index >= count($keys) - 1) {
+            return null;
+        }
+
+        return $keys[$index + 1] ?? null;
+    }
+
+    public function selectPreviousBranch(): void
+    {
+        $prev = $this->previousBranchId();
+        if (filled($prev)) {
+            $this->branch_id = $prev;
+            $this->payroll_page = 1;
+        }
+    }
+
+    public function selectNextBranch(): void
+    {
+        $next = $this->nextBranchId();
+        if (filled($next)) {
+            $this->branch_id = $next;
+            $this->payroll_page = 1;
+        }
+    }
+
+    public function setPreset(string $preset): void
+    {
+        if (! in_array($preset, ['summary', 'earnings', 'deductions', 'remittances', 'all'], true)) {
+            return;
+        }
+
+        $this->payroll_preset = $preset;
+        $this->dispatch('payroll-column-preset-changed', preset: $preset);
+    }
+
+    #[On('payroll-column-preset-changed')]
+    public function syncPresetState(string $preset): void
+    {
+        if (in_array($preset, ['summary', 'earnings', 'deductions', 'remittances', 'all'], true)) {
+            $this->payroll_preset = $preset;
+        }
+    }
+
     public function getSelectedPeriodProperty(): ?PayrollPeriod
     {
         if (blank($this->period_id)) {
             return null;
         }
 
-        return PayrollPeriod::query()->find($this->period_id);
+        $key = (string) $this->period_id;
+
+        if ($this->cachedSelectedPeriodKey === $key) {
+            return $this->cachedSelectedPeriod;
+        }
+
+        $this->cachedSelectedPeriodKey = $key;
+
+        return $this->cachedSelectedPeriod = PayrollPeriod::query()->find($this->period_id);
     }
 
     public function getRowsProperty(): Collection
@@ -113,13 +283,69 @@ class PayrollByBranch extends Page implements HasForms
             return collect();
         }
 
-        return app(PayrollCalculator::class)->rows($this->selectedPeriod, (int) $this->branch_id);
+        $key = $this->selectedPeriod->id.'|'.(int) $this->branch_id;
+
+        if ($this->cachedRows !== null && $this->cachedRowsKey === $key) {
+            return $this->cachedRows;
+        }
+
+        $this->cachedRowsKey = $key;
+
+        return $this->cachedRows = app(PayrollCalculator::class)->rows($this->selectedPeriod, (int) $this->branch_id);
+    }
+
+    /**
+     * @return array{employees_count: int, gross_pay: float, total_deductions: float, net_pay: float}
+     */
+    public function branchMetrics(): array
+    {
+        $rows = $this->rows;
+
+        return [
+            'employees_count' => $rows->count(),
+            'gross_pay' => (float) $rows->sum(fn (array $row): float => (float) ($row['gross_pay'] ?? 0)),
+            'total_deductions' => (float) $rows->sum(fn (array $row): float => (float) ($row['total_deductions'] ?? 0)),
+            'net_pay' => (float) $rows->sum(fn (array $row): float => (float) ($row['net_pay'] ?? 0)),
+        ];
+    }
+
+    public function returnUrl(): string
+    {
+        return Payroll::getUrl(array_filter([
+            'periodId' => $this->selectedPeriod?->publicKey(),
+            'branchId' => $this->selectedBranch()?->publicKey(),
+        ]));
+    }
+
+    public function payrollSummaryUrl(): ?string
+    {
+        return $this->selectedPeriod
+            ? PayrollSummary::getUrl(['periodId' => $this->selectedPeriod->publicKey()])
+            : null;
+    }
+
+    public function payrollCalculationUrl(): ?string
+    {
+        return $this->selectedPeriod
+            ? PayrollCalculation::getUrl(['periodId' => $this->selectedPeriod->publicKey()])
+            : null;
+    }
+
+    public function printUrl(): ?string
+    {
+        if (blank($this->period_id) || blank($this->branch_id)) {
+            return null;
+        }
+
+        return route('hr_tools.payroll_by_branch.print', [
+            'period_id' => $this->period_id,
+            'branch_id' => $this->branch_id,
+        ]);
     }
 
     protected function resolveBranchId(): ?string
     {
-        $selectedPeriod = filled($this->period_id) ? PayrollPeriod::query()->find($this->period_id) : null;
-        $branchOptions = app(PayrollCalculator::class)->branchOptionsForPeriod($selectedPeriod);
+        $branchOptions = $this->branchOptions();
         $requestedBranchId = Branch::resolvePublicId(request()->query('branchId'));
 
         if ($requestedBranchId && array_key_exists($requestedBranchId, $branchOptions)) {
@@ -134,7 +360,8 @@ class PayrollByBranch extends Page implements HasForms
     #[On('payroll-adjustment-updated')]
     public function refreshPayrollRows(): void
     {
-        // Re-render computed payroll rows after inline adjustments.
+        $this->cachedRows = null;
+        $this->cachedRowsKey = null;
     }
 
     public function exportExcel(): StreamedResponse
@@ -149,9 +376,7 @@ class PayrollByBranch extends Page implements HasForms
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => filled($this->period_id)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->selectedPeriod?->publicKey()])
-                    : Payroll::getUrl()),
+                ->url(fn (): string => $this->returnUrl()),
 
             Action::make('signatories')
                 ->label('Signatories')
@@ -237,7 +462,7 @@ class PayrollByBranch extends Page implements HasForms
     {
         $headers = app(PayrollCalculator::class)->payrollHeaders();
         $period = $this->selectedPeriod?->title ?? 'payroll';
-        $branch = Branch::query()->find($this->branch_id)?->branch_name ?? 'branch';
+        $branch = $this->selectedBranch()?->branch_name ?? 'branch';
         $filename = 'payroll-'.str($branch)->slug().'-'.str($period)->slug().'.xls';
 
         return response()->streamDownload(function () use ($headers): void {

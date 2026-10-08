@@ -42,6 +42,14 @@ class PayrollPeriod extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (PayrollPeriod $payrollPeriod): void {
+            if ($payrollPeriod->is_locked && (blank($payrollPeriod->description) || $payrollPeriod->description === 'Payroll currently running')) {
+                $payrollPeriod->description = 'Payroll not currently running';
+            } elseif (! $payrollPeriod->is_locked && (blank($payrollPeriod->description) || $payrollPeriod->description === 'Payroll not currently running')) {
+                $payrollPeriod->description = 'Payroll currently running';
+            }
+        });
+
         static::saved(function (PayrollPeriod $payrollPeriod): void {
             Dtr::query()
                 ->where('payroll_period_id', $payrollPeriod->id)

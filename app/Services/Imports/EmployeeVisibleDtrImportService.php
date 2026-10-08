@@ -7,10 +7,12 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use App\Services\DtrDayPartService;
+use App\Services\DtrSynchronizationService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -21,7 +23,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
     /**
      * @param  array<int, array<string, mixed>>  $rows
-     * @return array{total:int, successful:int, failed:int, skipped:int, batch_id:string, message:string, errors:array<int, array<string, mixed>>}
+     * @return array{total:int, successful:int, failed:int, skipped:int, already_existing:int, invalid:int, batch_id:string, message:string, summary:array<string, int>, errors:array<int, array<string, mixed>>}
      */
     public function importRows(array $rows, string $importName, ?string $fallbackBatchId = null): array
     {
@@ -32,8 +34,16 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             'successful' => 0,
             'failed' => 0,
             'skipped' => 0,
+            'already_existing' => 0,
+            'invalid' => 0,
             'batch_id' => $fallbackBatchId,
             'message' => 'No rows were imported.',
+            'summary' => [
+                'total_records_processed' => count($rows),
+                'newly_imported_records' => 0,
+                'skipped_already_existing_records' => 0,
+                'invalid_or_failed_records' => 0,
+            ],
             'errors' => [],
         ];
 
@@ -49,6 +59,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                 ];
             } catch (ValidationException $exception) {
                 $result['failed']++;
+                $result['invalid']++;
 
                 foreach (collect($exception->errors())->flatten()->all() ?: ['Unable to validate D.T.R row.'] as $message) {
                     $result['errors'][] = [
@@ -60,6 +71,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                 report($exception);
 
                 $result['failed']++;
+                $result['invalid']++;
                 $result['errors'][] = [
                     'row' => $rowNumber,
                     'message' => $exception->getMessage() ?: 'Unable to validate D.T.R row.',
@@ -70,92 +82,144 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         if ($result['errors'] !== []) {
             $result['message'] = 'Import cancelled. No D.T.R records were saved. Fix the listed rows and import again.';
 
-            return $result;
+            return $this->withSummary($result);
         }
 
         if ($validatedRows !== []) {
             $result['batch_id'] = $validatedRows[0]['data']['batch_id'];
         }
 
-        $pendingRecords = collect();
-        $rowsToImport = [];
-        $seenSourceRowHashes = [];
-        $sourceRowHashes = array_map(
-            fn (array $validatedRow): string => $this->buildSourceRowHash($validatedRow['data']),
-            $validatedRows,
-        );
-        $existingSourceRowHashes = $this->getExistingSourceRowHashes($sourceRowHashes);
+        return $this->withImportLock($validatedRows, $fallbackBatchId, function () use ($rows, $validatedRows, $importName, &$result): array {
+            $pendingRecords = collect();
+            $rowsToImport = [];
+            $seenSourceRowHashes = [];
+            $sourceRowHashes = array_map(
+                fn (array $validatedRow): string => $this->buildSourceRowHash($validatedRow['data']),
+                $validatedRows,
+            );
+            $existingSourceRowHashes = $this->getExistingSourceRowHashes($sourceRowHashes);
 
-        foreach ($validatedRows as $index => $validatedRow) {
-            $data = $validatedRow['data'];
-            $sourceRowHash = $sourceRowHashes[$index];
+            foreach ($validatedRows as $index => $validatedRow) {
+                $data = $validatedRow['data'];
+                $sourceRowHash = $sourceRowHashes[$index];
 
-            if (filled($sourceRowHash) && (isset($seenSourceRowHashes[$sourceRowHash]) || isset($existingSourceRowHashes[$sourceRowHash]))) {
-                $result['skipped']++;
+                if (filled($sourceRowHash) && (isset($seenSourceRowHashes[$sourceRowHash]) || isset($existingSourceRowHashes[$sourceRowHash]))) {
+                    $result['skipped']++;
+                    $result['already_existing']++;
 
-                continue;
+                    continue;
+                }
+
+                $metadata = $this->getImportMetadata($data, $importName);
+
+                if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
+                    $result['skipped']++;
+                    $result['already_existing']++;
+
+                    if (filled($sourceRowHash)) {
+                        $seenSourceRowHashes[$sourceRowHash] = true;
+                    }
+
+                    continue;
+                }
+
+                if ($this->hasBatchConflict(
+                    $data,
+                    $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
+                    $pendingRecords,
+                )) {
+                    $result['failed']++;
+                    $result['invalid']++;
+                    $result['errors'][] = [
+                        'row' => $validatedRow['row'],
+                        'message' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval, or an earlier punch remains open.',
+                    ];
+                }
+
+                $pendingRecords->push($this->makePendingRecord($data, $metadata));
+                $rowsToImport[] = $validatedRow;
+
+                if (filled($sourceRowHash)) {
+                    $seenSourceRowHashes[$sourceRowHash] = true;
+                }
             }
 
-            $metadata = $this->getImportMetadata($data, $importName);
-            $existing = $this->findExistingRecord($data, $metadata);
+            if ($result['errors'] !== []) {
+                $result['message'] = 'Import cancelled. No D.T.R records were saved. Fix the listed rows and import again.';
 
-            if ($this->hasConflictingDtr(
-                $data,
-                $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
-                $pendingRecords,
-                $existing?->getKey(),
-            )) {
-                $result['failed']++;
+                return $this->withSummary($result);
+            }
+
+            if ($rowsToImport === []) {
+                $result['message'] = 'No new D.T.R records were imported. Every decoded row was already imported.';
+
+                return $this->withSummary($result);
+            }
+
+            try {
+                DB::transaction(function () use ($rowsToImport, $importName, &$result): void {
+                    $savedIds = [];
+
+                    foreach ($rowsToImport as $validatedRow) {
+                        $saved = $this->saveValidatedRow($validatedRow['data'], $importName);
+
+                        if (! empty($saved['skipped'])) {
+                            $result['skipped']++;
+                            $result['already_existing']++;
+
+                            continue;
+                        }
+
+                        $result['successful']++;
+                        $savedIds[] = $saved['id'];
+                    }
+
+                    if ($savedIds !== [] && Schema::hasTable('dtrs')) {
+                        $visibleRecords = EmployeeVisibleDtr::query()->whereIn('id', $savedIds)->get();
+                        app(DtrSynchronizationService::class)->syncVisibleBatchToOfficial($visibleRecords);
+                    }
+                });
+
+                $result['message'] = $result['skipped'] > 0
+                    ? "D.T.R import completed and synchronized with HR. {$result['successful']} imported and {$result['skipped']} duplicate/existing row(s) skipped."
+                    : 'D.T.R import completed and synchronized with HR.';
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                $result['successful'] = 0;
+                $result['failed'] = count($rows) - $result['skipped'];
+                $result['message'] = 'Import failed. No employee-visible D.T.R records were saved.';
                 $result['errors'][] = [
-                    'row' => $validatedRow['row'],
-                    'message' => 'A conflicting D.T.R, leave, or absence entry overlaps this punch interval, or an earlier punch remains open.',
+                    'row' => 0,
+                    'message' => $exception->getMessage() ?: 'Unable to save D.T.R import.',
                 ];
             }
 
-            $pendingRecords->push($this->makePendingRecord($data, $metadata));
-            $rowsToImport[] = $validatedRow;
+            return $this->withSummary($result);
+        });
+    }
 
-            if (filled($sourceRowHash)) {
-                $seenSourceRowHashes[$sourceRowHash] = true;
-            }
-        }
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array{id:int, batch_id:?string}
+     */
+    public function importRow(array $row, string $importName, string $fallbackBatchId): array
+    {
+        $data = $this->validateRow($row, $fallbackBatchId);
 
-        if ($result['errors'] !== []) {
-            $result['message'] = 'Import cancelled. No D.T.R records were saved. Fix the listed rows and import again.';
+        return DB::transaction(function () use ($data, $importName): array {
+            $result = $this->saveValidatedRow($data, $importName);
 
-            return $result;
-        }
+            if (! empty($result['id']) && empty($result['skipped']) && Schema::hasTable('dtrs')) {
+                $visible = EmployeeVisibleDtr::query()->find($result['id']);
 
-        if ($rowsToImport === []) {
-            $result['message'] = 'No new D.T.R records were imported. Every decoded row was already imported.';
-
-            return $result;
-        }
-
-        try {
-            DB::transaction(function () use ($rowsToImport, $importName, &$result): void {
-                foreach ($rowsToImport as $validatedRow) {
-                    $this->saveValidatedRow($validatedRow['data'], $importName);
-                    $result['successful']++;
+                if ($visible) {
+                    app(DtrSynchronizationService::class)->syncVisibleToOfficial($visible);
                 }
-            });
+            }
 
-            $result['message'] = $result['skipped'] > 0
-                ? "D.T.R preview import completed. {$result['successful']} imported/merged and {$result['skipped']} duplicate row(s) skipped."
-                : 'D.T.R preview import completed successfully.';
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            $result['successful'] = 0;
-            $result['failed'] = count($rows) - $result['skipped'];
-            $result['message'] = 'Import failed. No employee-visible D.T.R records were saved.';
-            $result['errors'][] = [
-                'row' => 0,
-                'message' => $exception->getMessage() ?: 'Unable to save D.T.R import.',
-            ];
-        }
-
-        return $result;
+            return $result;
+        });
     }
 
     protected function validateRow(array $row, string $fallbackBatchId): array
@@ -172,30 +236,42 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         return $data;
     }
 
+    protected function hasExistingOrConflictingDatabaseRecord(array $data, array $metadata): bool
+    {
+        $existing = $this->findExistingRecord($data, $metadata);
+
+        if ($existing) {
+            if (Schema::hasTable('dtrs') && blank($existing->dtr_source_id)) {
+                app(DtrSynchronizationService::class)->syncVisibleToOfficial($existing);
+            }
+
+            return true;
+        }
+
+        return $this->hasDatabaseConflict(
+            $data,
+            $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
+        );
+    }
+
     protected function saveValidatedRow(array $data, string $importName): array
     {
         $metadata = $this->getImportMetadata($data, $importName);
-        $sourceRowHash = $metadata['source_row_hash'] ?? $this->buildSourceRowHash($data);
         $existing = $this->findExistingRecord($data, $metadata);
 
-        if ($existing && $this->hasProtectedManualState($existing)) {
-            $existing->forceFill([
-                'batch_id' => $data['batch_id'],
-                'import_name' => $metadata['import_name'] ?? $importName,
-                'employee_id' => $data['employee_id'],
-                'latest_source_row_hash' => $sourceRowHash,
-                'latest_source_payload' => $data,
-                'needs_review' => true,
-                'review_reason' => 'A newer biometric D.T.R row matched this manually edited or overtime-reviewed row. Review before changing it.',
-            ])->save();
+        if ($existing || $this->hasDatabaseConflict($data, $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY)) {
+            if ($existing && Schema::hasTable('dtrs') && blank($existing->dtr_source_id)) {
+                app(DtrSynchronizationService::class)->syncVisibleToOfficial($existing);
+            }
 
             return [
-                'id' => $existing->id,
-                'batch_id' => $existing->batch_id,
+                'id' => $existing?->id ?? 0,
+                'batch_id' => $existing?->batch_id ?? ($data['batch_id'] ?? null),
+                'skipped' => true,
             ];
         }
 
-        $record = $existing ?: new EmployeeVisibleDtr;
+        $record = new EmployeeVisibleDtr;
 
         $record->forceFill([
             'batch_id' => $data['batch_id'],

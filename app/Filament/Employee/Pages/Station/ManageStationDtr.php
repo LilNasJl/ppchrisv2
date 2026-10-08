@@ -126,11 +126,6 @@ class ManageStationDtr extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('submitDtr')
-                ->label('Submit Station D.T.R')
-                ->icon(Heroicon::ArrowUpTray)
-                ->url(StationSubmissions::getUrl()),
-
             Action::make('submitDtrProof')
                 ->label('On Field DTR')
                 ->icon(Heroicon::DocumentCheck)

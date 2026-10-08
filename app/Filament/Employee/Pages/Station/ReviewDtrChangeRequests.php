@@ -486,6 +486,8 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                         ->modalWidth('2xl')
                         ->modalHeading('Are you sure you want to continue?')
                         ->modalDescription(function (DtrChangeRequest $record): string {
+                            $isFinal = (int) $record->current_level >= (int) $record->total_levels;
+
                             if ($record->is_overtime_type) {
                                 return match ($record->overtime_request_scope) {
                                     DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => 'Employee requested Overtime Only. Only regular after-schedule overtime will be approved.',
@@ -495,21 +497,27 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                             }
 
                             if ($record->request_type === DtrChangeRequest::TYPE_DELETE_TIME_ENTRY) {
-                                return $record->is_final_level
-                                    ? 'Approving will permanently delete the selected DTR entry from official records. This action cannot be undone.'
-                                    : 'Approving will forward this deletion request to the next approval level.';
+                                if ($isFinal) {
+                                    return 'Approving will permanently delete the selected DTR entry from official records. This action cannot be undone.';
+                                }
+
+                                return 'Approving will forward this deletion request to the next approval level.';
                             }
 
                             if ($record->request_type === DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES) {
                                 $count = count($record->proposed_values['entries'] ?? []);
-                                return $record->is_final_level
-                                    ? "Approving will officially create {$count} missing DTR record(s) and apply them to payroll calculations."
-                                    : "Approving will forward this missing DTR request ({$count} entries) to the next approval level.";
+                                if ($isFinal) {
+                                    return "Approving will officially create {$count} missing DTR record(s) and apply them to payroll calculations.";
+                                }
+
+                                return "Approving will forward this missing DTR request ({$count} entries) to the next approval level.";
                             }
 
-                            return $record->is_final_level
-                                ? 'Approving will officially finalize the attendance record and apply changes to payroll calculations.'
-                                : 'Approving will forward this request to the next approval level with any saved corrections.';
+                            if ($isFinal) {
+                                return 'Approving will officially finalize the attendance record and apply changes to payroll calculations.';
+                            }
+
+                            return 'Approving will forward this request to the next approval level with any saved corrections.';
                         })
                         ->modalSubmitActionLabel('Yes, Approve Request')
                         ->schema(function (DtrChangeRequest $record): array {

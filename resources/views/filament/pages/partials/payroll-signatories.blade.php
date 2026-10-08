@@ -1,40 +1,76 @@
 <style>
     .signatories {
         display: grid;
-        gap: 18px;
+        gap: 0.75rem 1.25rem;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        margin-top: 18px;
+        padding: 0.75rem 1rem;
+        border-radius: 0.65rem;
+        border: 1px solid rgb(226, 232, 240);
+        background: #ffffff;
+    }
+
+    .dark .signatories {
+        border-color: rgb(51, 65, 85);
+        background: rgb(15, 23, 42);
     }
 
     .signatory-name {
-        border-top: 1px solid rgba(71, 85, 105, .65);
+        border-top: 1px solid rgba(148, 163, 184, 0.55);
         color: rgb(15, 23, 42);
-        font-size: 11px;
+        font-size: 0.78rem;
         font-weight: 700;
-        padding-top: 5px;
+        padding-top: 0.35rem;
         text-align: center;
     }
 
     .signatory-label {
-        color: rgb(51, 65, 85);
-        font-size: 9px;
-        margin-top: 2px;
+        color: rgb(100, 116, 139);
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-top: 0.15rem;
         text-align: center;
     }
 
-    .dark .signatory-name,
-    .dark .signatory-label {
+    .dark .signatory-name {
+        border-top-color: rgb(71, 85, 105);
         color: #f8fafc;
     }
 
+    .dark .signatory-label {
+        color: rgb(148, 163, 184);
+    }
+
+    @media (max-width: 640px) {
+        .signatories {
+            grid-template-columns: 1fr;
+        }
+    }
+
     @media print {
+        .signatories {
+            border: 0 !important;
+            background: transparent !important;
+            padding: 0 !important;
+            margin-top: 18px;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 18px;
+        }
+
         .signatory-name,
         .signatory-label {
             color: #000 !important;
         }
 
         .signatory-name {
-            border-top-color: #000;
+            border-top-color: #000 !important;
+            font-size: 11px !important;
+        }
+
+        .signatory-label {
+            font-size: 9px !important;
+            text-transform: none !important;
         }
     }
 </style>

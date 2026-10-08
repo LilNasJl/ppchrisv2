@@ -153,10 +153,10 @@ class StationChangeRequestHistory extends Page implements HasTable
                     ->label('Decision / Approver')
                     ->getStateUsing(function (DtrChangeRequest $record): string {
                         if ($record->status === DtrChangeRequest::STATUS_APPROVED) {
-                            return 'Approved by ' . ($record->reviewedByEmployee?->full_name ?? 'Approver');
+                            return 'Approved by ' . ($record->reviewer_name ?? 'Approver');
                         }
                         if ($record->status === DtrChangeRequest::STATUS_REJECTED) {
-                            return 'Rejected by ' . ($record->reviewedByEmployee?->full_name ?? 'Approver');
+                            return 'Rejected by ' . ($record->reviewer_name ?? 'Approver');
                         }
                         if ($record->status === DtrChangeRequest::STATUS_CANCELLED) {
                             return 'Cancelled by Employee';

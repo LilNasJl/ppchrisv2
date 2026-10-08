@@ -19,6 +19,15 @@ return new class extends Migration
             }
         });
 
+        if (DB::getDriverName() === 'sqlite') {
+            Schema::table('branches', function (Blueprint $table): void {
+                $table->string('mobile_no')->nullable()->change();
+                $table->integer('employee_id')->nullable()->change();
+            });
+
+            return;
+        }
+
         DB::statement('ALTER TABLE branches MODIFY mobile_no VARCHAR(255) NULL');
         DB::statement('ALTER TABLE branches MODIFY employee_id INT NULL');
     }

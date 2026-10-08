@@ -47,7 +47,7 @@ class StationDtrImportHistory extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return StationManagementAccess::canAccessStationManagement(auth()->user());
+        return false;
     }
 
     public function getMaxContentWidth(): Width|string|null
@@ -57,23 +57,7 @@ class StationDtrImportHistory extends Page implements HasTable
 
     public function mount(): void
     {
-        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
-            throw new HttpException(403, 'Unauthorized access to Station Management.');
-        }
-
-        $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
-        $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
-
-        $this->branch = $this->branchId ? Branch::query()->find($this->branchId) : null;
-        $this->period = $this->periodId ? PayrollPeriod::query()->find($this->periodId) : null;
-
-        if (! $this->branch || ! StationManagementAccess::canManageBranch(auth()->user(), $this->branch->id)) {
-            throw new HttpException(403, 'This station branch is not assigned to your management profile.');
-        }
-
-        if (! $this->period) {
-            throw new HttpException(404, 'No payroll period was selected.');
-        }
+        throw new HttpException(403, 'Station D.T.R Import History deletion is disabled to protect synchronized D.T.R records.');
     }
 
     public function getTitle(): string
@@ -155,29 +139,7 @@ class StationDtrImportHistory extends Page implements HasTable
                     ->dateTime('M d, Y h:i A')
                     ->sortable(),
             ])
-            ->recordActions([
-                ActionGroup::make([
-                    Action::make('deleteImport')
-                        ->label('Delete Batch')
-                        ->icon('heroicon-m-trash')
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->modalHeading('Delete D.T.R Import Batch')
-                        ->modalDescription('Deleting this import removes the preview D.T.R records and the import history entry for this batch. This action cannot be undone.')
-                        ->modalSubmitActionLabel('Delete Import Batch')
-                        ->action(function (SicRcDtrImport $record): void {
-                            $result = app(SicRcDtrImportDeletionService::class)->delete($record);
-
-                            Notification::make()
-                                ->title('Import Batch Deleted')
-                                ->body("Deleted {$result['entries']} preview D.T.R record(s) and {$result['histories']} history row(s).")
-                                ->success()
-                                ->send();
-                        }),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal)
-                    ->tooltip('Actions'),
-            ])
+            ->recordActions([])
             ->striped()
             ->defaultPaginationPageOption(10);
     }

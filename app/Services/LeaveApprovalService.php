@@ -278,6 +278,9 @@ class LeaveApprovalService
 
         return DB::transaction(function () use ($data, $actor, $workflow): LeaveApprovalWorkflow {
             $workflow = $workflow ? LeaveApprovalWorkflow::lockForUpdate()->findOrFail($workflow->id) : new LeaveApprovalWorkflow;
+            if ($workflow->exists && $workflow->isCompanyDefault()) {
+                throw ValidationException::withMessages(['name' => 'The company default workflow cannot be edited.']);
+            }
             if ($workflow->exists && isset($data['version']) && (int) $data['version'] !== (int) $workflow->version) {
                 throw ValidationException::withMessages(['name' => 'This workflow changed. Reopen it before saving.']);
             }

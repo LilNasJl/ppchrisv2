@@ -9,6 +9,7 @@ use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Override;
 
@@ -25,30 +26,20 @@ class ManageDeductions extends Page
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cog6Tooth;
 
     #[Override]
-    protected function getHeaderActions(): array
+    public function getHeading(): string
     {
-        return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(ComplianceBenefits::getUrl()),
-        ];
+        return '';
     }
 
     #[Override]
-    protected function getHeaderWidgets(): array
+    public function getBreadcrumbs(): array
     {
-        return [
-            CompanyDeductionsTable::class,
-            RemittanceDeductionsTable::class,
-            OtherDeductionsTable::class,
-        ];
+        return [];
     }
 
-    public function getHeaderWidgetsColumns(): int|array
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
     {
-        return [
-            'default' => 1,
-        ];
+        return Width::Full;
     }
 }

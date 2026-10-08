@@ -217,12 +217,32 @@ class OvertimeApprovalService
                 'credited_work_hrs' => $baseCreditedMinutes + $totalCreditedOvertime,
             ])->save();
 
+            $actor = auth()->user()?->employee;
+            $source = 'overtime_'.strtolower($targetStatus);
+
+            $counterpart = app(DtrSynchronizationService::class)->syncOvertimeState(
+                $record,
+                $actor,
+                $source,
+            );
+
+            app(DtrSynchronizationService::class)->recordAudit(
+                $source,
+                $record,
+                [
+                    'target_status' => $targetStatus,
+                    'credited_overtime' => $totalCreditedOvertime,
+                    'credited_early_clock_in' => $approvedEarlyMinutes,
+                    'counterpart_id' => $counterpart?->getKey(),
+                ],
+                $actor,
+            );
+
             return 1;
         });
 
         if (
             $targetStatus !== self::STATUS_PENDING
-            && $record->getTable() === (new Dtr)->getTable()
             && filled($record->payroll_period_id)
         ) {
             $period = PayrollPeriod::query()->find($record->payroll_period_id);

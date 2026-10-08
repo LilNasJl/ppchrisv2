@@ -69,6 +69,10 @@ return new class extends Migration
 
     protected function hasIndex(string $table, string $index): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasIndex($table, $index);
+        }
+
         return collect(DB::select("SHOW INDEX FROM {$table} WHERE Key_name = ?", [$index]))->isNotEmpty();
     }
 };

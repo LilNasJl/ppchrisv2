@@ -26,13 +26,166 @@ class HolidayResolver
 
     public function holidaysForRange(CarbonInterface|string $start, CarbonInterface|string $end, ?int $branchId = null, bool $includeNational = true): Collection
     {
+        $startDate = Carbon::parse($start)->startOfDay();
+        $endDate = Carbon::parse($end)->startOfDay();
+        $dates = [];
+        $monthDays = [];
+
+        foreach (CarbonPeriod::create($startDate, $endDate) as $date) {
+            $dateString = $date->toDateString();
+            $monthDay = $date->format('m-d');
+            $dates[$dateString] = $monthDay;
+            $monthDays[$monthDay] = $monthDay;
+        }
+
+        if ($dates === []) {
+            return collect();
+        }
+
+        $candidates = Holiday::query()
+            ->with(['type', 'branch'])
+            ->where(function (Builder $query) use ($branchId, $includeNational): void {
+                if ($branchId) {
+                    $query->where('branch_id', $branchId);
+
+                    if ($includeNational) {
+                        $query->orWhereNull('branch_id');
+                    }
+
+                    return;
+                }
+
+                $query->whereNull('branch_id');
+            })
+            ->where(function (Builder $query) use ($startDate, $endDate, $monthDays): void {
+                $query
+                    ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->orWhere(function (Builder $query) use ($monthDays): void {
+                        $query
+                            ->where('is_recurring', true)
+                            ->whereIn('month_day', array_values($monthDays));
+                    });
+            })
+            ->get();
+
+        return $this->resolveDatesFromCandidates($dates, $candidates);
+    }
+
+    /**
+     * Resolve holidays across a date range for multiple branches in a single database query.
+     *
+     * @param  array<int, int>  $branchIds
+     * @return array<int, Collection<string, Holiday>>
+     */
+    public function holidaysForRangeByBranches(CarbonInterface|string $start, CarbonInterface|string $end, array $branchIds): array
+    {
+        $branchIds = array_values(array_unique(array_map('intval', array_filter($branchIds))));
+
+        if ($branchIds === []) {
+            return [];
+        }
+
+        $startDate = Carbon::parse($start)->startOfDay();
+        $endDate = Carbon::parse($end)->startOfDay();
+        $dates = [];
+        $monthDays = [];
+
+        foreach (CarbonPeriod::create($startDate, $endDate) as $date) {
+            $dateString = $date->toDateString();
+            $monthDay = $date->format('m-d');
+            $dates[$dateString] = $monthDay;
+            $monthDays[$monthDay] = $monthDay;
+        }
+
+        if ($dates === []) {
+            return array_fill_keys($branchIds, collect());
+        }
+
+        $allCandidates = Holiday::query()
+            ->with(['type', 'branch'])
+            ->where(function (Builder $query) use ($branchIds): void {
+                $query
+                    ->whereIn('branch_id', $branchIds)
+                    ->orWhereNull('branch_id');
+            })
+            ->where(function (Builder $query) use ($startDate, $endDate, $monthDays): void {
+                $query
+                    ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
+                    ->orWhere(function (Builder $query) use ($monthDays): void {
+                        $query
+                            ->where('is_recurring', true)
+                            ->whereIn('month_day', array_values($monthDays));
+                    });
+            })
+            ->get();
+
+        if ($allCandidates->isEmpty()) {
+            return array_fill_keys($branchIds, collect());
+        }
+
+        $result = [];
+
+        foreach ($branchIds as $branchId) {
+            $branchCandidates = $allCandidates->filter(
+                fn (Holiday $h): bool => $h->branch_id === null || (int) $h->branch_id === $branchId
+            );
+            $result[$branchId] = $this->resolveDatesFromCandidates($dates, $branchCandidates);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<string, string>  $dates
+     * @param  Collection<int, Holiday>  $candidates
+     * @return Collection<string, Holiday>
+     */
+    protected function resolveDatesFromCandidates(array $dates, Collection $candidates): Collection
+    {
+        if ($candidates->isEmpty()) {
+            return collect();
+        }
+
         $holidays = collect();
 
-        foreach (CarbonPeriod::create($start, $end) as $date) {
-            $holiday = $this->resolveForDate($date, $branchId, $includeNational);
+        foreach ($dates as $dateString => $monthDay) {
+            $matched = $candidates
+                ->filter(function (Holiday $holiday) use ($dateString, $monthDay): bool {
+                    $holidayDate = $holiday->date instanceof CarbonInterface
+                        ? $holiday->date->toDateString()
+                        : (filled($holiday->date) ? Carbon::parse($holiday->date)->toDateString() : null);
 
-            if ($holiday) {
-                $holidays->put($date->toDateString(), $holiday);
+                    return $holidayDate === $dateString
+                        || ((bool) $holiday->is_recurring && (string) $holiday->month_day === $monthDay);
+                })
+                ->sort(function (Holiday $a, Holiday $b) use ($dateString): int {
+                    $aBranchRank = $a->branch_id === null ? 0 : 1;
+                    $bBranchRank = $b->branch_id === null ? 0 : 1;
+
+                    if ($aBranchRank !== $bBranchRank) {
+                        return $bBranchRank <=> $aBranchRank;
+                    }
+
+                    $aDate = $a->date instanceof CarbonInterface
+                        ? $a->date->toDateString()
+                        : (filled($a->date) ? Carbon::parse($a->date)->toDateString() : null);
+                    $bDate = $b->date instanceof CarbonInterface
+                        ? $b->date->toDateString()
+                        : (filled($b->date) ? Carbon::parse($b->date)->toDateString() : null);
+
+                    $aExact = $aDate === $dateString ? 1 : 0;
+                    $bExact = $bDate === $dateString ? 1 : 0;
+
+                    if ($aExact !== $bExact) {
+                        return $bExact <=> $aExact;
+                    }
+
+                    return (int) $a->id <=> (int) $b->id;
+                })
+                ->first();
+
+            if ($matched) {
+                $holidays->put($dateString, clone $matched);
             }
         }
 

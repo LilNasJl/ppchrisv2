@@ -72,6 +72,77 @@ class Dtr extends Model
         'daily_rate' => 'decimal:2',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (Dtr $dtr): void {
+            if ((bool) $dtr->is_locked || $dtr->isPayrollPeriodLocked()) {
+                throw new \DomainException('Cannot create a D.T.R entry in a locked payroll period.');
+            }
+        });
+
+        static::updating(function (Dtr $dtr): void {
+            $dirtyKeys = array_values(array_diff(array_keys($dtr->getDirty()), ['is_locked', 'updated_at']));
+            if ($dirtyKeys === []) {
+                return;
+            }
+
+            if (
+                (bool) $dtr->getOriginal('is_locked')
+                || (bool) $dtr->is_locked
+                || $dtr->isPayrollPeriodLocked(checkOriginal: true)
+            ) {
+                throw new \DomainException('Cannot update a D.T.R entry in a locked payroll period.');
+            }
+        });
+
+        static::deleting(function (Dtr $dtr): void {
+            if (
+                (bool) $dtr->getOriginal('is_locked')
+                || (bool) $dtr->is_locked
+                || $dtr->isPayrollPeriodLocked(checkOriginal: true)
+            ) {
+                throw new \DomainException('Cannot delete a D.T.R entry in a locked payroll period.');
+            }
+        });
+    }
+
+    public function isPayrollPeriodLocked(bool $checkOriginal = false): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('payroll_periods')) {
+            return false;
+        }
+
+        $periodIds = array_values(array_unique(array_filter([
+            $this->payroll_period_id ? (int) $this->payroll_period_id : null,
+            $checkOriginal && $this->getOriginal('payroll_period_id') ? (int) $this->getOriginal('payroll_period_id') : null,
+        ])));
+
+        if ($periodIds !== [] && PayrollPeriod::query()->whereIn('id', $periodIds)->where('is_locked', true)->exists()) {
+            return true;
+        }
+
+        $dates = array_values(array_unique(array_filter([
+            filled($this->date_in) ? \Illuminate\Support\Carbon::parse($this->date_in)->toDateString() : null,
+            $checkOriginal && filled($this->getOriginal('date_in'))
+                ? \Illuminate\Support\Carbon::parse($this->getOriginal('date_in'))->toDateString()
+                : null,
+        ])));
+
+        foreach ($dates as $dateString) {
+            if (
+                PayrollPeriod::query()
+                    ->where('is_locked', true)
+                    ->whereDate('date_start', '<=', $dateString)
+                    ->whereDate('date_end', '>=', $dateString)
+                    ->exists()
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function requiresAttendanceApproval(): bool
     {
         $scheduleType = Str::lower(trim((string) $this->schedule_type));

@@ -9,12 +9,45 @@ use Illuminate\Support\Collection;
 
 class EmployeeDeductionService
 {
-    public function ensureDefaultDeductions(Employee $employee): void
+    public function defaultDeductions(): Collection
     {
-        Deduction::query()
+        return Deduction::query()
             ->whereIn('category', [Deduction::CATEGORY_COMPANY, Deduction::CATEGORY_REMITTANCE])
-            ->get()
-            ->each(fn (Deduction $deduction) => $this->ensureEmployeeDeduction($employee, $deduction));
+            ->get();
+    }
+
+    public function ensureDefaultDeductions(Employee $employee, ?Collection $defaultDeductions = null): void
+    {
+        $deductions = $defaultDeductions ?? $this->defaultDeductions();
+
+        if ($deductions->isEmpty()) {
+            return;
+        }
+
+        if ($employee->relationLoaded('employeeDeductions')) {
+            $existingIds = $employee->employeeDeductions
+                ->pluck('deduction_id')
+                ->map(fn (mixed $id): int => (int) $id)
+                ->all();
+
+            $missing = $deductions->reject(
+                fn (Deduction $deduction): bool => in_array((int) $deduction->id, $existingIds, true)
+            );
+
+            if ($missing->isEmpty()) {
+                return;
+            }
+
+            foreach ($missing as $deduction) {
+                $created = $this->ensureEmployeeDeduction($employee, $deduction);
+                $created->setRelation('deduction', $deduction);
+                $employee->employeeDeductions->push($created);
+            }
+
+            return;
+        }
+
+        $deductions->each(fn (Deduction $deduction) => $this->ensureEmployeeDeduction($employee, $deduction));
     }
 
     public function ensureEmployeeDeduction(Employee $employee, Deduction $deduction): EmployeeDeduction
@@ -34,9 +67,20 @@ class EmployeeDeductionService
         );
     }
 
-    public function activeEmployeeDeductions(Employee $employee): Collection
+    public function activeEmployeeDeductions(Employee $employee, ?Collection $defaultDeductions = null): Collection
     {
-        $this->ensureDefaultDeductions($employee);
+        $this->ensureDefaultDeductions($employee, $defaultDeductions);
+
+        if (
+            $employee->relationLoaded('employeeDeductions')
+            && $employee->employeeDeductions->every(fn (EmployeeDeduction $ed): bool => $ed->relationLoaded('deduction'))
+        ) {
+            return $employee->employeeDeductions
+                ->filter(fn (EmployeeDeduction $employeeDeduction): bool => (bool) $employeeDeduction->active
+                    && $employeeDeduction->deduction !== null
+                    && $employeeDeduction->isActiveForPayroll())
+                ->values();
+        }
 
         return $employee->employeeDeductions()
             ->with('deduction')

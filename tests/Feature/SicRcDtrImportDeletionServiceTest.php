@@ -93,7 +93,7 @@ class SicRcDtrImportDeletionServiceTest extends TestCase
         });
     }
 
-    public function test_completed_batch_is_permanently_deleted_with_all_matching_history_records(): void
+    public function test_completed_batch_and_imported_dtr_records_are_protected_from_deletion(): void
     {
         [$branch, $period] = $this->context();
         $completed = $this->history($branch, $period, 'BATCH-A', SicRcDtrImport::STATUS_COMPLETED, 2);
@@ -107,11 +107,11 @@ class SicRcDtrImportDeletionServiceTest extends TestCase
 
         $deleted = app(SicRcDtrImportDeletionService::class)->delete($completed);
 
-        $this->assertSame(['entries' => 2, 'histories' => 2], $deleted);
-        $this->assertNull(EmployeeVisibleDtr::withTrashed()->find($first->id));
-        $this->assertNull(EmployeeVisibleDtr::withTrashed()->find($second->id));
+        $this->assertSame(['entries' => 0, 'histories' => 0], $deleted);
+        $this->assertNotNull(EmployeeVisibleDtr::withTrashed()->find($first->id));
+        $this->assertNotNull(EmployeeVisibleDtr::withTrashed()->find($second->id));
         $this->assertNotNull(EmployeeVisibleDtr::withTrashed()->find($unrelated->id));
-        $this->assertDatabaseMissing('sic_rc_dtr_imports', ['batch_id' => 'BATCH-A']);
+        $this->assertDatabaseHas('sic_rc_dtr_imports', ['id' => $completed->id, 'batch_id' => 'BATCH-A']);
         $this->assertDatabaseHas('sic_rc_dtr_imports', ['batch_id' => 'BATCH-B']);
     }
 

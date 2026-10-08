@@ -286,9 +286,10 @@ class StationManagementAccess
             return $query->whereRaw('1 = 0');
         }
 
+        $approverEmployee = static::resolveEmployee($user);
         $table = $query->getModel()->getTable();
 
-        return $query->where(function (Builder $outer) use ($workflows, $table): void {
+        return $query->where(function (Builder $outer) use ($workflows, $approverEmployee, $table): void {
             foreach ($workflows as $workflow) {
                 $empScopeId = $workflow->getAttribute('employee_id');
                 $branchScopeId = $workflow->getAttribute('branch_id');
@@ -309,6 +310,11 @@ class StationManagementAccess
                         $inner->whereHas('employee', fn (Builder $empQ): Builder => $empQ->where('designation_id', (int) $desigScopeId));
                     }
                 });
+
+                $subordinateIds = static::getSubordinateApproverIdsInWorkflow($workflow, $approverEmployee?->id);
+                if ($subordinateIds !== []) {
+                    $outer->orWhereIn("{$table}.employee_id", $subordinateIds);
+                }
             }
         });
     }
@@ -324,9 +330,15 @@ class StationManagementAccess
             return false;
         }
 
+        $approverEmployee = static::resolveEmployee($user);
         $targetEmployee = null;
 
         foreach ($workflows as $workflow) {
+            $subordinateIds = static::getSubordinateApproverIdsInWorkflow($workflow, $approverEmployee?->id);
+            if ($subordinateIds !== [] && in_array((int) $request->employee_id, $subordinateIds, true)) {
+                return true;
+            }
+
             $empScopeId = $workflow->getAttribute('employee_id');
             $branchScopeId = $workflow->getAttribute('branch_id');
             $deptScopeId = $workflow->getAttribute('department_id');
@@ -355,6 +367,40 @@ class StationManagementAccess
         }
 
         return false;
+    }
+
+    /**
+     * Get employee IDs of approvers at levels strictly below the given approver in a workflow.
+     *
+     * @return array<int>
+     */
+    protected static function getSubordinateApproverIdsInWorkflow(LeaveApprovalWorkflow $workflow, ?int $approverEmployeeId): array
+    {
+        if (! $approverEmployeeId) {
+            return [];
+        }
+
+        $orderedLevels = $workflow->levels->values();
+        $myHighestIndex = -1;
+
+        foreach ($orderedLevels as $idx => $level) {
+            if ((int) $level->approver_employee_id === (int) $approverEmployeeId) {
+                $myHighestIndex = $idx;
+            }
+        }
+
+        if ($myHighestIndex <= 0) {
+            return [];
+        }
+
+        $subordinateIds = [];
+        foreach ($orderedLevels as $idx => $level) {
+            if ($idx < $myHighestIndex && (int) $level->approver_employee_id !== (int) $approverEmployeeId) {
+                $subordinateIds[] = (int) $level->approver_employee_id;
+            }
+        }
+
+        return array_values(array_unique($subordinateIds));
     }
 
     /**

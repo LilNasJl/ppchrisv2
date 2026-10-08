@@ -5,11 +5,13 @@ namespace App\Filament\Widgets;
 use App\Models\Branch;
 use App\Models\Dtr as ModelsDtr;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
+use App\Services\DtrSynchronizationService;
 use App\Services\HolidayEntitlementService;
 use App\Services\OnFieldDtrService;
 use App\Services\OvertimeApprovalService;
@@ -52,13 +54,14 @@ class DtrManageTable extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->heading(fn (): string => 'Employee: '.($this->getEmployee()?->full_name ?? 'No employee selected').' | Payroll Period: '.($this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected'))
+            ->heading('Daily Time Record Entries')
             ->query(fn (): Builder => $this->getDtrQuery())
             ->recordClasses('text-xs')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
-                    ->rowIndex(),
+                    ->rowIndex()
+                    ->alignCenter(),
 
                 TextColumn::make('attendance_status')
                     ->label('Status')
@@ -77,8 +80,8 @@ class DtrManageTable extends BaseWidget
                         }
 
                         return match (app(DtrAttendanceUnitService::class)->dayPartForRecord($record)) {
-                            DtrDayPartService::MORNING => 'Present - Morning',
-                            DtrDayPartService::AFTERNOON => 'Present - Afternoon',
+                            DtrDayPartService::MORNING => 'Morning',
+                            DtrDayPartService::AFTERNOON => 'Afternoon',
                             DtrDayPartService::UNCLASSIFIED => 'Review Required',
                             default => 'Present',
                         };
@@ -86,43 +89,89 @@ class DtrManageTable extends BaseWidget
                     ->color(fn (string $state): string => match ($state) {
                         'Leave' => 'info',
                         'Absent' => 'danger',
-                        'For Approval' => 'warning',
-                        'Review Required' => 'warning',
+                        'For Approval', 'Review Required' => 'warning',
                         default => 'success',
                     }),
 
                 TextColumn::make('date_in')
                     ->label('Date In')
-                    ->date(),
+                    ->date('M d, Y (D)')
+                    ->sortable(),
 
                 TextColumn::make('time_in')
                     ->label('IN')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
+                    ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('date_out')
                     ->label('Date Out')
-                    ->date()
+                    ->date('M d, Y')
                     ->placeholder('-'),
 
                 TextColumn::make('time_out')
                     ->label('OUT')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
+                    ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('schedule_start')
                     ->label('SCHED. START')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter(),
 
                 TextColumn::make('schedule_end')
                     ->label('SCHED. END')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter(),
 
                 TextColumn::make('schedule_type')
                     ->label('SCHED. TYPE')
                     ->badge()
                     ->placeholder('-')
                     ->color(fn (?string $state): string => match ($state) {
-                        'Saturday' => 'info',
-                        'Leave' => 'info',
+                        'Saturday', 'Regular Saturday' => 'info',
+                        'Leave' => 'purple',
                         'Overtime' => 'warning',
                         'Forgot to Punch', 'Absent' => 'danger',
                         default => 'gray',
@@ -141,7 +190,8 @@ class DtrManageTable extends BaseWidget
                     ->getStateUsing(fn (ModelsDtr $record): string => app(DtrAttendanceUnitService::class)->dayPartForRecord($record))
                     ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
                     ->color(fn (?string $state): string => match (app(DtrDayPartService::class)->normalize($state)) {
-                        DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 'info',
+                        DtrDayPartService::MORNING => 'info',
+                        DtrDayPartService::AFTERNOON => 'purple',
                         DtrDayPartService::UNCLASSIFIED => 'warning',
                         default => 'gray',
                     }),
@@ -149,55 +199,86 @@ class DtrManageTable extends BaseWidget
                 TextColumn::make('attendance_unit')
                     ->label('DAY COUNT')
                     ->getStateUsing(fn (ModelsDtr $record): float => app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record))
-                    ->formatStateUsing(fn (float $state): string => number_format($state, 1)),
+                    ->formatStateUsing(fn (float $state): string => number_format($state, 1).' d')
+                    ->badge()
+                    ->color(fn (float $state): string => $state >= 1.0 ? 'success' : ($state > 0 ? 'info' : 'gray'))
+                    ->alignCenter(),
 
                 TextColumn::make('late')
                     ->label('LATE')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'danger' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('undertime')
                     ->label('UNDERTIME')
-                    ->numeric(),
-
-                TextColumn::make('overtime')
-                    ->label('OVERTIME')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'warning' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('early_clock_in')
                     ->label('EARLY OT')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'info' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('credited_early_clock_in')
                     ->label('CRED. EARLY')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'success' : 'gray')
+                    ->alignCenter(),
+
+                TextColumn::make('overtime')
+                    ->label('OVERTIME')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'warning' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('credited_overtime')
                     ->label('TOTAL CRED. OT')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m ('.number_format((int) $state / 60, 1).'h)' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'success' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('work_hrs')
                     ->label('WORK HOURS')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? number_format((int) $state / 60, 1).' hrs' : '-')
+                    ->alignCenter(),
 
                 TextColumn::make('credited_work_hrs')
                     ->label('CRED. WORK HOURS')
-                    ->numeric(),
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? number_format((int) $state / 60, 1).' hrs' : '-')
+                    ->badge(fn ($state): bool => (int) $state > 0)
+                    ->color(fn ($state): string => (int) $state > 0 ? 'success' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('holiday_type')
                     ->label('HOL.')
                     ->badge()
-                    ->placeholder('n/a')
-                    ->color('warning'),
+                    ->placeholder('-')
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Regular' => 'danger',
+                        'Special' => 'warning',
+                        default => 'gray',
+                    }),
 
                 TextColumn::make('holiday_rate')
                     ->label('HOL. RATE')
-                    ->placeholder('n/a'),
+                    ->placeholder('-')
+                    ->alignCenter(),
 
                 TextColumn::make('holiday_excluded')
                     ->label('HOL. EXCL.')
                     ->badge()
                     ->formatStateUsing(fn (bool $state): string => $state ? 'Yes' : 'No')
-                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray'),
+                    ->color(fn (bool $state): string => $state ? 'danger' : 'gray')
+                    ->alignCenter(),
 
                 TextColumn::make('overtime_status')
                     ->label('OT Status')
@@ -210,29 +291,6 @@ class DtrManageTable extends BaseWidget
                     }),
             ])
             ->headerActions([
-                ActionGroup::make([
-                    Action::make('exportDtr')
-                        ->label('Export as Excel')
-                        ->icon('heroicon-m-arrow-down-tray')
-                        ->url(fn (): string => route('hr_tools.export.dtr', [
-                            'employee_id' => $this->employeeId,
-                            'branch_id' => $this->branchId,
-                            'period_id' => $this->periodId,
-                        ]))
-                        ->openUrlInNewTab()
-                        ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
-
-                    Action::make('printDtr')
-                        ->label('Print / PDF')
-                        ->icon('heroicon-m-printer')
-                        ->url(fn (): string => $this->getPrintUrl())
-                        ->openUrlInNewTab()
-                        ->disabled(fn (): bool => blank($this->employeeId) || blank($this->branchId) || blank($this->periodId)),
-                ])
-                    ->label('Export/Print DTR')
-                    ->icon('heroicon-m-arrow-down-tray')
-                    ->button(),
-
                 ActionGroup::make([
                     Action::make('dtrOverview')
                         ->label('D.T.R Overview')
@@ -559,13 +617,19 @@ class DtrManageTable extends BaseWidget
             return;
         }
 
-        ModelsDtr::create([
+        $record = ModelsDtr::create([
             ...$dtrData,
             ...$this->getDtrScopeData(),
             'is_imported' => 0,
             'is_locked' => 0,
             'is_absent' => 0,
         ]);
+
+        app(DtrSynchronizationService::class)->syncOfficialToVisible(
+            $record,
+            'hr_manual_add',
+            auth()->user()?->employee,
+        );
 
         $this->flushCachedTableRecords();
 
@@ -607,11 +671,27 @@ class DtrManageTable extends BaseWidget
             return false;
         }
 
+        $originalAnchor = [
+            'date_in' => $record->date_in,
+            'schedule_type' => $record->schedule_type,
+            'day_part' => $record->day_part,
+            'time_in' => $record->time_in,
+        ];
+
         $record->forceFill([
             ...$dtrData,
             'is_absent' => false,
             'absence_minutes' => 0,
         ])->save();
+
+        if (! ($record instanceof EmployeeVisibleDtr)) {
+            app(DtrSynchronizationService::class)->syncOfficialToVisible(
+                $record->refresh(),
+                'hr_manual_update',
+                auth()->user()?->employee,
+                $originalAnchor,
+            );
+        }
 
         $this->flushCachedTableRecords();
 
@@ -696,7 +776,7 @@ class DtrManageTable extends BaseWidget
             }
         }
 
-        ModelsDtr::create([
+        $record = ModelsDtr::create([
             ...$this->getDtrScopeData(),
             ...$this->getHolidayData($absenceDate),
             'date_in' => $absenceDate,
@@ -725,6 +805,12 @@ class DtrManageTable extends BaseWidget
             'is_imported' => 0,
             'is_locked' => 0,
         ]);
+
+        app(DtrSynchronizationService::class)->syncOfficialToVisible(
+            $record,
+            'hr_manual_absence',
+            auth()->user()?->employee,
+        );
 
         $this->flushCachedTableRecords();
 
@@ -774,6 +860,7 @@ class DtrManageTable extends BaseWidget
         }
 
         $created = 0;
+        $createdRecords = collect();
 
         foreach (CarbonPeriod::create($payrollPeriod->date_start, $payrollPeriod->date_end) as $date) {
             if ($date->isSunday()) {
@@ -795,7 +882,7 @@ class DtrManageTable extends BaseWidget
                 'overtime_only' => false,
             ];
 
-            ModelsDtr::create([
+            $record = ModelsDtr::create([
                 ...$this->buildDtrData($data),
                 ...$this->getDtrScopeData(),
                 'is_imported' => 0,
@@ -803,8 +890,15 @@ class DtrManageTable extends BaseWidget
                 'is_absent' => 0,
             ]);
 
+            $createdRecords->push($record);
             $created++;
         }
+
+        app(DtrSynchronizationService::class)->syncOfficialBatchToVisible(
+            $createdRecords,
+            'hr_fill_dtr',
+            auth()->user()?->employee,
+        );
 
         $this->flushCachedTableRecords();
 
@@ -824,6 +918,16 @@ class DtrManageTable extends BaseWidget
         $deleted = $this->getScopedDtrQuery()
             ->whereNull('on_field_dtr_submission_id')
             ->delete();
+
+        $employee = $this->getEmployee();
+        if ($employee && filled($this->getSelectedPayrollPeriodId())) {
+            EmployeeVisibleDtr::query()
+                ->where('payroll_period_id', $this->getSelectedPayrollPeriodId())
+                ->where('branch_id', $this->getBranchId())
+                ->forEmployee($employee)
+                ->whereNull('on_field_dtr_submission_id')
+                ->forceDelete();
+        }
 
         if ($deleted > 0) {
             HrDatabaseNotification::send(
@@ -876,6 +980,14 @@ class DtrManageTable extends BaseWidget
         }
 
         $record->forceFill(['comment' => null])->save();
+
+        if (! ($record instanceof EmployeeVisibleDtr)) {
+            app(DtrSynchronizationService::class)->syncOfficialToVisible(
+                $record->refresh(),
+                'hr_delete_comment',
+                auth()->user()?->employee,
+            );
+        }
 
         $this->flushCachedTableRecords();
 
@@ -1522,6 +1634,8 @@ class DtrManageTable extends BaseWidget
 
                 return true;
             }
+
+            app(DtrSynchronizationService::class)->deleteCounterpart($record);
 
             return (bool) $record->forceDelete();
         } catch (\DomainException $exception) {

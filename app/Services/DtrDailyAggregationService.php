@@ -342,10 +342,15 @@ class DtrDailyAggregationService
             ])->saveQuietly();
         });
 
+        $representativeDayPart = $completed->count() > 1
+            && in_array($representative->day_part, [DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON], true)
+                ? $representative->day_part
+                : $aggregate['day_part'];
+
         $representative->forceFill([
             'schedule_start' => $aggregate['schedule_start'],
             'schedule_end' => $aggregate['schedule_end'],
-            'day_part' => $aggregate['day_part'],
+            'day_part' => $representativeDayPart,
             'late' => $aggregate['late'],
             'undertime' => $aggregate['undertime'],
             'early_clock_in' => $aggregate['early_clock_in'],
@@ -391,6 +396,7 @@ class DtrDailyAggregationService
     {
         return $records
             ->reject(fn (Dtr $record): bool => (bool) $record->is_absent && ! $this->isForgotToPunch($record))
+            ->reject(fn (Dtr $record): bool => $record->day_part === DtrDayPartService::UNCLASSIFIED)
             ->filter(fn (Dtr $record): bool => $this->dayPartService->isRegularScheduleType($record->schedule_type))
             ->filter(fn (Dtr $record): bool => filled($record->date_in)
                 && filled($record->time_in)

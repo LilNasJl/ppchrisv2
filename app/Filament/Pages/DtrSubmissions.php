@@ -45,7 +45,7 @@ class DtrSubmissions extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => DtrSubmission::query()
-                ->with(['payrollPeriod', 'branch', 'sicRcAccount'])
+                ->with(['payrollPeriod', 'branch', 'submittedByEmployee'])
                 ->where('submission_type', DtrSubmission::TYPE_DTR)
                 ->latest())
             ->columns([
@@ -77,7 +77,7 @@ class DtrSubmissions extends Page implements HasTable
                     ->dateTime('M d, Y h:i A')
                     ->sortable(),
 
-                TextColumn::make('sicRcAccount.username')
+                TextColumn::make('submittedByEmployee.full_name')
                     ->label('Submitted By')
                     ->placeholder('Unknown')
                     ->searchable(),

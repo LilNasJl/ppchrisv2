@@ -40,6 +40,14 @@ class PayrollSummary extends Page implements HasForms
 
     public ?string $approved_by = null;
 
+    protected ?PayrollPeriod $cachedSelectedPeriod = null;
+
+    protected ?string $cachedSelectedPeriodKey = null;
+
+    protected ?Collection $cachedSummaryRows = null;
+
+    protected ?string $cachedSummaryRowsKey = null;
+
     public function mount(): void
     {
         $periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'))
@@ -72,7 +80,15 @@ class PayrollSummary extends Page implements HasForms
             return null;
         }
 
-        return PayrollPeriod::query()->find($this->period_id);
+        $key = (string) $this->period_id;
+
+        if ($this->cachedSelectedPeriodKey === $key) {
+            return $this->cachedSelectedPeriod;
+        }
+
+        $this->cachedSelectedPeriodKey = $key;
+
+        return $this->cachedSelectedPeriod = PayrollPeriod::query()->find($this->period_id);
     }
 
     public function getSummaryRowsProperty(): Collection
@@ -81,7 +97,15 @@ class PayrollSummary extends Page implements HasForms
             return collect();
         }
 
-        return app(PayrollCalculator::class)->branchSummaryRows($this->selectedPeriod);
+        $key = (string) $this->selectedPeriod->id;
+
+        if ($this->cachedSummaryRows !== null && $this->cachedSummaryRowsKey === $key) {
+            return $this->cachedSummaryRows;
+        }
+
+        $this->cachedSummaryRowsKey = $key;
+
+        return $this->cachedSummaryRows = app(PayrollCalculator::class)->branchSummaryRows($this->selectedPeriod);
     }
 
     public function exportExcel(): StreamedResponse
@@ -97,7 +121,7 @@ class PayrollSummary extends Page implements HasForms
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->url(fn (): string => filled($this->period_id)
-                    ? PayrollPeriodBranches::getUrl(['periodId' => $this->period_id])
+                    ? Payroll::getUrl(['periodId' => $this->selectedPeriod?->publicKey() ?? $this->period_id])
                     : Payroll::getUrl()),
 
             Action::make('signatories')

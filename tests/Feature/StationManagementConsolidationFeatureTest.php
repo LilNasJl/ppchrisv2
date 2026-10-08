@@ -376,7 +376,7 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $this->assertEquals([30], $data['datasets'][3]['data']);
     }
 
-    public function test_download_dtr_action_notifies_when_no_records_exist(): void
+    public function test_manual_dtr_download_and_submit_actions_are_removed_from_station_pages(): void
     {
         [, $managerUser, $branch, $period] = $this->setupUsers();
 
@@ -387,35 +387,12 @@ class StationManagementConsolidationFeatureTest extends TestCase
             'periodId' => $period->id,
         ])
             ->test(StationEmployees::class)
-            ->callAction('downloadDtr')
-            ->assertNotified('No D.T.R Records Found');
-    }
+            ->assertActionDoesNotExist('downloadDtr')
+            ->assertActionExists('importDtr');
 
-    public function test_download_dtr_action_streams_file_when_records_exist(): void
-    {
-        [, $managerUser, $branch, $period] = $this->setupUsers();
-
-        EmployeeVisibleDtr::query()->create([
-            'payroll_period_id' => $period->id,
-            'branch_id' => $branch->id,
-            'employee_id' => $managerUser->employee->id,
-            'fingerprint_id' => '1001',
-            'date_in' => '2026-09-02',
-            'time_in' => '08:00:00',
-            'date_out' => '2026-09-02',
-            'time_out' => '17:00:00',
-        ]);
-
-        $this->actingAs($managerUser, 'web');
-
-        $component = Livewire::withQueryParams([
-            'branchId' => $branch->id,
-            'periodId' => $period->id,
-        ])
-            ->test(StationEmployees::class)
-            ->callAction('downloadDtr');
-
-        $component->assertSuccessful();
+        Livewire::test(\App\Filament\Employee\Pages\Station\ManageStationDtr::class)
+            ->assertActionDoesNotExist('submitDtr')
+            ->assertActionExists('submitDtrProof');
     }
 
     public function test_station_managers_hr_page_is_removed(): void

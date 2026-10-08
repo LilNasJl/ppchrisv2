@@ -1,19 +1,36 @@
 <x-filament-panels::page>
     <style>
-        .employee-payroll-summary {
+        .employee-payroll-workspace { display: grid; gap: 12px; min-width: 0; }
+        .employee-payroll-context {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px 24px;
+            padding: 12px 16px;
+            border: 1px solid rgb(226, 232, 240);
+            border-radius: 8px;
+            background: rgb(248, 250, 252);
+        }
+        .dark .employee-payroll-context { border-color: rgb(55, 65, 81); background: rgb(17, 24, 39); }
+        .employee-payroll-identity { min-width: 0; }
+        .employee-payroll-period { display: block; color: rgb(100, 116, 139); font-size: .72rem; }
+        .employee-payroll-name { color: rgb(15, 23, 42); font-size: 1rem; font-weight: 750; overflow-wrap: anywhere; }
+        .dark .employee-payroll-period { color: rgb(148, 163, 184); }
+        .dark .employee-payroll-name { color: rgb(248, 250, 252); }
+        .employee-payroll-meta { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+        .employee-payroll-meta div { min-width: 110px; }
+        .employee-payroll-meta dt { color: rgb(100, 116, 139); font-size: .68rem; }
+        .employee-payroll-meta dd { color: rgb(15, 23, 42); font-size: .78rem; font-weight: 650; margin: 0; }
+        .dark .employee-payroll-meta dt { color: rgb(148, 163, 184); }
+        .dark .employee-payroll-meta dd { color: rgb(241, 245, 249); }
+        .employee-payroll-overview {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            align-items: start;
         }
-
-        .employee-payroll-value {
-            font-weight: 700;
-            overflow-wrap: anywhere;
-        }
-
-        .employee-payroll-adjustments {
-            max-width: 760px;
-        }
+        .employee-payroll-adjustments { max-width: 960px; min-width: 0; }
 
         .employee-payroll-statement {
             background: rgb(255, 255, 255);
@@ -29,17 +46,16 @@
 
         .employee-payroll-groups {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
         }
 
         .employee-payroll-group {
-            border-bottom: 1px solid rgb(226, 232, 240);
             min-width: 0;
-            padding: 18px;
+            padding: 14px;
         }
 
-        .employee-payroll-group:nth-child(odd) {
-            border-right: 1px solid rgb(226, 232, 240);
+        .employee-payroll-group + .employee-payroll-group {
+            border-left: 1px solid rgb(226, 232, 240);
         }
 
         .dark .employee-payroll-group {
@@ -50,7 +66,7 @@
             color: rgb(15, 23, 42);
             font-size: .875rem;
             font-weight: 700;
-            margin: 0 0 14px;
+            margin: 0 0 8px;
         }
 
         .dark .employee-payroll-group h3 {
@@ -59,16 +75,20 @@
 
         .employee-payroll-metrics {
             display: grid;
-            gap: 10px 18px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0;
+            grid-template-columns: minmax(0, 1fr);
         }
 
         .employee-payroll-metric {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             justify-content: space-between;
             min-width: 0;
+            padding: 5px 0;
+            border-bottom: 1px solid rgb(226, 232, 240);
         }
+        .employee-payroll-metric:last-child { border-bottom: 0; }
+        .dark .employee-payroll-metric { border-color: rgb(55, 65, 81); }
 
         .employee-payroll-metric dt {
             color: rgb(100, 116, 139);
@@ -84,6 +104,7 @@
             margin: 0;
             text-align: right;
             white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .dark .employee-payroll-metric dt {
@@ -94,28 +115,37 @@
             color: rgb(241, 245, 249);
         }
 
-        .employee-payroll-totals {
-            background: rgb(248, 250, 252);
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-
-        .dark .employee-payroll-totals {
-            background: rgb(15, 23, 42);
-        }
-
         .employee-payroll-total {
             min-width: 0;
-            padding: 16px 18px;
+            min-height: 88px;
+            padding: 12px;
+            border: 1px solid rgb(226, 232, 240);
+            border-radius: 8px;
+            background: rgb(248, 250, 252);
+            display: flex;
+            align-items: center;
+            gap: 11px;
         }
-
-        .employee-payroll-total + .employee-payroll-total {
-            border-left: 1px solid rgb(226, 232, 240);
-        }
-
-        .dark .employee-payroll-total + .employee-payroll-total {
+        .dark .employee-payroll-total {
             border-color: rgb(55, 65, 81);
+            background: rgb(17, 24, 39);
         }
+        .employee-payroll-total-icon {
+            display: grid;
+            flex: 0 0 38px;
+            height: 38px;
+            place-items: center;
+            border-radius: 8px;
+            margin: 0 !important;
+        }
+        .employee-payroll-total-icon svg { height: 20px; width: 20px; }
+        .employee-payroll-total.gross .employee-payroll-total-icon { color: rgb(5, 150, 105); background: rgb(209, 250, 229); }
+        .employee-payroll-total.deductions .employee-payroll-total-icon { color: rgb(180, 83, 9); background: rgb(254, 243, 199); }
+        .employee-payroll-total.net .employee-payroll-total-icon { color: rgb(37, 99, 235); background: rgb(219, 234, 254); }
+        .dark .employee-payroll-total.gross .employee-payroll-total-icon { color: rgb(110, 231, 183); background: rgba(5, 150, 105, .18); }
+        .dark .employee-payroll-total.deductions .employee-payroll-total-icon { color: rgb(252, 211, 77); background: rgba(217, 119, 6, .18); }
+        .dark .employee-payroll-total.net .employee-payroll-total-icon { color: rgb(147, 197, 253); background: rgba(37, 99, 235, .2); }
+        .employee-payroll-total-copy { min-width: 0; }
 
         .employee-payroll-total span {
             color: rgb(100, 116, 139);
@@ -132,9 +162,7 @@
             overflow-wrap: anywhere;
         }
 
-        .employee-payroll-total:last-child strong {
-            color: rgb(37, 99, 235);
-        }
+        .employee-payroll-total.net strong { color: rgb(37, 99, 235); }
 
         .dark .employee-payroll-total span {
             color: rgb(148, 163, 184);
@@ -144,9 +172,7 @@
             color: rgb(248, 250, 252);
         }
 
-        .dark .employee-payroll-total:last-child strong {
-            color: rgb(96, 165, 250);
-        }
+        .dark .employee-payroll-total.net strong { color: rgb(96, 165, 250); }
 
         .employee-payroll-empty {
             border: 1px dashed rgb(203, 213, 225);
@@ -161,46 +187,36 @@
             color: rgb(148, 163, 184);
         }
 
-        @media (max-width: 900px) {
-            .employee-payroll-summary {
+        @media (max-width: 1450px) {
+            .employee-payroll-groups {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+            .employee-payroll-group:nth-child(odd) { border-left: 0; }
+            .employee-payroll-group:nth-child(n + 3) { border-top: 1px solid rgb(226, 232, 240); }
+            .dark .employee-payroll-group:nth-child(n + 3) { border-top-color: rgb(55, 65, 81); }
+        }
 
-            .employee-payroll-groups {
-                grid-template-columns: 1fr;
-            }
-
-            .employee-payroll-group:nth-child(odd) {
-                border-right: 0;
-            }
+        @media (max-width: 700px) {
+            .employee-payroll-groups { grid-template-columns: 1fr; }
+            .employee-payroll-group + .employee-payroll-group { border-left: 0; border-top: 1px solid rgb(226, 232, 240); }
+            .dark .employee-payroll-group + .employee-payroll-group { border-top-color: rgb(55, 65, 81); }
+            .employee-payroll-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .employee-payroll-total.net { grid-column: 1 / -1; }
+            .employee-payroll-meta { width: 100%; }
         }
 
         @media (max-width: 560px) {
-            .employee-payroll-summary {
-                grid-template-columns: 1fr;
-            }
-
-            .employee-payroll-metrics,
-            .employee-payroll-totals {
-                grid-template-columns: 1fr;
-            }
-
-            .employee-payroll-total + .employee-payroll-total {
-                border-left: 0;
-                border-top: 1px solid rgb(226, 232, 240);
-            }
-
-            .dark .employee-payroll-total + .employee-payroll-total {
-                border-color: rgb(55, 65, 81);
-            }
+            .employee-payroll-overview { grid-template-columns: 1fr; }
+            .employee-payroll-adjustments, .employee-payroll-total.net { grid-column: auto; }
+            .employee-payroll-meta { gap: 8px 16px; }
+            .employee-payroll-meta div { min-width: 0; }
+            .employee-payroll-context { padding: 12px; }
         }
 
-        .payroll-print-table {
-            display: none;
-        }
+        .payroll-print-table { display: none; }
 
         @media print {
-            .employee-payroll-adjustments,
+            .employee-payroll-overview,
             .employee-payroll-statement {
                 display: none !important;
             }
@@ -209,38 +225,25 @@
                 display: block !important;
             }
         }
+
     </style>
 
-    <div style="display: grid; gap: 16px;">
-        <div style="font-size: 14px; color: #64748b;">
-            Payroll Period:
-            <span style="font-weight: 700; color: inherit;">{{ $this->selectedPeriod?->title ?: 'No payroll period selected' }}</span>
-        </div>
-
-        @if ($this->employee)
-            <div class="employee-payroll-summary">
-                <div>
-                    <div style="font-size: 12px; color: #94a3b8;">Employee</div>
-                    <div class="employee-payroll-value">
-                        <span style="display: inline-flex; align-items: center; border-radius: 999px; background: rgba(37, 99, 235, .16); color: #2563eb; padding: 4px 10px; max-width: 100%; overflow-wrap: anywhere;">
-                            {{ trim($this->employee->lastname . ', ' . (filled($this->employee->middlename) ? $this->employee->middlename . '. ' : '') . $this->employee->firstname) }}
-                        </span>
-                    </div>
-                </div>
-                <div>
-                    <div style="font-size: 12px; color: #94a3b8;">Designation</div>
-                    <div class="employee-payroll-value">{{ $this->employee->designation?->title ?: '-' }}</div>
-                </div>
-                <div>
-                    <div style="font-size: 12px; color: #94a3b8;">Department</div>
-                    <div class="employee-payroll-value">{{ $this->employee->department?->name ?: '-' }}</div>
-                </div>
-                <div>
-                    <div style="font-size: 12px; color: #94a3b8;">Branch</div>
-                    <div class="employee-payroll-value">{{ $this->employee->branch?->branch_name ?: '-' }}</div>
-                </div>
+    <div class="employee-payroll-workspace">
+        <div class="employee-payroll-context">
+            <div class="employee-payroll-identity">
+                <span class="employee-payroll-period">{{ $this->selectedPeriod?->title ?: 'No payroll period selected' }}</span>
+                @if ($this->employee)
+                    <strong class="employee-payroll-name">{{ trim($this->employee->lastname . ', ' . (filled($this->employee->middlename) ? $this->employee->middlename . '. ' : '') . $this->employee->firstname) }}</strong>
+                @endif
             </div>
-        @endif
+            @if ($this->employee)
+                <dl class="employee-payroll-meta">
+                    <div><dt>Designation</dt><dd>{{ $this->employee->designation?->title ?: '-' }}</dd></div>
+                    <div><dt>Department</dt><dd>{{ $this->employee->department?->name ?: '-' }}</dd></div>
+                    <div><dt>Branch</dt><dd>{{ $this->employee->branch?->branch_name ?: '-' }}</dd></div>
+                </dl>
+            @endif
+        </div>
 
         @php
             $payrollRow = $this->payrollRow;
@@ -253,6 +256,30 @@
         @endphp
 
         @if ($payrollRow)
+            <div class="employee-payroll-overview">
+                <div class="employee-payroll-total gross">
+                    <span class="employee-payroll-total-icon"><x-filament::icon icon="heroicon-m-banknotes" /></span>
+                    <div class="employee-payroll-total-copy">
+                        <span>Gross Pay</span>
+                        <strong>{{ $money($payrollRow['gross_pay'] ?? null) }}</strong>
+                    </div>
+                </div>
+                <div class="employee-payroll-total deductions">
+                    <span class="employee-payroll-total-icon"><x-filament::icon icon="heroicon-m-arrow-trending-down" /></span>
+                    <div class="employee-payroll-total-copy">
+                        <span>Total Deductions</span>
+                        <strong>{{ $money($payrollRow['total_deductions'] ?? null) }}</strong>
+                    </div>
+                </div>
+                <div class="employee-payroll-total net">
+                    <span class="employee-payroll-total-icon"><x-filament::icon icon="heroicon-m-wallet" /></span>
+                    <div class="employee-payroll-total-copy">
+                        <span>Net Pay</span>
+                        <strong>{{ $money($payrollRow['net_pay'] ?? null) }}</strong>
+                    </div>
+                </div>
+            </div>
+
             <div class="employee-payroll-adjustments">
                 {{ $this->form }}
             </div>
@@ -311,20 +338,6 @@
                     </section>
                 </div>
 
-                <div class="employee-payroll-totals">
-                    <div class="employee-payroll-total">
-                        <span>Gross Pay</span>
-                        <strong>{{ $money($payrollRow['gross_pay'] ?? null) }}</strong>
-                    </div>
-                    <div class="employee-payroll-total">
-                        <span>Total Deductions</span>
-                        <strong>{{ $money($payrollRow['total_deductions'] ?? null) }}</strong>
-                    </div>
-                    <div class="employee-payroll-total">
-                        <span>Net Pay</span>
-                        <strong>{{ $money($payrollRow['net_pay'] ?? null) }}</strong>
-                    </div>
-                </div>
             </div>
         @else
             <div class="employee-payroll-empty">No payroll data available.</div>

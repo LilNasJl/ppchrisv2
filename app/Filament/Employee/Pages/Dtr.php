@@ -14,15 +14,15 @@ use App\Services\DtrRecordService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -79,6 +79,38 @@ class Dtr extends Page implements HasForms, HasTable
         ]);
     }
 
+    public function updatedPeriodId($value): void
+    {
+        $this->period_id = filled($value) ? (string) $value : null;
+
+        if (isset($this->form)) {
+            $this->form->fill([
+                'period_id' => $this->period_id,
+            ]);
+        }
+
+        unset($this->selectedPeriod, $this->overview);
+        $this->resetTable();
+    }
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    #[Override]
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {
@@ -89,9 +121,7 @@ class Dtr extends Page implements HasForms, HasTable
                 ->badge(fn (): ?string => $this->unseenReviewedRequestBadge())
                 ->badgeColor('danger')
                 ->badgeTooltip('Reviewed change requests you have not opened yet')
-                ->url(fn (): string => DtrChangeRequests::getUrl([
-                    'periodId' => $this->selectedPeriod?->publicKey(),
-                ])),
+                ->url(fn (): string => $this->getChangeRequestsUrl()),
 
             Action::make('printDtr')
                 ->label('Print / PDF D.T.R')
@@ -102,28 +132,40 @@ class Dtr extends Page implements HasForms, HasTable
         ];
     }
 
-    protected function unseenReviewedRequestBadge(): ?string
+    public function getChangeRequestsUrl(): string
+    {
+        return DtrChangeRequests::getUrl([
+            'periodId' => $this->selectedPeriod?->publicKey(),
+        ]);
+    }
+
+    public function unseenReviewedRequestBadge(): ?string
+    {
+        $count = $this->getUnseenReviewedRequestCount();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public function getUnseenReviewedRequestCount(): int
     {
         $employeeId = auth()->user()?->employee?->id;
 
         if (! $employeeId) {
-            return null;
+            return 0;
         }
 
-        $count = DtrChangeRequest::query()
+        return DtrChangeRequest::query()
             ->where('employee_id', $employeeId)
             ->reviewed()
             ->unseenByEmployee()
             ->count();
-
-        return $count > 0 ? (string) $count : null;
     }
 
     protected function getFormSchema(): array
     {
         return [
             Select::make('period_id')
-                ->label('Payroll Period')
+                ->hiddenLabel()
                 ->options(fn (): array => $this->payrollPeriodOptions())
                 ->default(fn (): ?string => $this->period_id)
                 ->searchable()
@@ -134,7 +176,7 @@ class Dtr extends Page implements HasForms, HasTable
                     unset($this->selectedPeriod, $this->overview);
                     $this->resetTable();
                 })
-                ->placeholder('No payroll period available'),
+                ->placeholder('Select payroll period...'),
         ];
     }
 
@@ -148,6 +190,7 @@ class Dtr extends Page implements HasForms, HasTable
                 ->orderByDesc('id'))
             ->heading(fn (): string => $this->selectedPeriod?->title ?: 'D.T.R Entries')
             ->description('Read-only attendance records for the selected payroll period.')
+            ->recordClasses('text-xs')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
@@ -163,19 +206,31 @@ class Dtr extends Page implements HasForms, HasTable
                         'Leave' => 'info',
                         'For Approval' => 'warning',
                         'Overtime' => 'warning',
+                        'Morning' => 'info',
+                        'Afternoon' => 'purple',
                         default => 'success',
                     })
                     ->alignCenter(),
 
                 TextColumn::make('date_in')
                     ->label('Date In')
-                    ->date('M d, Y')
+                    ->date('M d, Y (D)')
                     ->sortable(),
 
                 TextColumn::make('time_in')
-                    ->label('In')
-                    ->time('h:i A')
+                    ->label('IN')
                     ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
                     ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('date_out')
@@ -184,22 +239,52 @@ class Dtr extends Page implements HasForms, HasTable
                     ->placeholder('-'),
 
                 TextColumn::make('time_out')
-                    ->label('Out')
-                    ->time('h:i A')
+                    ->label('OUT')
                     ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
                     ->extraAttributes(['class' => 'font-mono tabular-nums']),
 
                 TextColumn::make('schedule_start')
                     ->label('Sched. Start')
-                    ->time('h:i A')
                     ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
                     ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->toggleable(),
 
                 TextColumn::make('schedule_end')
                     ->label('Sched. End')
-                    ->time('h:i A')
                     ->placeholder('-')
+                    ->formatStateUsing(function (?string $state): string {
+                        if (blank($state)) {
+                            return '-';
+                        }
+                        try {
+                            return Carbon::parse($state)->format('h:i A');
+                        } catch (\Throwable) {
+                            return (string) $state;
+                        }
+                    })
+                    ->alignCenter()
                     ->extraAttributes(['class' => 'font-mono tabular-nums'])
                     ->toggleable(),
 
@@ -209,11 +294,11 @@ class Dtr extends Page implements HasForms, HasTable
                     ->placeholder('-')
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->replace('_', ' ')->title()->toString() : '-')
                     ->color(fn (?string $state): string => match (str($state ?? '')->lower()->toString()) {
-                        'regular' => 'gray',
-                        'saturday', 'sunday', 'rest_day' => 'info',
-                        'leave' => 'info',
+                        'regular', 'regular work' => 'gray',
+                        'saturday', 'sunday', 'rest_day', 'regular saturday' => 'info',
+                        'leave' => 'purple',
                         'overtime' => 'warning',
-                        'absent' => 'danger',
+                        'absent', 'forgot to punch' => 'danger',
                         default => 'gray',
                     })
                     ->toggleable(),
@@ -227,7 +312,8 @@ class Dtr extends Page implements HasForms, HasTable
                         : (string) ($record->day_part ?? ''))
                     ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
                     ->color(fn (?string $state): string => match (app(DtrDayPartService::class)->normalize($state)) {
-                        DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 'info',
+                        DtrDayPartService::MORNING => 'info',
+                        DtrDayPartService::AFTERNOON => 'purple',
                         DtrDayPartService::UNCLASSIFIED => 'warning',
                         default => 'gray',
                     })
@@ -242,48 +328,48 @@ class Dtr extends Page implements HasForms, HasTable
 
                 TextColumn::make('late')
                     ->label('Late')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): ?string => (int) $state > 0 ? 'danger' : null)
                     ->alignCenter(),
 
                 TextColumn::make('undertime')
                     ->label('Undertime')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): ?string => (int) $state > 0 ? 'warning' : null)
                     ->alignCenter(),
 
                 TextColumn::make('early_clock_in')
                     ->label('Early In')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): ?string => (int) $state > 0 ? 'info' : null)
                     ->alignCenter(),
 
                 TextColumn::make('overtime')
                     ->label('Overtime')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
-                    ->color(fn ($state): ?string => (int) $state > 0 ? 'purple' : null)
+                    ->color(fn ($state): ?string => (int) $state > 0 ? 'warning' : null)
                     ->alignCenter(),
 
                 TextColumn::make('credited_overtime')
                     ->label('Cred. OT')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatMinutes($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m ('.number_format((int) $state / 60, 1).'h)' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): ?string => (int) $state > 0 ? 'success' : null)
                     ->alignCenter(),
 
                 TextColumn::make('work_hrs')
                     ->label('Work Hours')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatDuration($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? number_format((int) $state / 60, 1).' hrs' : '-')
                     ->extraAttributes(['class' => 'font-semibold tabular-nums'])
                     ->alignCenter(),
 
                 TextColumn::make('credited_work_hrs')
                     ->label('Cred. Work Hours')
-                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? $this->formatDuration($state) : '-')
+                    ->formatStateUsing(fn ($state): string => (int) $state > 0 ? number_format((int) $state / 60, 1).' hrs' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(function (DtrModel $record, $state): ?string {
                         if ((int) $state <= 0) {
@@ -292,23 +378,26 @@ class Dtr extends Page implements HasForms, HasTable
 
                         return ((int) $record->late > 0 || (int) $record->undertime > 0)
                             ? 'warning'
-                            : 'info';
+                            : 'success';
                     })
                     ->alignCenter(),
 
                 TextColumn::make('holiday_type')
                     ->label('Holiday')
                     ->badge(fn ($state): bool => filled($state))
-                    ->color(fn ($state): ?string => filled($state) ? 'warning' : null)
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Regular' => 'danger',
+                        'Special' => 'warning',
+                        default => 'gray',
+                    })
                     ->placeholder('-')
                     ->toggleable(),
 
                 TextColumn::make('holiday_rate')
                     ->label('Hol. Rate')
                     ->formatStateUsing(fn ($state): string => filled($state) ? number_format((float) $state, 2).'%' : '-')
-                    ->badge(fn ($state): bool => filled($state))
-                    ->color(fn ($state): ?string => filled($state) ? 'success' : null)
                     ->placeholder('-')
+                    ->alignCenter()
                     ->toggleable(),
 
                 TextColumn::make('overtime_status')
@@ -346,6 +435,8 @@ class Dtr extends Page implements HasForms, HasTable
                     Action::make('changeRequest')
                         ->label('Change Request')
                         ->icon(Heroicon::DocumentPlus)
+                        ->visible(fn (DtrModel $record): bool => ! $this->isSelectedPeriodLocked() && ! (bool) $record->is_locked && ! (bool) $record->payrollPeriod?->is_locked)
+                        ->disabled(fn (DtrModel $record): bool => $this->isSelectedPeriodLocked() || (bool) $record->is_locked || (bool) $record->payrollPeriod?->is_locked)
                         ->modalHeading('Submit D.T.R Change Request')
                         ->modalIcon(Heroicon::DocumentPlus)
                         ->modalDescription(fn (DtrModel $record): string => 'Request approval or correction for ' . (filled($record->date_in) ? Carbon::parse($record->date_in)->format('M d, Y') : 'this D.T.R entry'))
@@ -500,6 +591,16 @@ class Dtr extends Page implements HasForms, HasTable
                                 ->columnSpanFull(),
                         ])
                         ->action(function (DtrModel $record, array $data): void {
+                            if ($this->isSelectedPeriodLocked() || (bool) $record->is_locked || (bool) $record->payrollPeriod?->is_locked || $record->isPayrollPeriodLocked()) {
+                                Notification::make()
+                                    ->title('Payroll Period Locked')
+                                    ->body('This payroll period is locked. D.T.R entries are read-only and change requests cannot be submitted.')
+                                    ->danger()
+                                    ->send();
+
+                                return;
+                            }
+
                             $employee = $this->employee;
                             if (! $employee) {
                                 Notification::make()->title('Employee record not found')->danger()->send();
@@ -546,7 +647,7 @@ class Dtr extends Page implements HasForms, HasTable
     {
         return auth()->user()
             ?->employee()
-            ->with(['branch', 'designation'])
+            ->with(['branch', 'designation', 'department', 'user'])
             ->first();
     }
 
@@ -557,6 +658,11 @@ class Dtr extends Page implements HasForms, HasTable
         return filled($periodId)
             ? PayrollPeriod::query()->find($periodId)
             : null;
+    }
+
+    public function isSelectedPeriodLocked(): bool
+    {
+        return (bool) $this->selectedPeriod?->is_locked;
     }
 
     /**
@@ -616,7 +722,7 @@ class Dtr extends Page implements HasForms, HasTable
 
     public function formatMinutes(mixed $minutes): string
     {
-        return max(0, (int) $minutes).' min';
+        return max(0, (int) $minutes).'m';
     }
 
     public function formatDuration(mixed $minutes): string
@@ -644,13 +750,27 @@ class Dtr extends Page implements HasForms, HasTable
             return 'Overtime';
         }
 
-        return 'Present';
+        return match (app(DtrAttendanceUnitService::class)->dayPartForRecord($record)) {
+            DtrDayPartService::MORNING => 'Morning',
+            DtrDayPartService::AFTERNOON => 'Afternoon',
+            default => 'Present',
+        };
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, PayrollPeriod>
+     */
+    public function payrollPeriods()
+    {
+        return PayrollPeriod::query()
+            ->newestFirst()
+            ->get();
     }
 
     /**
      * @return array<int|string, string>
      */
-    protected function payrollPeriodOptions(): array
+    public function payrollPeriodOptions(): array
     {
         return PayrollPeriod::query()
             ->newestFirst()
@@ -708,14 +828,14 @@ class Dtr extends Page implements HasForms, HasTable
         return $employee?->fingerprint_id ?: $employee?->uid;
     }
 
-    protected function canPrintDtr(): bool
+    public function canPrintDtr(): bool
     {
         return filled($this->employee)
             && filled($this->employee?->branch)
             && filled($this->selectedPeriod);
     }
 
-    protected function getPrintUrl(): string
+    public function getPrintUrl(): string
     {
         if (! $this->canPrintDtr()) {
             return '#';

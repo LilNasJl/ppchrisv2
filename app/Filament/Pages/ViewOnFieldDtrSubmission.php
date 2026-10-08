@@ -66,7 +66,7 @@ class ViewOnFieldDtrSubmission extends Page
                     'employee.branch',
                     'branch',
                     'payrollPeriod',
-                    'sicRcAccount',
+                    'submittedByEmployee',
                     'reviewedBy',
                     'generatedDtrDeletedBy',
                 ])

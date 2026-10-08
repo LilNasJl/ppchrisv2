@@ -275,6 +275,11 @@ class EmployeeLoan extends Model
 
     public function postedPaymentForPeriod(PayrollPeriod $period): ?EmployeeLoanPayment
     {
+        if ($this->relationLoaded('postedPayments')) {
+            return $this->postedPayments
+                ->first(fn (EmployeeLoanPayment $payment): bool => (int) $payment->payroll_period_id === (int) $period->id);
+        }
+
         return $this->payments()
             ->where('payroll_period_id', $period->id)
             ->where('status', EmployeeLoanPayment::STATUS_POSTED)

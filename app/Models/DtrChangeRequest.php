@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
 use App\Models\User;
+use App\Services\LeaveApprovalAccess;
 use App\Services\StationManagementAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -130,6 +131,59 @@ class DtrChangeRequest extends Model
         ];
     }
 
+    public static function isHrReviewer(User|Employee|null $actor): bool
+    {
+        if (! $actor) {
+            return false;
+        }
+
+        $user = $actor instanceof User
+            ? $actor
+            : ($actor->relationLoaded('user') ? $actor->user : $actor->user()->first());
+
+        if (! $user) {
+            return false;
+        }
+
+        if ((bool) ($user->is_disabled ?? false)) {
+            return false;
+        }
+
+        if (in_array($user->role, ['hr', 'admin'], true)) {
+            return true;
+        }
+
+        return LeaveApprovalAccess::review($user);
+    }
+
+    public function isCurrentStepHr(): bool
+    {
+        $snapshot = $this->workflow_snapshot ?? [];
+        $currentLevel = (int) ($this->current_level ?? 1);
+
+        foreach ($snapshot as $step) {
+            if ((int) ($step['level'] ?? 0) === $currentLevel) {
+                if (! empty($step['is_hr'])) {
+                    return true;
+                }
+
+                if (blank($step['approver_employee_id'] ?? null) && str_contains(strtolower((string) ($step['label'] ?? '')), 'hr')) {
+                    return true;
+                }
+            }
+        }
+
+        return blank($this->assigned_employee_id)
+            && str_contains(strtolower((string) ($this->current_step_label ?? '')), 'hr');
+    }
+
+    public function isPendingHrApproval(): bool
+    {
+        return $this->status === self::STATUS_PENDING
+            && $this->isCurrentStepHr()
+            && $this->arePreviousLevelsApproved();
+    }
+
     public function getRequestTypeLabelAttribute(): string
     {
         return self::requestTypeOptions()[$this->request_type] ?? str($this->request_type)->replace('_', ' ')->title()->toString();
@@ -138,7 +192,14 @@ class DtrChangeRequest extends Model
     public function getDisplayStatusAttribute(): string
     {
         if ($this->status === self::STATUS_PENDING) {
+            if ($this->isCurrentStepHr()) {
+                return 'Pending HR Final Approval';
+            }
+
             $step = trim((string) ($this->current_step_label ?? ''));
+            if ($step !== '' && str_ends_with(strtolower($step), 'approval')) {
+                return "Pending – {$step}";
+            }
 
             return $step !== '' ? "Pending – {$step} Approval" : 'Pending';
         }
@@ -150,6 +211,10 @@ class DtrChangeRequest extends Model
     {
         if ($this->status !== self::STATUS_PENDING) {
             return $this->reviewer_name;
+        }
+
+        if ($this->isCurrentStepHr()) {
+            return 'HR';
         }
 
         if ($this->assignedEmployee) {
@@ -269,14 +334,28 @@ class DtrChangeRequest extends Model
 
     public function isPendingAtCurrentLevel(): bool
     {
-        return $this->status === self::STATUS_PENDING
-            && filled($this->assigned_employee_id)
-            && $this->arePreviousLevelsApproved();
+        if ($this->status !== self::STATUS_PENDING || ! $this->arePreviousLevelsApproved()) {
+            return false;
+        }
+
+        if ($this->isCurrentStepHr()) {
+            return true;
+        }
+
+        return filled($this->assigned_employee_id);
     }
 
     public function canBeEditedBy(User|Employee|null $actor): bool
     {
-        if (! $this->isPendingAtCurrentLevel() || ! $this->is_first_level || ! $this->is_editable_type) {
+        if (! $this->isPendingAtCurrentLevel() || ! $this->is_editable_type) {
+            return false;
+        }
+
+        if ($this->isCurrentStepHr()) {
+            return self::isHrReviewer($actor);
+        }
+
+        if (! $this->is_first_level) {
             return false;
         }
 
@@ -286,6 +365,10 @@ class DtrChangeRequest extends Model
 
         $employee = StationManagementAccess::resolveEmployee($actor);
         if (! $employee) {
+            return false;
+        }
+
+        if ((int) $this->employee_id === (int) $employee->id) {
             return false;
         }
 
@@ -302,12 +385,20 @@ class DtrChangeRequest extends Model
             return false;
         }
 
+        if ($this->isCurrentStepHr()) {
+            return self::isHrReviewer($actor);
+        }
+
         if (! StationManagementAccess::isActiveApproverAccount($actor)) {
             return false;
         }
 
         $employee = StationManagementAccess::resolveEmployee($actor);
         if (! $employee) {
+            return false;
+        }
+
+        if ((int) $this->employee_id === (int) $employee->id) {
             return false;
         }
 
@@ -398,6 +489,16 @@ class DtrChangeRequest extends Model
         return $query->where('status', self::STATUS_PENDING);
     }
 
+    public function scopePendingForHr(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_PENDING)
+            ->whereNull('assigned_employee_id')
+            ->where(function (Builder $q): void {
+                $q->where('current_step_label', 'HR Final Approval')
+                    ->orWhereColumn('current_level', '>=', 'total_levels');
+            });
+    }
+
     public function scopePendingForApprover(Builder $query, Employee|int|null $approver): Builder
     {
         $approverEmployee = $approver instanceof Employee
@@ -475,6 +576,16 @@ class DtrChangeRequest extends Model
 
     public function getReviewerNameAttribute(): string
     {
-        return $this->reviewedByEmployee?->full_name ?? 'Not reviewed yet';
+        if ($this->reviewedByEmployee) {
+            return (string) $this->reviewedByEmployee->full_name;
+        }
+
+        $history = collect($this->approvals_history ?? []);
+        $lastDecision = $history->reverse()->first(fn ($entry) => in_array(strtolower((string) ($entry['action'] ?? '')), ['approved', 'rejected'], true));
+        if ($lastDecision && filled($lastDecision['actor_name'] ?? null)) {
+            return (string) $lastDecision['actor_name'];
+        }
+
+        return $this->reviewed_at ? 'HR' : 'Not reviewed yet';
     }
 }

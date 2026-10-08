@@ -1614,4 +1614,156 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertDatabaseMissing('employee_visible_dtrs', ['id' => $visible->id]);
         $this->assertDatabaseMissing('dtrs', ['id' => $official->id]);
     }
+
+    public function test_pf0014_and_sic_missing_dtr_entries_self_approval_routing_across_workflows(): void
+    {
+        $mainOffice = Branch::query()->create([
+            'branch_name' => 'MAIN OFFICE',
+            'reg_sched_start' => '08:00:00',
+            'reg_sched_end' => '18:00:00',
+        ]);
+
+        $macoBranch = Branch::query()->create([
+            'branch_name' => 'Maco',
+            'reg_sched_start' => '08:00:00',
+            'reg_sched_end' => '18:00:00',
+        ]);
+
+        $period = PayrollPeriod::query()->create([
+            'title' => 'Oct 1 - 15, 2026',
+            'date_start' => '2026-10-01',
+            'date_end' => '2026-10-15',
+            'date_payout' => '2026-10-20',
+            'is_locked' => false,
+        ]);
+
+        $hrUser = User::query()->create([
+            'name' => 'HR Admin',
+            'email' => 'hr@example.com',
+            'role' => 'hr',
+        ]);
+
+        $sicUser = User::query()->create(['name' => 'Rhonalyn Degamo', 'role' => 'employee']);
+        $sic = Employee::query()->create([
+            'user_id' => $sicUser->id,
+            'uid' => '9',
+            'company_id' => 'PF-0009',
+            'fingerprint_id' => '9',
+            'firstname' => 'Rhonalyn',
+            'lastname' => 'Degamo',
+            'branch_id' => $mainOffice->id,
+        ]);
+
+        $rcUser = User::query()->create(['name' => 'Franz Kevin Gaslang', 'role' => 'employee']);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'uid' => '14',
+            'company_id' => 'PF-0014',
+            'fingerprint_id' => '14',
+            'firstname' => 'Franz Kevin',
+            'lastname' => 'Gaslang',
+            'branch_id' => $mainOffice->id,
+        ]);
+
+        // Company default workflow with 0 levels (as in live DB)
+        LeaveApprovalWorkflow::query()->create([
+            'name' => 'Company default - HR review',
+            'branch_id' => null,
+            'is_active' => true,
+        ]);
+
+        // Maco station workflow where PF-0009 is Level 1 (SIC) and PF-0014 is Level 2 (RC)
+        $macoWorkflow = LeaveApprovalWorkflow::query()->create([
+            'name' => 'Maco',
+            'branch_id' => $macoBranch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $macoWorkflow->id,
+            'sequence' => 1,
+            'label' => 'SIC',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $macoWorkflow->id,
+            'sequence' => 2,
+            'label' => 'RC',
+            'approver_employee_id' => $rc->id,
+        ]);
+
+        $attachmentPath = $this->createValidAttachment();
+        $service = app(DtrChangeRequestService::class);
+
+        // 1. Level 1 SIC (PF-0009) submits Missing DTR Entries -> skips self-approval, routes to Level 2 RC (PF-0014)
+        $sicRequest = $service->submitMissingDtrEntries($sic, [
+            'payroll_period_id' => $period->id,
+            'explanation' => 'SIC field visit.',
+            'attachment_path' => $attachmentPath,
+            'attachment_original_name' => 'proof.png',
+            'entries' => [
+                [
+                    'date_in' => '2026-10-03',
+                    'time_in' => '08:00 AM',
+                    'date_out' => '2026-10-03',
+                    'time_out' => '06:00 PM',
+                    'schedule_type' => 'Regular',
+                ],
+            ],
+        ]);
+
+        $this->assertSame(1, $sicRequest->total_levels);
+        $this->assertSame(1, $sicRequest->current_level);
+        $this->assertSame($rc->id, $sicRequest->assigned_employee_id);
+        $this->assertFalse($sicRequest->canBeReviewedBy($sic));
+        $this->assertTrue($sicRequest->canBeReviewedBy($rc));
+
+        // RC approves -> RC is final approver, so DTR record is created immediately
+        $sicRequest = $service->approve($sicRequest, $rc, 'Approved by RC.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $sicRequest->status);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '9',
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-10-03',
+        ]);
+
+        // 2. Level 2 RC (PF-0014) submits Missing DTR Entries for 8:00 AM - 6:00 PM Regular schedule
+        // -> No higher workflow approver exists -> routes directly to HR Final Approval without error!
+        $rcRequest = $service->submitMissingDtrEntries($rc, [
+            'payroll_period_id' => $period->id,
+            'explanation' => 'RC station audit 8:00 AM to 6:00 PM.',
+            'attachment_path' => $attachmentPath,
+            'attachment_original_name' => 'proof.png',
+            'entries' => [
+                [
+                    'date_in' => '2026-10-04',
+                    'time_in' => '08:00 AM',
+                    'date_out' => '2026-10-04',
+                    'time_out' => '06:00 PM',
+                    'schedule_type' => 'Regular',
+                ],
+            ],
+        ]);
+
+        $this->assertSame(1, $rcRequest->total_levels);
+        $this->assertSame(1, $rcRequest->current_level);
+        $this->assertNull($rcRequest->assigned_employee_id);
+        $this->assertTrue($rcRequest->isPendingHrApproval());
+        $this->assertSame('Pending HR Final Approval', $rcRequest->display_status);
+        $this->assertFalse($rcRequest->canBeReviewedBy($rc));
+        $this->assertTrue($rcRequest->canBeReviewedBy($hrUser));
+
+        // HR approves -> finalizes and creates the missing DTR entry for PF-0014
+        $rcRequest = $service->approve($rcRequest, $hrUser, 'Approved by HR.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $rcRequest->status);
+        $this->assertDatabaseHas('dtrs', [
+            'fingerprint_id' => '14',
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-10-04',
+        ]);
+        $this->assertDatabaseHas('employee_visible_dtrs', [
+            'employee_id' => $rc->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-10-04',
+        ]);
+    }
 }

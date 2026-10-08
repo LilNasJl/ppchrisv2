@@ -22,6 +22,7 @@ use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -54,6 +55,24 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     public ?array $data = [];
 
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    #[Override]
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     public function mount(): void
     {
         $this->form->fill($this->defaultLoanData());
@@ -72,6 +91,8 @@ class LoanManagement extends Page implements HasForms, HasTable
     public function table(Table $table): Table
     {
         return $table
+            ->heading('Loan List')
+            ->description('Manage active employee loans and their amortization status.')
             ->query(fn (): Builder => EmployeeLoan::query()
                 ->with(['employee.branch', 'employee.designation', 'amortizationStartPayrollPeriod'])
                 ->latest('loan_date')
@@ -200,6 +221,24 @@ class LoanManagement extends Page implements HasForms, HasTable
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('loan-list')
+                ->label('Loan List')
+                ->icon(Heroicon::QueueList)
+                ->color(fn (): string => $this->activeLoanTab === 'list' ? 'primary' : 'gray')
+                ->action(fn () => $this->showLoanTab('list')),
+
+            Action::make('loan-requests')
+                ->label('Loan Requests')
+                ->icon(Heroicon::ClipboardDocumentList)
+                ->color(fn (): string => $this->activeLoanTab === 'requests' ? 'primary' : 'gray')
+                ->action(fn () => $this->showLoanTab('requests')),
+
+            Action::make('add-loan')
+                ->label('Add Loan')
+                ->icon(Heroicon::Plus)
+                ->color(fn (): string => $this->activeLoanTab === 'information' ? 'primary' : 'gray')
+                ->action(fn () => $this->showLoanTab('information')),
+
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)

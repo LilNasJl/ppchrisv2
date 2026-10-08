@@ -764,4 +764,70 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $this->assertSame('hr', $leave->approval_phase);
         $this->assertTrue($leave->isReadyForHr());
     }
+
+    public function test_company_default_workflow_cannot_be_deleted(): void
+    {
+        $defaultWorkflow = LeaveApprovalWorkflow::where('active_scope_key', '0:0:0:0')->firstOrFail();
+        $this->assertTrue($defaultWorkflow->isCompanyDefault());
+
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessage('The company default workflow cannot be deleted.');
+
+        $defaultWorkflow->delete();
+    }
+
+    public function test_company_default_workflow_cannot_be_edited(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Branch Main']);
+        [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
+        $defaultWorkflow = LeaveApprovalWorkflow::where('active_scope_key', '0:0:0:0')->firstOrFail();
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('The company default workflow cannot be edited.');
+
+        app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Modified Default',
+            'is_active' => true,
+            'scope_type' => 'company',
+            'version' => $defaultWorkflow->version,
+            'levels' => [],
+        ], $admin, $defaultWorkflow);
+    }
+
+    public function test_custom_workflow_can_be_edited_and_deleted(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Custom Branch']);
+        [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
+        [$approverUser, $approver] = $this->createEmployeeWithUser('Custom Approver', 'employee', $branch);
+
+        $custom = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Custom Branch Flow',
+            'is_active' => true,
+            'scope_type' => 'branch',
+            'scope_id' => $branch->id,
+            'levels' => [
+                ['label' => 'Level 1', 'approver_employee_id' => $approver->id],
+            ],
+        ], $admin);
+
+        $this->assertFalse($custom->isCompanyDefault());
+
+        // Can be edited
+        $updated = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Renamed Custom Flow',
+            'is_active' => true,
+            'scope_type' => 'branch',
+            'scope_id' => $branch->id,
+            'version' => $custom->version,
+            'levels' => [
+                ['label' => 'Level 1 Renamed', 'approver_employee_id' => $approver->id],
+            ],
+        ], $admin, $custom);
+
+        $this->assertSame('Renamed Custom Flow', $updated->fresh()->name);
+
+        // Can be deleted
+        $updated->delete();
+        $this->assertDatabaseMissing('leave_approval_workflows', ['id' => $custom->id]);
+    }
 }

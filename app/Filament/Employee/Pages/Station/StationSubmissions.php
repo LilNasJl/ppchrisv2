@@ -42,14 +42,12 @@ class StationSubmissions extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return StationManagementAccess::canAccessStationManagement(auth()->user());
+        return false;
     }
 
     public function mount(): void
     {
-        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
-            throw new HttpException(403, 'Unauthorized access to Station Management.');
-        }
+        throw new HttpException(403, 'Manual D.T.R submission has been replaced by automatic D.T.R synchronization.');
     }
 
     public function table(Table $table): Table

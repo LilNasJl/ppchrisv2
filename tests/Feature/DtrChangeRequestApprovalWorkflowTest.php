@@ -134,6 +134,48 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('holiday_types', function (Blueprint $table): void {
+            $table->id();
+            $table->string('type');
+            $table->decimal('rate', 8, 2)->default(100);
+            $table->timestamps();
+        });
+
+        Schema::create('holidays', function (Blueprint $table): void {
+            $table->id();
+            $table->date('date')->nullable();
+            $table->unsignedBigInteger('holiday_type_id')->nullable();
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->string('title')->default('Holiday');
+            $table->boolean('is_recurring')->default(false);
+            $table->string('month_day', 10)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('holiday_employee_exclusions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('holiday_id')->nullable();
+            $table->unsignedBigInteger('employee_id')->nullable();
+            $table->date('date')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('payroll_calculation_settings', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payroll_period_id')->nullable();
+            $table->decimal('regular_work_days_per_month', 8, 2)->default(26);
+            $table->decimal('regular_half_month_days', 8, 2)->default(13);
+            $table->decimal('work_hours_per_day', 8, 2)->default(8);
+            $table->decimal('half_day_work_day_value', 8, 2)->default(0.5);
+            $table->decimal('overtime_rate_multiplier', 8, 2)->default(1);
+            $table->decimal('regular_holiday_rate', 8, 2)->default(200);
+            $table->decimal('special_holiday_rate', 8, 2)->default(30);
+            $table->integer('late_grace_minutes')->default(0);
+            $table->decimal('holiday_overtime_premium_rate', 8, 2)->default(0);
+            $table->boolean('unworked_regular_holiday_pay_enabled')->default(true);
+            $table->timestamps();
+        });
+
         Schema::create('employees', function (Blueprint $table): void {
             $table->id();
             $table->string('uid', 20)->nullable();
@@ -2038,6 +2080,202 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'schedule_type' => 'Regular',
         ]);
     }
+
+    public function test_two_level_workflow_sic_self_request_skips_self_and_rc_becomes_final_approver(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+
+        $rcUser = User::query()->create(['name' => 'Robert RC', 'role' => 'employee']);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'firstname' => 'Robert',
+            'lastname' => 'RC',
+            'company_id' => 'RC-001',
+            'branch_id' => $branch->id,
+        ]);
+
+        $workflow = LeaveApprovalWorkflow::query()->create([
+            'name' => 'Tagum 2-Level Workflow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'SIC',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 2,
+            'label' => 'RC',
+            'approver_employee_id' => $rc->id,
+        ]);
+
+        $sicDtr = Dtr::query()->create([
+            'employee_id' => $sic->id,
+            'fingerprint_id' => 'FP-SIC',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-05',
+            'time_in' => '08:00 AM',
+            'date_out' => '2026-09-05',
+            'time_out' => '06:00 PM',
+            'schedule_start' => '08:00 AM',
+            'schedule_end' => '05:00 PM',
+            'schedule_type' => 'Regular',
+            'overtime' => 60,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+
+        // SIC submits their own request -> skips Level 1 (SIC) and routes to RC as final approver
+        $request = $service->submitFromDtr($sic, $sicDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'explanation' => 'SIC overtime work.',
+        ]);
+
+        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(1, $request->current_level);
+        $this->assertSame($rc->id, $request->assigned_employee_id);
+        $this->assertSame('RC', $request->current_step_label);
+        $this->assertFalse($request->isPendingHrApproval());
+        $this->assertFalse($request->canBeReviewedBy($sic));
+        $this->assertTrue($request->canBeReviewedBy($rc));
+
+        // RC approves -> RC is the final approver, so DTR is finalized immediately
+        $request = $service->approve($request, $rc, 'Approved by RC as final approver.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+        $this->assertTrue((bool) $sicDtr->fresh()->overtime_approved);
+    }
+
+    public function test_two_level_workflow_rc_self_request_routes_directly_to_hr_as_final_approver(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+        $hrUser = User::query()->create([
+            'name' => 'HR Admin',
+            'email' => 'hr@example.com',
+            'role' => 'hr',
+        ]);
+
+        $rcUser = User::query()->create(['name' => 'Robert RC', 'role' => 'employee']);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'firstname' => 'Robert',
+            'lastname' => 'RC',
+            'company_id' => 'RC-001',
+            'fingerprint_id' => 'FP-RC',
+            'branch_id' => $branch->id,
+        ]);
+
+        $workflow = LeaveApprovalWorkflow::query()->create([
+            'name' => 'Tagum 2-Level Workflow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'SIC',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 2,
+            'label' => 'RC',
+            'approver_employee_id' => $rc->id,
+        ]);
+
+        $rcDtr = Dtr::query()->create([
+            'employee_id' => $rc->id,
+            'fingerprint_id' => 'FP-RC',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-06',
+            'time_in' => '08:00 AM',
+            'date_out' => '2026-09-06',
+            'time_out' => null,
+            'schedule_start' => '08:00 AM',
+            'schedule_end' => '05:00 PM',
+            'schedule_type' => 'Regular',
+            'is_absent' => true,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+
+        // RC is the last configured approver in the workflow. Submitting routes directly to HR Final Approval!
+        $request = $service->submitFromDtr($rc, $rcDtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'RC forgot to punch out during station visit.',
+        ]);
+
+        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(1, $request->current_level);
+        $this->assertNull($request->assigned_employee_id);
+        $this->assertTrue($request->isPendingHrApproval());
+        $this->assertSame('Pending HR Final Approval', $request->display_status);
+        $this->assertFalse($request->canBeReviewedBy($rc));
+        $this->assertFalse($request->canBeReviewedBy($sic));
+
+        // Because HR is Level 1 for this request, HR can edit and approve the Forgot to Punch request
+        $this->assertTrue($request->canBeEditedBy($hrUser));
+        $this->assertTrue($request->canBeReviewedBy($hrUser));
+
+        $request = $service->saveCorrections($request, $hrUser, [
+            'date_in' => '2026-09-06',
+            'time_in' => '08:00 AM',
+            'date_out' => '2026-09-06',
+            'time_out' => '05:00 PM',
+            'schedule_type' => 'Regular',
+        ]);
+
+        $request = $service->approve($request, $hrUser, 'Verified and approved by HR.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+        $this->assertSame('05:00 PM', $rcDtr->fresh()->time_out);
+    }
+
+    public function test_one_level_workflow_sic_self_request_routes_directly_to_hr_as_final_approver(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+        $hrUser = User::query()->create([
+            'name' => 'HR Admin',
+            'email' => 'hr@example.com',
+            'role' => 'hr',
+        ]);
+
+        $sicDtr = Dtr::query()->create([
+            'employee_id' => $sic->id,
+            'fingerprint_id' => 'FP-SIC',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-07',
+            'time_in' => '08:00 AM',
+            'date_out' => '2026-09-07',
+            'time_out' => '06:00 PM',
+            'schedule_start' => '08:00 AM',
+            'schedule_end' => '05:00 PM',
+            'schedule_type' => 'Regular',
+            'overtime' => 60,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+
+        // In a 1-level workflow (Level 1: SIC), SIC submits own request -> routes directly to HR
+        $request = $service->submitFromDtr($sic, $sicDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'explanation' => 'SIC overtime in 1-level workflow.',
+        ]);
+
+        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(1, $request->current_level);
+        $this->assertNull($request->assigned_employee_id);
+        $this->assertTrue($request->isPendingHrApproval());
+        $this->assertFalse($request->canBeReviewedBy($sic));
+        $this->assertSame(1, DtrChangeRequest::query()->pendingForHr()->count());
+
+        $request = $service->approve($request, $hrUser, 'Approved by HR.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+        $this->assertTrue((bool) $sicDtr->fresh()->overtime_approved);
+        $this->assertSame(0, DtrChangeRequest::query()->pendingForHr()->count());
+    }
 }
-
-
