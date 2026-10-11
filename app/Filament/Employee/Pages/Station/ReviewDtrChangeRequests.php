@@ -39,7 +39,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.employee.pages.station.table-page';
 
     protected static ?string $slug = 'station/change-requests';
 
@@ -92,6 +92,11 @@ class ReviewDtrChangeRequests extends Page implements HasTable
         if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
             throw new HttpException(403, 'Unauthorized access to Station Management.');
         }
+    }
+
+    public function getSubheading(): string
+    {
+        return 'Review attendance change requests from employees in your assigned stations.';
     }
 
     public function table(Table $table): Table

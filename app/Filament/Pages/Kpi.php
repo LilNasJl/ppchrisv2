@@ -7,7 +7,6 @@ use App\Models\Department;
 use App\Models\Employee;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +18,7 @@ class Kpi extends Page
 {
     use HasPageShield;
 
-    protected string $view = 'filament.pages.kpi';
+    protected string $view = 'filament.pages.under-construction';
 
     protected static ?string $title = 'KPI';
 
@@ -27,9 +26,9 @@ class Kpi extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ChartBarSquare;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Performance Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employees Relation & Performance Mngt';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 2;
 
     public string $viewMode = 'departments';
 
@@ -77,17 +76,7 @@ class Kpi extends Page
     #[Override]
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('configuration')
-                ->label('KPI Configuration')
-                ->icon(Heroicon::AdjustmentsHorizontal)
-                ->url(KpiConfiguration::getUrl()),
-
-            Action::make('accounts')
-                ->label('Accounts')
-                ->icon(Heroicon::Users)
-                ->url(KpiAccounts::getUrl()),
-        ];
+        return [];
     }
 
     protected function departmentRows(): Collection

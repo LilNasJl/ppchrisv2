@@ -8,4 +8,6 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateMemoType extends CreateRecord
 {
     protected static string $resource = MemoTypeResource::class;
+
+    protected string $view = 'filament.resources.memo-types.pages.create-memo-type';
 }

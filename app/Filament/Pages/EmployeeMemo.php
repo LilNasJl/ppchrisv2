@@ -8,7 +8,6 @@ use App\Models\MemoType;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -19,6 +18,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -32,7 +32,7 @@ class EmployeeMemo extends Page implements HasTable
     use HasPageShield;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.employee-memo';
 
     protected static bool $shouldRegisterNavigation = false;
 
@@ -47,10 +47,20 @@ class EmployeeMemo extends Page implements HasTable
         $this->employeeId = Employee::resolvePublicId(request()->query('employeeId'));
     }
 
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    public function employeeName(): string
+    {
+        return $this->employee()?->full_name ?? 'Employee';
+    }
+
     public function table(Table $table): Table
     {
         return $table
-            ->heading(fn (): string => $this->employee()?->full_name.' Notice Records')
+            ->heading('Notice Records')
             ->query(fn (): Builder => MemoModel::query()
                 ->with(['type', 'employee'])
                 ->where('employee_id', $this->employeeId)
@@ -82,36 +92,27 @@ class EmployeeMemo extends Page implements HasTable
                     ->placeholder('No file')
                     ->wrap(),
             ])
-            ->headerActions([
-                Action::make('addMemo')
-                    ->label('Add Notice')
-                    ->icon(Heroicon::Plus)
-                    ->schema($this->memoFormSchema())
-                    ->modalHeading('Add Notice')
-                    ->modalSubmitActionLabel('Save Notice')
-                    ->action(fn (array $data): mixed => $this->createMemo($data)),
-            ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('view')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->modalSubmitAction(false)
-                        ->modalHeading('Notice Details')
-                        ->modalContent(fn (MemoModel $record) => view('filament.pages.partials.memo-details', [
-                            'memo' => $record,
-                        ])),
+                Action::make('view')
+                    ->label('View')
+                    ->icon(Heroicon::Eye)
+                    ->iconButton()
+                    ->tooltip('View Notice')
+                    ->modalSubmitAction(false)
+                    ->modalHeading('Notice Details')
+                    ->modalContent(fn (MemoModel $record) => view('filament.pages.partials.memo-details', [
+                        'memo' => $record,
+                    ])),
 
-                    EditAction::make('edit')
-                        ->label('Update')
-                        ->icon(Heroicon::PencilSquare)
-                        ->schema($this->memoFormSchema())
-                        ->modalHeading('Update Notice')
-                        ->modalSubmitActionLabel('Update Notice')
-                        ->using(fn (MemoModel $record, array $data): MemoModel => $this->updateMemo($record, $data)),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal)
-                    ->tooltip('Actions'),
+                EditAction::make('edit')
+                    ->label('Update')
+                    ->icon(Heroicon::PencilSquare)
+                    ->iconButton()
+                    ->tooltip('Update Notice')
+                    ->schema($this->memoFormSchema())
+                    ->modalHeading('Update Notice')
+                    ->modalSubmitActionLabel('Update Notice')
+                    ->using(fn (MemoModel $record, array $data): MemoModel => $this->updateMemo($record, $data)),
             ]);
     }
 
@@ -127,10 +128,13 @@ class EmployeeMemo extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(Memo::getUrl()),
+            Action::make('addMemo')
+                ->label('Add Notice')
+                ->icon(Heroicon::Plus)
+                ->schema($this->memoFormSchema())
+                ->modalHeading('Add Notice')
+                ->modalSubmitActionLabel('Save Notice')
+                ->action(fn (array $data): mixed => $this->createMemo($data)),
         ];
     }
 
@@ -152,7 +156,7 @@ class EmployeeMemo extends Page implements HasTable
 
                     Textarea::make('description')
                         ->label('Notice Description')
-                        ->rows(5)
+                        ->rows(3)
                         ->columnSpanFull(),
 
                     FileUpload::make('attachment_path')

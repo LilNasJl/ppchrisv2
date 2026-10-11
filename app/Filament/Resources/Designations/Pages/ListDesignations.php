@@ -10,6 +10,13 @@ class ListDesignations extends ListRecords
 {
     protected static string $resource = DesignationResource::class;
 
+    protected string $view = 'filament.resources.designations.pages.list-designations';
+
+    public function getSubheading(): string
+    {
+        return 'Manage job titles, specifications, and role descriptions.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

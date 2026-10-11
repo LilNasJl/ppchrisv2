@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\ActionHistory;
 use App\Models\Branch;
 use App\Models\Dtr as DtrModel;
 use App\Models\DtrChangeRequest;
@@ -18,6 +19,7 @@ use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
@@ -33,7 +35,7 @@ class Dtr extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::QueueList;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation & Benefits Mngt';
 
     protected static ?int $navigationSort = 1;
 
@@ -121,6 +123,7 @@ class Dtr extends Page implements HasForms
     public function syncStationRecords(): void
     {
         $count = app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($this->branchId, $this->periodId);
+        $this->recordManualSyncRun($count);
 
         if ($count > 0) {
             Notification::make()
@@ -180,6 +183,60 @@ class Dtr extends Page implements HasForms
         return filled($this->branchId)
             ? Branch::query()->find((int) $this->branchId)
             : null;
+    }
+
+    public function lastSyncAt(): ?Carbon
+    {
+        if (! filled($this->periodId)
+            || ! Schema::hasTable('action_histories')
+            || ! Schema::hasColumn('action_histories', 'after_data')
+            || ! Schema::hasColumn('action_histories', 'created_at')) {
+            return null;
+        }
+
+        return ActionHistory::query()
+            ->whereIn('action', ['dtr_synced_create', 'dtr_synced_update', 'dtr_sync_completed'])
+            ->where('model_type', DtrModel::class)
+            ->where('after_data->payroll_period_id', (int) $this->periodId)
+            ->when(filled($this->branchId), fn (Builder $query): Builder => $query
+                ->where('after_data->branch_id', (int) $this->branchId))
+            ->latest('created_at')
+            ->first(['created_at'])
+            ?->created_at;
+    }
+
+    protected function recordManualSyncRun(int $syncedCount): void
+    {
+        if (! Schema::hasTable('action_histories')) {
+            return;
+        }
+
+        $user = auth()->user();
+
+        try {
+            ActionHistory::query()->create([
+                'actor_id' => $user?->id,
+                'actor_name' => $user?->employee?->full_name ?: ($user?->name ?: ($user?->username ?: 'System Sync')),
+                'actor_role' => $user?->role ?: 'system',
+                'action' => 'dtr_sync_completed',
+                'model_type' => DtrModel::class,
+                'model_label' => 'Station DTR Sync',
+                'record_label' => sprintf(
+                    'Payroll period: %s | Branch: %s',
+                    $this->selectedPeriod()?->title ?? 'All periods',
+                    $this->selectedBranch()?->branch_name ?? 'All branches',
+                ),
+                'summary' => "Station DTR synchronization completed; {$syncedCount} record(s) synchronized.",
+                'after_data' => [
+                    'payroll_period_id' => filled($this->periodId) ? (int) $this->periodId : null,
+                    'branch_id' => filled($this->branchId) ? (int) $this->branchId : null,
+                    'synced_count' => $syncedCount,
+                ],
+                'changed_data' => ['source' => 'hr_manual_sync'],
+            ]);
+        } catch (\Throwable) {
+            // Sync completion should not depend on audit storage being available.
+        }
     }
 
     /**

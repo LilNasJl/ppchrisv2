@@ -26,24 +26,28 @@ class MemoTypeResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'title';
 
+    protected static ?string $modelLabel = 'Notice Type';
+
+    protected static ?string $pluralModelLabel = 'Notice Types';
+
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->components([
-                Section::make('Memo Type')
+                Section::make('Notice Type')
                     ->schema([
                         TextInput::make('title')
-                            ->label('Memo Title Type')
+                            ->label('Notice Type')
                             ->required()
                             ->maxLength(255)
                             ->unique(ignoreRecord: true),
 
                         Textarea::make('description')
-                            ->label('Memo Type Description')
-                            ->rows(4)
+                            ->label('Description')
+                            ->rows(3)
                             ->columnSpanFull(),
                     ])
-                    ->columns(2),
+                    ->columns(1),
             ]);
     }
 
@@ -56,7 +60,7 @@ class MemoTypeResource extends Resource
                     ->rowIndex(),
 
                 TextColumn::make('title')
-                    ->label('Memo Title Type')
+                    ->label('Notice Type')
                     ->searchable()
                     ->sortable(),
 
@@ -66,8 +70,8 @@ class MemoTypeResource extends Resource
                     ->limit(100),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                EditAction::make()->icon('heroicon-o-pencil-square')->iconButton()->tooltip('Edit Notice Type'),
+                DeleteAction::make()->icon('heroicon-o-trash')->iconButton()->tooltip('Delete Notice Type'),
             ]);
     }
 

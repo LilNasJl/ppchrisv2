@@ -12,6 +12,132 @@
             gap: 0.5rem !important;
         }
 
+        .payroll-visibility-topbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            padding: 1.1rem 1.4rem;
+            border: 1px solid #3b82f6;
+            border-radius: 0.75rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+        }
+
+        .payroll-visibility-topbar-copy {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .payroll-visibility-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .payroll-visibility-title {
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .payroll-visibility-subtitle {
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
+
+        .payroll-visibility-return {
+            display: inline-flex;
+            min-height: 2.35rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid rgb(147 197 253 / 0.4);
+            border-radius: 0.5rem;
+            background: rgb(10 31 68 / 0.6);
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 150ms ease, border-color 150ms ease;
+        }
+
+        .payroll-visibility-return:hover {
+            border-color: rgb(191 219 254 / 0.65);
+            background: rgb(10 31 68 / 0.85);
+            color: #ffffff;
+        }
+
+        .payroll-visibility-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+
+        .payroll-visibility-action {
+            display: inline-flex;
+            min-height: 2.35rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid transparent;
+            border-radius: 0.5rem;
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            white-space: nowrap;
+            transition: background-color 150ms ease, border-color 150ms ease;
+        }
+
+        .payroll-visibility-action.enable {
+            border-color: rgb(167 243 208 / 0.45);
+            background: rgb(5 120 80 / 0.88);
+        }
+
+        .payroll-visibility-action.enable:hover {
+            background: rgb(4 100 68);
+        }
+
+        .payroll-visibility-action.disable {
+            border-color: rgb(254 202 202 / 0.45);
+            background: rgb(185 28 28 / 0.88);
+        }
+
+        .payroll-visibility-action.disable:hover {
+            background: rgb(153 27 27);
+        }
+
+        .payroll-visibility-action:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
+
+        .payroll-visibility-action svg {
+            width: 1rem;
+            height: 1rem;
+            flex: none;
+        }
+
+        .payroll-visibility-return svg {
+            width: 1rem;
+            height: 1rem;
+            flex: none;
+        }
+
         /* Table Container */
         .fi-page .fi-ta-ctn {
             border-radius: 0.6rem !important;
@@ -175,7 +301,58 @@
         .dark .fi-page .fi-ta-pagination {
             border-top-color: rgb(51, 65, 85) !important;
         }
+
+        @media (max-width: 640px) {
+            .payroll-visibility-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .payroll-visibility-return {
+                align-self: flex-start;
+            }
+
+            .payroll-visibility-actions {
+                justify-content: flex-start;
+            }
+        }
     </style>
+
+    <section class="payroll-visibility-topbar" aria-labelledby="payroll-visibility-title">
+        <div class="payroll-visibility-topbar-copy">
+            <p class="payroll-visibility-eyebrow">PAYROLL ADMINISTRATION</p>
+            <h1 class="payroll-visibility-title" id="payroll-visibility-title">Payroll Visibility</h1>
+            <p class="payroll-visibility-subtitle">Control employee access to payroll details.</p>
+        </div>
+        <div class="payroll-visibility-actions">
+            <a class="payroll-visibility-return" href="{{ \App\Filament\Pages\Payroll::getUrl() }}">
+                <x-filament::icon icon="heroicon-o-arrow-left" />
+                <span>Return to Payroll</span>
+            </a>
+            <button
+                class="payroll-visibility-action enable"
+                type="button"
+                wire:click="enableAllPayrollVisibility"
+                wire:confirm="Are you sure you want to make payroll visible to all employees?"
+                wire:loading.attr="disabled"
+                wire:target="enableAllPayrollVisibility"
+            >
+                <x-filament::icon icon="heroicon-o-eye" />
+                <span>Enable All</span>
+            </button>
+            <button
+                class="payroll-visibility-action disable"
+                type="button"
+                wire:click="disableAllPayrollVisibility"
+                wire:confirm="Are you sure you want to hide payroll from all employees?"
+                wire:loading.attr="disabled"
+                wire:target="disableAllPayrollVisibility"
+            >
+                <x-filament::icon icon="heroicon-o-eye-slash" />
+                <span>Disable All</span>
+            </button>
+        </div>
+    </section>
 
     {{ $this->content }}
 </x-filament-panels::page>

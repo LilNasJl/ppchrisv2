@@ -12,6 +12,79 @@
             gap: 0.5rem !important;
         }
 
+        .payroll-periods-topbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            padding: 1.1rem 1.4rem;
+            border: 1px solid #3b82f6;
+            border-radius: 0.75rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+        }
+
+        .payroll-periods-topbar-copy {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .payroll-periods-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .payroll-periods-title {
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .payroll-periods-subtitle {
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
+
+        .payroll-periods-return {
+            display: inline-flex;
+            min-height: 2.35rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid rgb(147 197 253 / 0.4);
+            border-radius: 0.5rem;
+            background: rgb(10 31 68 / 0.6);
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 150ms ease, border-color 150ms ease;
+        }
+
+        .payroll-periods-return:hover {
+            border-color: rgb(191 219 254 / 0.65);
+            background: rgb(10 31 68 / 0.85);
+            color: #ffffff;
+        }
+
+        .payroll-periods-return svg {
+            width: 1rem;
+            height: 1rem;
+            flex: none;
+        }
+
         /* Compact Status Tabs */
         .fi-page .fi-sc-tabs,
         .fi-page .fi-tabs {
@@ -181,7 +254,30 @@
         .dark .fi-page .fi-ta-pagination {
             border-top-color: rgb(51, 65, 85) !important;
         }
+
+        @media (max-width: 640px) {
+            .payroll-periods-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .payroll-periods-return {
+                align-self: flex-start;
+            }
+        }
     </style>
+
+    <section class="payroll-periods-topbar" aria-labelledby="payroll-periods-title">
+        <div class="payroll-periods-topbar-copy">
+            <p class="payroll-periods-eyebrow">PAYROLL ADMINISTRATION</p>
+            <h1 class="payroll-periods-title" id="payroll-periods-title">Payroll Periods</h1>
+            <p class="payroll-periods-subtitle">Review payroll schedules, lock status, and period activity.</p>
+        </div>
+        <a class="payroll-periods-return" href="{{ \App\Filament\Pages\Payroll::getUrl() }}">
+            <x-filament::icon icon="heroicon-o-arrow-left" />
+            <span>Return to Payroll</span>
+        </a>
+    </section>
 
     {{ $this->content }}
 </x-filament-panels::page>

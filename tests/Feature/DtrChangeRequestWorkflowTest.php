@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Employee\Pages\DtrChangeRequests;
 use App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests;
 use App\Models\Branch;
 use App\Models\DtrChangeRequest;
@@ -13,6 +14,7 @@ use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -269,6 +271,25 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->string('label')->default('Level 1');
             $table->unsignedBigInteger('approver_employee_id');
         });
+    }
+
+    public function test_employee_dtr_change_requests_renders_actions_in_the_custom_header(): void
+    {
+        [$employee] = $this->context();
+        $user = User::factory()->create([
+            'role' => 'employee',
+            'employee_id' => $employee->id,
+        ]);
+        $employee->update(['user_id' => $user->id]);
+
+        $this->actingAs($user, 'web');
+
+        Livewire::test(DtrChangeRequests::class)
+            ->assertSuccessful()
+            ->assertSee('WORKFORCE RECORDS')
+            ->assertSee('Missing DTR Entries')
+            ->assertSee('On Field DTR')
+            ->assertSee('Return to D.T.R');
     }
 
     public function test_submission_routes_to_the_active_station_manager_without_modifying_dtr(): void

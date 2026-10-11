@@ -32,6 +32,7 @@ class EmployeePanelProvider extends PanelProvider
             // ->collapsedSidebarWidth(true)
             ->sidebarCollapsibleOnDesktop(true)
             ->brandName('HRMS: SELF SERVICE')
+            ->darkMode(isForced: true)
             ->globalSearch(false)
             ->maxContentWidth(Width::Full)
             ->databaseNotifications()

@@ -28,9 +28,9 @@ class LeaveResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'Leave';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Request & Tracking';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $navigationLabel = 'Leave Tracking';
 

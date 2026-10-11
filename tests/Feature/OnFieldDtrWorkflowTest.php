@@ -2,18 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Employee\Pages\Payroll;
+use App\Filament\Employee\Pages\Station\StationProofSubmissions;
 use App\Models\Branch;
+use App\Models\Dtr;
 use App\Models\DtrSubmission;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use App\Services\Imports\EmployeeVisibleDtrImportService;
 use App\Services\OnFieldDtrService;
+use App\Services\PayrollCalculator;
 use Filament\Facades\Filament;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class OnFieldDtrWorkflowTest extends TestCase
@@ -597,7 +603,7 @@ class OnFieldDtrWorkflowTest extends TestCase
         ]);
 
         // Verify automatic real-time payroll calculation picks up both approved On-Field DTR days
-        $row = app(\App\Services\PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
+        $row = app(PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
         $this->assertEquals(2.0, (float) $row['days_worked']);
         $this->assertEquals(1000.0, (float) $row['gross_pay']);
         $this->assertEquals(1000.0, (float) $row['net_pay']);
@@ -633,8 +639,8 @@ class OnFieldDtrWorkflowTest extends TestCase
         $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
         app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Approved before lock.');
 
-        $dtr = \App\Models\Dtr::query()->firstOrFail();
-        $visibleDtr = \App\Models\EmployeeVisibleDtr::query()->firstOrFail();
+        $dtr = Dtr::query()->firstOrFail();
+        $visibleDtr = EmployeeVisibleDtr::query()->firstOrFail();
 
         // Lock the payroll period
         $period->update(['is_locked' => true]);
@@ -665,7 +671,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         // 4. Creating new DTR in locked period must be rejected
         try {
-            \App\Models\Dtr::query()->create([
+            Dtr::query()->create([
                 'payroll_period_id' => $period->id,
                 'branch_id' => $branch->id,
                 'fingerprint_id' => $employee->fingerprint_id,
@@ -700,7 +706,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         $this->actingAs($user);
 
-        $page = new \App\Filament\Employee\Pages\Payroll();
+        $page = new Payroll;
         $page->mount();
 
         // Default mounted period must be the locked period, never the unlocked period
@@ -712,6 +718,33 @@ class OnFieldDtrWorkflowTest extends TestCase
         $this->assertNull($page->period_id);
         $this->assertNull($page->selectedPeriod);
         $this->assertNull($page->payrollRow);
+    }
+
+    public function test_regular_employee_can_access_on_field_dtr_without_station_manager_assignment(): void
+    {
+        [, $employee] = $this->context();
+        $employee->update([
+            'is_station_manager' => false,
+            'managed_branches' => null,
+        ]);
+
+        $user = User::factory()->create([
+            'role' => 'employee',
+            'employee_id' => $employee->id,
+        ]);
+        $employee->update(['user_id' => $user->id]);
+
+        $this->actingAs($user);
+
+        $this->assertTrue(StationProofSubmissions::canAccess());
+
+        Livewire::test(StationProofSubmissions::class)
+            ->assertSuccessful()
+            ->assertSee('WORKFORCE RECORDS')
+            ->assertSee('Submit On Field DTR')
+            ->assertSee('Return')
+            ->assertDontSee('On Field DTR Requests')
+            ->assertDontSee('Submitted records remain pending until HR reviews them.');
     }
 
     private function context(): array

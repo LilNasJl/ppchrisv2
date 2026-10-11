@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Schemas\Components\Section;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -69,26 +70,31 @@ class HolidayExclusionTable extends TableWidget
                 Action::make('manageExclusions')
                     ->label('Manage Exclusions')
                     ->icon(Heroicon::UserMinus)
-                    ->modalWidth('5xl')
+                    ->modalWidth('3xl')
                     ->schema([
-                        Select::make('employee_ids')
-                            ->label('Excluded Employees')
-                            ->multiple()
-                            ->searchable()
-                            ->preload()
-                            ->options(fn (?Holiday $record = null): array => $record ? $this->employeeOptions($record) : [])
-                            ->helperText('Selected employees will not receive this holiday rate/pay for this holiday.')
-                            ->columnSpanFull(),
+                        Section::make('Exclusion settings')
+                            ->schema([
+                                Select::make('employee_ids')
+                                    ->label('Excluded Employees')
+                                    ->multiple()
+                                    ->searchable()
+                                    ->preload()
+                                    ->options(fn (?Holiday $record = null): array => $record ? $this->employeeOptions($record) : [])
+                                    ->helperText('Selected employees will not receive holiday pay for this holiday.')
+                                    ->columnSpanFull(),
 
-                        Toggle::make('applies_every_year')
-                            ->label('Apply selected exclusions every year')
-                            ->helperText('Use this only for fixed yearly holidays. Movable holidays should stay date-specific.'),
+                                Toggle::make('applies_every_year')
+                                    ->label('Repeat every year')
+                                    ->helperText('Use for fixed-date holidays only.'),
 
-                        Textarea::make('reason')
-                            ->label('Reason')
-                            ->rows(3)
-                            ->maxLength(1000)
-                            ->columnSpanFull(),
+                                Textarea::make('reason')
+                                    ->label('Reason')
+                                    ->rows(2)
+                                    ->maxLength(1000)
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(1)
+                            ->compact(),
                     ])
                     ->fillForm(fn (Holiday $record): array => $this->exclusionFormData($record))
                     ->action(fn (Holiday $record, array $data): mixed => $this->syncExclusions($record, $data)),

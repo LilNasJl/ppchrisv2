@@ -51,6 +51,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     public bool $showTotals = false;
 
+    public bool $showColumnPresets = true;
+
     public string $columnPreset = 'summary';
 
     protected const COLUMN_PRESETS = [
@@ -115,6 +117,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         int $initialPerPage = 10,
         string $initialPreset = 'summary',
         bool $showTotals = false,
+        bool $showColumnPresets = true,
     ): void {
         $this->periodId = $periodId;
         $this->branchId = $branchId;
@@ -123,6 +126,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         $this->usePagination = $usePagination;
         $this->enableSearch = $enableSearch;
         $this->showTotals = $showTotals;
+        $this->showColumnPresets = $showColumnPresets;
         $this->tableSearch = $initialSearch ?? '';
         $this->tableRecordsPerPage = in_array($initialPerPage, [10, 25, 50, 100], true)
             ? $initialPerPage
@@ -159,7 +163,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 pageCondition: false,
                 allTableCondition: fn (): bool => $this->showTotals,
             )
-            ->toolbarActions([
+            ->toolbarActions($this->showColumnPresets ? [
                 ActionGroup::make([
                     Action::make('showSummaryColumns')
                         ->label('Summary')
@@ -194,7 +198,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     ->label(fn (): string => 'View: '.str($this->columnPreset)->headline())
                     ->icon(Heroicon::TableCells)
                     ->button(),
-            ])
+            ] : [])
             ->columns([
                 TextColumn::make('index')
                     ->label('#')

@@ -27,7 +27,7 @@ class DepartmentResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'Departments';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Organizational Set Up';
+    protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
     protected static ?string $navigationLabel = 'Department';
 

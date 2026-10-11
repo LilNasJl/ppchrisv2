@@ -7,10 +7,10 @@ use App\Models\Employee;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -26,7 +26,7 @@ class Memo extends Page implements HasTable
     use HasPageShield;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.memo';
 
     protected static ?string $title = 'Employee Notice';
 
@@ -34,9 +34,14 @@ class Memo extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Labor Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Request & Tracking';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 
     public function table(Table $table): Table
     {
@@ -60,7 +65,7 @@ class Memo extends Page implements HasTable
 
                 TextColumn::make('full_name')
                     ->label('Employee Name')
-                    ->badge()
+                    ->weight('semibold')
                     ->searchable(['lastname', 'middlename', 'firstname'])
                     ->sortable(['lastname', 'firstname']),
 
@@ -84,15 +89,12 @@ class Memo extends Page implements HasTable
                     }),
             ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('viewMemo')
-                        ->label('View Notices')
-                        ->icon(Heroicon::DocumentText)
-                        ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
-                            'employeeId' => $record->publicKey(),
-                        ])),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal),
+                Action::make('viewMemo')
+                    ->label('View Notices')
+                    ->icon(Heroicon::DocumentText)
+                    ->url(fn (Employee $record): string => EmployeeMemo::getUrl([
+                        'employeeId' => $record->publicKey(),
+                    ])),
             ]);
     }
 

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 #[RequiresPhpExtension('pdo_sqlite')]
@@ -118,7 +119,7 @@ class EmployeeLoanRequestTest extends TestCase
         $this->assertDatabaseCount('employee_loans', 0);
     }
 
-    public function test_payment_and_terms_must_cover_the_total_loan(): void
+    public function test_monthly_payment_is_calculated_instead_of_trusting_submitted_payment(): void
     {
         $employee = $this->employee();
         $period = $this->openPayrollPeriod();
@@ -126,9 +127,8 @@ class EmployeeLoanRequestTest extends TestCase
         $data['loan_terms_months'] = 2;
         $data['payment_amount'] = 100;
 
-        $this->expectException(ValidationException::class);
-
-        app(EmployeeLoanRequestService::class)->create($employee, $data);
+        $request = app(EmployeeLoanRequestService::class)->create($employee, $data);
+        $this->assertSame(250.0, (float) $request->payment_amount);
     }
 
     protected function employee(): Employee
@@ -153,11 +153,14 @@ class EmployeeLoanRequestTest extends TestCase
 
     protected function hrUser(): User
     {
-        return User::factory()->create([
+        $user = User::factory()->create([
             'username' => 'hrreviewer',
             'role' => 'hr',
             'is_disabled' => false,
         ]);
+        $user->givePermissionTo(Permission::findOrCreate('View:LoanManagement', 'web'));
+
+        return $user;
     }
 
     protected function openPayrollPeriod(): PayrollPeriod
@@ -178,6 +181,7 @@ class EmployeeLoanRequestTest extends TestCase
             'loan_type' => 'Company Loan',
             'loan_amount' => 1000,
             'loan_interest' => 100,
+            'interest_rate' => 0,
             'loan_terms_months' => 11,
             'payment_amount' => 100,
             'schedule' => EmployeeLoan::SCHEDULE_EVERY_PAYROLL,
@@ -193,6 +197,7 @@ class EmployeeLoanRequestTest extends TestCase
             'loan_date' => '2026-07-02',
             'loan_amount' => 1000,
             'loan_interest' => 100,
+            'interest_rate' => 0,
             'loan_terms_months' => 11,
             'payment_amount' => 100,
             'schedule' => EmployeeLoan::SCHEDULE_EVERY_PAYROLL,

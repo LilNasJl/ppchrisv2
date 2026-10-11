@@ -30,13 +30,13 @@ class ComplianceBenefits extends Page implements HasForms
 
     protected static ?string $title = 'Benefits & Company Deduction Management';
 
-    protected static ?string $navigationLabel = 'Benefits & Company Deduction Management';
+    protected static ?string $navigationLabel = 'Benefits and Company Deductions';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::MinusCircle;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation & Benefits Mngt';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     #[Url(as: 'branchId')]
     public mixed $branchId = null;

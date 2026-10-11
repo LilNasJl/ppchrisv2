@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanPayment;
+use App\Services\LoanAccessService;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
@@ -14,6 +15,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTable
@@ -22,11 +24,13 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
     use InteractsWithSchemas;
     use InteractsWithTable;
 
+    #[Locked]
     public ?int $loanId = null;
 
     public function mount(int $loanId): void
     {
         $this->loanId = $loanId;
+        $this->authorizedLoan();
     }
 
     public function makeFilamentTranslatableContentDriver(): ?TranslatableContentDriver
@@ -39,9 +43,11 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
         return $table
             ->heading('Payment History')
             ->description(fn (): string => $this->summary())
-            ->query(fn (): Builder => EmployeeLoanPayment::query()
-                ->with('payrollPeriod')
-                ->where('employee_loan_id', $this->loanId ?? 0))
+            ->query(function (): Builder {
+                $loan = $this->authorizedLoan();
+
+                return EmployeeLoanPayment::query()->with(['payrollPeriod', 'events'])->where('employee_loan_id', $loan->id);
+            })
             ->defaultSort('processed_at', 'desc')
             ->paginated(false)
             ->columns([
@@ -87,6 +93,13 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
                     ->label('Remarks')
                     ->placeholder('-')
                     ->wrap(),
+
+                TextColumn::make('audit_history')
+                    ->label('Posting / Reversal History')
+                    ->getStateUsing(fn (EmployeeLoanPayment $record): string => $record->events->map(
+                        fn ($event) => $event->status.' '.$event->occurred_at->format('M d, Y h:i A').' / '.number_format((float) $event->amount, 2)
+                    )->implode(' | '))
+                    ->wrap(),
             ])
             ->emptyStateHeading('No loan payment history yet')
             ->emptyStateDescription('Ledger entries will appear after a payroll period is locked.');
@@ -94,12 +107,15 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
 
     public function render()
     {
+        $this->authorizedLoan();
+
         return view('livewire.loan-ledger-table');
     }
 
     protected function summary(): string
     {
-        $loan = EmployeeLoan::query()
+        $this->authorizedLoan();
+        $loan = EmployeeLoan::withTrashed()
             ->withCount([
                 'payments as posted_payments_count' => fn (Builder $query) => $query
                     ->where('status', EmployeeLoanPayment::STATUS_POSTED),
@@ -125,5 +141,13 @@ class LoanLedgerTable extends Component implements HasActions, HasSchemas, HasTa
             (int) ($loan->posted_payments_count ?? 0),
             (int) ($loan->voided_payments_count ?? 0),
         );
+    }
+
+    protected function authorizedLoan(): EmployeeLoan
+    {
+        $loan = EmployeeLoan::withTrashed()->findOrFail($this->loanId);
+        app(LoanAccessService::class)->authorizeLedger(auth()->user(), $loan);
+
+        return $loan;
     }
 }

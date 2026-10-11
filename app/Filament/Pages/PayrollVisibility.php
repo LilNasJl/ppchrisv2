@@ -7,7 +7,6 @@ use App\Models\Employee;
 use App\Models\User;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -137,52 +136,33 @@ class PayrollVisibility extends Page implements HasTable
                         '1' => 'Visible',
                         '0' => 'Hidden',
                     ]),
-            ])
-            ->toolbarActions([
-                Action::make('return')
-                    ->label('Return')
-                    ->icon('heroicon-o-arrow-left')
-                    ->color('gray')
-                    ->url(Payroll::getUrl()),
-
-                Action::make('enable_all')
-                    ->label('Enable All')
-                    ->icon('heroicon-o-eye')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->modalHeading('Enable Payroll Visibility for All Employees')
-                    ->modalDescription('Are you sure you want to make payroll visible to all employees?')
-                    ->action(function (): void {
-                        User::query()
-                            ->where('role', 'employee')
-                            ->whereHas('employee')
-                            ->update(['can_view_payroll' => true]);
-
-                        Notification::make()
-                            ->title('Payroll visibility enabled for all employees')
-                            ->success()
-                            ->send();
-                    }),
-
-                Action::make('disable_all')
-                    ->label('Disable All')
-                    ->icon('heroicon-o-eye-slash')
-                    ->color('danger')
-                    ->requiresConfirmation()
-                    ->modalHeading('Disable Payroll Visibility for All Employees')
-                    ->modalDescription('Are you sure you want to hide payroll from all employees?')
-                    ->action(function (): void {
-                        User::query()
-                            ->where('role', 'employee')
-                            ->whereHas('employee')
-                            ->update(['can_view_payroll' => false]);
-
-                        Notification::make()
-                            ->title('Payroll visibility disabled for all employees')
-                            ->warning()
-                            ->send();
-                    }),
             ]);
+    }
+
+    public function enableAllPayrollVisibility(): void
+    {
+        User::query()
+            ->where('role', 'employee')
+            ->whereHas('employee')
+            ->update(['can_view_payroll' => true]);
+
+        Notification::make()
+            ->title('Payroll visibility enabled for all employees')
+            ->success()
+            ->send();
+    }
+
+    public function disableAllPayrollVisibility(): void
+    {
+        User::query()
+            ->where('role', 'employee')
+            ->whereHas('employee')
+            ->update(['can_view_payroll' => false]);
+
+        Notification::make()
+            ->title('Payroll visibility disabled for all employees')
+            ->warning()
+            ->send();
     }
 
     public function content(Schema $schema): Schema

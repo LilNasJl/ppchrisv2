@@ -34,6 +34,7 @@ class HrPanelProvider extends PanelProvider
             // ->brandLogo(asset('ppclogo.png'))
             // ->brandLogoHeight('48px')
             ->brandName('Human Resource Management System')
+            ->darkMode(isForced: true)
             ->globalSearch(false)
             ->favicon(asset('ppclogo.png').'?v=20260724')
             ->maxContentWidth(Width::Full)
@@ -41,13 +42,13 @@ class HrPanelProvider extends PanelProvider
             ->login(Login::class)
             ->sidebarCollapsibleOnDesktop()
             ->navigationGroups([
-                NavigationGroup::make('Analytic and Reporting'),
-                NavigationGroup::make('Employee Management'),
-                NavigationGroup::make('Compensation and Benefits Management'),
-                NavigationGroup::make('Performance Management'),
-                NavigationGroup::make('Labor Management'),
-                NavigationGroup::make('Updates and Activities'),
-                NavigationGroup::make('Organizational Set Up'),
+                NavigationGroup::make('Employees Relation & Performance Mngt'),
+                NavigationGroup::make('Compensation & Benefits Mngt'),
+                NavigationGroup::make('Employee Request & Tracking'),
+                NavigationGroup::make('Company Compliance'),
+                NavigationGroup::make('Analytics & Reports'),
+                NavigationGroup::make('Recruitment'),
+                NavigationGroup::make('Organizational Setup'),
                 NavigationGroup::make('Settings'),
             ])
             ->colors([

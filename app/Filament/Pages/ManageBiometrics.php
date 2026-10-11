@@ -13,6 +13,8 @@ class ManageBiometrics extends Page
 {
     use HasPageShield;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected string $view = 'filament.pages.manage-biometrics';
 
     protected static ?string $title = 'Manage Biometrics';

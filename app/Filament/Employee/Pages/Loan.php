@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\PayrollPeriod;
 use App\Services\EmployeeLoanRequestService;
+use App\Support\LoanAmortizationPreview;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -47,6 +48,11 @@ class Loan extends Page implements HasTable
 
     protected static ?int $navigationSort = 4;
 
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -71,7 +77,6 @@ class Loan extends Page implements HasTable
                                 ->default(EmployeeLoan::SCHEDULE_EVERY_PAYROLL)
                                 ->live()
                                 ->afterStateUpdated(function (Get $get, Set $set): void {
-                                    $set('preferred_start_payroll_period_id', null);
                                     $this->syncCalculatedPayment($get, $set);
                                 })
                                 ->required(),
@@ -89,6 +94,7 @@ class Loan extends Page implements HasTable
                                 ->helperText('Uses flat add-on interest across the requested term months.')
                                 ->numeric()
                                 ->minValue(0)
+                                ->maxValue(100)
                                 ->default(0)
                                 ->live(onBlur: true)
                                 ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
@@ -98,6 +104,7 @@ class Loan extends Page implements HasTable
                                 ->label('Requested Terms (Months)')
                                 ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
                                 ->numeric()
+                                ->integer()
                                 ->minValue(1)
                                 ->default(1)
                                 ->live(onBlur: true)
@@ -118,7 +125,10 @@ class Loan extends Page implements HasTable
                                 ->options(fn (): array => $this->openPayrollPeriodOptions())
                                 ->searchable()
                                 ->preload()
+                                ->live()
                                 ->required(),
+
+                            LoanAmortizationPreview::make('preferred_start_payroll_period_id'),
 
                             Textarea::make('reason')
                                 ->label('Reason')

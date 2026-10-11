@@ -5,12 +5,10 @@ namespace App\Services;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanRequest;
-use App\Models\PayrollPeriod;
 use App\Models\User;
 use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification as LaravelNotification;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeLoanRequestService
@@ -53,6 +51,8 @@ class EmployeeLoanRequestService
 
     public function approve(EmployeeLoanRequest $request, array $data, User $reviewer): EmployeeLoan
     {
+        app(LoanAccessService::class)->authorizeManagement($reviewer);
+
         return DB::transaction(function () use ($request, $data, $reviewer): EmployeeLoan {
             $request = EmployeeLoanRequest::query()
                 ->with('employee')
@@ -69,6 +69,9 @@ class EmployeeLoanRequestService
                 throw ValidationException::withMessages([
                     'loan_type' => 'This employee is no longer eligible for loan approval.',
                 ]);
+            }
+            if ((int) $request->employee->user_id === (int) $reviewer->id) {
+                throw ValidationException::withMessages(['loan_type' => 'You cannot approve your own loan request.']);
             }
 
             $termsBasis = EmployeeLoan::normalizeTermsBasis($request->terms_basis);
@@ -111,6 +114,7 @@ class EmployeeLoanRequestService
 
     public function reject(EmployeeLoanRequest $request, string $comment, User $reviewer): void
     {
+        app(LoanAccessService::class)->authorizeManagement($reviewer);
         DB::transaction(function () use ($request, $comment, $reviewer): void {
             $request = EmployeeLoanRequest::query()->lockForUpdate()->findOrFail($request->id);
 
@@ -190,87 +194,7 @@ class EmployeeLoanRequestService
 
     protected function validateLoanData(array $data, string $periodField, string $termsBasis): array
     {
-        $validator = Validator::make($data, [
-            'loan_type' => ['required', 'string', 'max:191'],
-            'loan_date' => ['nullable', 'date'],
-            'loan_amount' => ['required', 'numeric', 'gt:0'],
-            'loan_interest' => ['nullable', 'numeric', 'min:0'],
-            'interest_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'loan_terms_months' => ['required', 'integer', 'min:1'],
-            'payment_amount' => ['nullable', 'numeric', 'min:0'],
-            'schedule' => ['required', 'in:'.implode(',', array_keys(EmployeeLoan::scheduleOptions()))],
-            $periodField => ['required', 'integer', 'exists:payroll_periods,id'],
-            'reason' => ['nullable', 'string', 'max:2000'],
-            'hr_comment' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        $validator->after(function ($validator) use ($data, $periodField, $termsBasis): void {
-            $terms = max(1, (int) ($data['loan_terms_months'] ?? 1));
-            $schedule = EmployeeLoan::normalizeSchedule($data['schedule'] ?? null);
-            $isCalendarMonthTerms = EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH;
-            $loanInterest = $isCalendarMonthTerms
-                ? EmployeeLoan::flatAddOnInterest(
-                    (float) ($data['loan_amount'] ?? 0),
-                    (float) ($data['interest_rate'] ?? 0),
-                    $terms,
-                )
-                : (float) ($data['loan_interest'] ?? 0);
-            $total = (float) ($data['loan_amount'] ?? 0) + $loanInterest;
-            $deductions = EmployeeLoan::scheduledDeductionsCount($terms, $schedule, $termsBasis);
-            $scheduledTotal = (float) ($data['payment_amount'] ?? 0) * $deductions;
-
-            if (
-                ! $isCalendarMonthTerms
-                && $scheduledTotal + 0.001 < $total
-            ) {
-                $validator->errors()->add(
-                    'payment_amount',
-                    'Payment multiplied by the scheduled deductions must cover the total loan amount.',
-                );
-            }
-
-            $periodId = $data[$periodField] ?? null;
-
-            $period = filled($periodId)
-                ? PayrollPeriod::query()->whereKey($periodId)->first()
-                : null;
-
-            if (! $period || $period->is_locked) {
-                $validator->errors()->add($periodField, 'Select an open payroll period.');
-
-                return;
-            }
-
-        });
-
-        $validated = $validator->validate();
-        $validated['loan_amount'] = round((float) $validated['loan_amount'], 2);
-        $validated['loan_terms_months'] = max(1, (int) $validated['loan_terms_months']);
-        $validated['schedule'] = EmployeeLoan::normalizeSchedule($validated['schedule']);
-        $validated['interest_rate'] = filled($validated['interest_rate'] ?? null)
-            ? round((float) $validated['interest_rate'], 4)
-            : null;
-
-        if (EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
-            $validated['loan_interest'] = EmployeeLoan::flatAddOnInterest(
-                $validated['loan_amount'],
-                $validated['interest_rate'] ?? 0,
-                $validated['loan_terms_months'],
-            );
-            $validated['payment_amount'] = EmployeeLoan::plannedPaymentAmount(
-                $validated['loan_amount'],
-                $validated['loan_interest'],
-                $validated['loan_terms_months'],
-                $validated['schedule'],
-                $termsBasis,
-            );
-
-        } else {
-            $validated['loan_interest'] = round((float) ($validated['loan_interest'] ?? 0), 2);
-            $validated['payment_amount'] = round((float) $validated['payment_amount'], 2);
-        }
-
-        return $validated;
+        return app(LoanTermsService::class)->validate($data, $periodField, $termsBasis);
     }
 
     protected function notifyEmployee(EmployeeLoanRequest $request, string $title, string $body, string $status): void

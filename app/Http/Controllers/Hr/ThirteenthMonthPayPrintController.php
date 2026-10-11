@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Hr;
 
+use App\Filament\Pages\ThirteenthMonthPay;
 use App\Http\Controllers\Controller;
 use App\Models\PayrollSignatory;
 use App\Services\ThirteenthMonthPayService;
@@ -46,6 +47,6 @@ class ThirteenthMonthPayPrintController extends Controller
     {
         $user = $request->user();
 
-        abort_unless($user && in_array($user->role, ['hr', 'admin'], true), 403);
+        abort_unless($user && ThirteenthMonthPay::canAccess(), 403);
     }
 }

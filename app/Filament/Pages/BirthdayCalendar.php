@@ -20,11 +20,16 @@ class BirthdayCalendar extends Page
 
     protected static ?string $title = 'Birthday Calendar';
 
+    public function getSubheading(): string
+    {
+        return 'View employee birthdays by month and select a date for details.';
+    }
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Cake;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     public string $calendarMonth;
 

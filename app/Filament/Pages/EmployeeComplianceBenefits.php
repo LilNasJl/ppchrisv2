@@ -8,6 +8,7 @@ use App\Models\EmployeeDeduction;
 use App\Services\EmployeeDeductionService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -18,6 +19,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Enums\GridDirection;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -80,14 +82,14 @@ class EmployeeComplianceBenefits extends Page implements HasForms
 
             Fieldset::make('Other Deductions')
                 ->schema(fn (Get $get): array => [
-                    Select::make('other_deduction_ids')
-                        ->label('Linked Other Deductions')
-                        ->multiple()
-                        ->searchable()
-                        ->preload()
+                    CheckboxList::make('other_deduction_ids')
+                        ->label('Link Other Deductions')
+                        ->searchable(fn (): bool => Deduction::query()->where('category', Deduction::CATEGORY_OTHER)->count() > 8)
                         ->live()
                         ->options(fn (): array => $this->deductionOptions(Deduction::CATEGORY_OTHER))
-                        ->helperText('Only selected other deductions are linked to this employee.')
+                        ->columns(['default' => 1, 'sm' => 2, 'xl' => 3])
+                        ->gridDirection(GridDirection::Row)
+                        ->helperText('Select deductions to configure below. Save Deductions applies your changes.')
                         ->columnSpanFull(),
 
                     ...$this->employeeDeductionFields(Deduction::CATEGORY_OTHER, $get('other_deduction_ids') ?? []),
@@ -147,11 +149,17 @@ class EmployeeComplianceBenefits extends Page implements HasForms
         }
 
         $state = $this->form->getState();
-        $selectedOtherIds = collect($state['other_deduction_ids'] ?? [])
+        $requestedOtherIds = collect($state['other_deduction_ids'] ?? [])
             ->map(fn ($id): int => (int) $id)
             ->filter()
             ->unique()
             ->values()
+            ->all();
+        $selectedOtherIds = Deduction::query()
+            ->where('category', Deduction::CATEGORY_OTHER)
+            ->whereIn('id', $requestedOtherIds)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
             ->all();
 
         $deductionIds = Deduction::query()
@@ -255,7 +263,11 @@ class EmployeeComplianceBenefits extends Page implements HasForms
             return [
                 Placeholder::make("empty_{$category}_deductions")
                     ->hiddenLabel()
-                    ->content('No deductions available.')
+                    ->content($category === Deduction::CATEGORY_OTHER
+                        ? (Deduction::query()->where('category', Deduction::CATEGORY_OTHER)->exists()
+                            ? 'Select a deduction above to configure its amount and term.'
+                            : 'No other deductions have been configured.')
+                        : 'No deductions available.')
                     ->columnSpanFull(),
             ];
         }

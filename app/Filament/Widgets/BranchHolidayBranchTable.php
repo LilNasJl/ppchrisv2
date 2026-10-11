@@ -35,6 +35,7 @@ class BranchHolidayBranchTable extends TableWidget
                 TextColumn::make('branch_address')
                     ->label('Address')
                     ->searchable()
+                    ->limit(64)
                     ->wrap(),
             ])
             ->recordActions([
@@ -46,7 +47,8 @@ class BranchHolidayBranchTable extends TableWidget
                             'branchId' => $record->publicKey(),
                         ])),
                 ])
-                    ->icon(Heroicon::EllipsisHorizontal),
+                    ->icon(Heroicon::EllipsisHorizontal)
+                    ->tooltip('Branch holiday actions'),
             ]);
     }
 }

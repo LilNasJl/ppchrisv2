@@ -2,12 +2,12 @@
 
 namespace App\Filament\Employee\Pages\Station;
 
+use App\Filament\Employee\Pages\DtrChangeRequests;
 use App\Models\DtrSubmission;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrChangeRequestService;
 use App\Services\OnFieldDtrService;
-use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -25,6 +25,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -33,13 +34,13 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Override;
 
 class StationProofSubmissions extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.employee.pages.station-proof-submissions';
 
     protected static ?string $slug = 'station/proof-submissions';
 
@@ -49,15 +50,28 @@ class StationProofSubmissions extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentCheck;
 
+    public ?string $periodId = null;
+
     public static function canAccess(): bool
     {
-        return StationManagementAccess::canAccessStationManagement(auth()->user());
+        return parent::canAccess() && filled(auth()->user()?->employee);
     }
 
     public function mount(): void
     {
-        if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
-            throw new HttpException(403, 'Unauthorized access to Station Management.');
+        $requestedPeriod = request()->query('periodId');
+        $resolvedPeriodId = filled($requestedPeriod)
+            ? (PayrollPeriod::resolvePublicId($requestedPeriod) ?: (int) $requestedPeriod)
+            : null;
+
+        $period = filled($resolvedPeriodId)
+            ? PayrollPeriod::query()->find($resolvedPeriodId)
+            : null;
+
+        $this->periodId = $period ? (string) $period->getKey() : null;
+
+        if (! auth()->user()?->employee) {
+            abort(403, 'An employee account is required to submit On Field DTR.');
         }
     }
 
@@ -70,9 +84,8 @@ class StationProofSubmissions extends Page implements HasTable
                 ->with(['payrollPeriod', 'branch'])
                 ->where('submitted_by_employee_id', $employeeId)
                 ->where('submission_type', DtrSubmission::TYPE_PROOF)
+                ->when(filled($this->periodId), fn (Builder $query): Builder => $query->where('payroll_period_id', (int) $this->periodId))
                 ->latest())
-            ->heading('On Field DTR Requests')
-            ->description('Submitted records remain pending until HR reviews them.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
                 TextColumn::make('payrollPeriod.title')->label('Payroll Period')->searchable()->sortable()->wrap(),
@@ -149,10 +162,18 @@ class StationProofSubmissions extends Page implements HasTable
         return $schema->components([EmbeddedTable::make()]);
     }
 
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(ManageStationDtr::getUrl()),
+            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(fn (): string => DtrChangeRequests::getUrl(array_filter([
+                'periodId' => filled($this->periodId) ? PayrollPeriod::query()->find((int) $this->periodId)?->publicKey() : null,
+            ]))),
             Action::make('submitDtr')
                 ->label('Submit On Field DTR')
                 ->icon(Heroicon::ArrowUpTray)
@@ -169,7 +190,7 @@ class StationProofSubmissions extends Page implements HasTable
                             ->newestFirst()
                             ->pluck('title', 'id')
                             ->all())
-                        ->default(fn () => PayrollPeriod::query()->where('is_locked', false)->newestFirst()->value('id'))
+                        ->default(fn () => $this->defaultOpenPayrollPeriodId())
                         ->searchable()
                         ->preload()
                         ->required(),
@@ -328,5 +349,23 @@ class StationProofSubmissions extends Page implements HasTable
         $branchName = $employee->branch?->branch_name ?? 'No Branch';
 
         return "Submitting as: {$employee->full_name} ({$employee->company_id}) - {$branchName}";
+    }
+
+    protected function defaultOpenPayrollPeriodId(): ?int
+    {
+        $selectedPeriod = filled($this->periodId)
+            ? PayrollPeriod::query()->find((int) $this->periodId)
+            : null;
+
+        if ($selectedPeriod && ! $selectedPeriod->is_locked) {
+            return (int) $selectedPeriod->getKey();
+        }
+
+        $latestOpenPeriodId = PayrollPeriod::query()
+            ->where('is_locked', false)
+            ->newestFirst()
+            ->value('id');
+
+        return $latestOpenPeriodId ? (int) $latestOpenPeriodId : null;
     }
 }

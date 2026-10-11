@@ -27,6 +27,7 @@ class KpiPanelProvider extends PanelProvider
             ->path('kpi')
             ->authGuard('kpi')
             ->brandName('KPI Portal')
+            ->darkMode(isForced: true)
             ->globalSearch(false)
             ->favicon(asset('ppclogo.png').'?v=20260727')
             ->login(KpiLogin::class)

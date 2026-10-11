@@ -29,43 +29,45 @@
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.6rem 1rem;
-            padding: 0.85rem 1.15rem;
+            gap: 1rem 1.5rem;
+            padding: 1.1rem 1.5rem;
             border-radius: 0.75rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
             overflow: hidden;
         }
 
         .dtr-topbar::before {
-            content: "";
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: 0;
-            inline-size: 100%;
-            block-size: 3px;
-            background: linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+            content: none;
         }
 
         .dark .dtr-topbar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border-color: #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
         }
 
         .dtr-topbar-copy {
             display: flex;
             flex-direction: column;
-            gap: 0.1rem;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .dtr-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
         }
 
         .dtr-title {
-            color: rgb(15, 23, 42);
-            font-size: 1.15rem;
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.65rem;
             font-weight: 800;
             line-height: 1.2;
-            letter-spacing: -0.02em;
         }
 
         .dark .dtr-title {
@@ -73,13 +75,14 @@
         }
 
         .dtr-subtitle {
-            color: rgb(100, 116, 139);
-            font-size: 0.775rem;
-            line-height: 1.3;
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.9rem;
+            line-height: 1.4;
         }
 
         .dark .dtr-subtitle {
-            color: rgb(148, 163, 184);
+            color: #e0ecff;
         }
 
         .dtr-actions-row {
@@ -725,6 +728,18 @@
         }
 
         @media (max-width: 640px) {
+            .dtr-topbar {
+                padding: 1rem;
+            }
+
+            .dtr-title {
+                font-size: 1.35rem;
+            }
+
+            .dtr-actions-row {
+                width: 100%;
+            }
+
             .dtr-filter-card {
                 grid-template-columns: 1fr;
             }
@@ -738,6 +753,7 @@
         {{-- Topbar Header --}}
         <header class="dtr-topbar">
             <div class="dtr-topbar-copy">
+                <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
                 <h2 class="dtr-title">Benefits &amp; Company Deduction Management</h2>
                 <p class="dtr-subtitle">
                     Configure employee government remittances, company deductions, and custom benefit schedules with instant branch and employee filtering.

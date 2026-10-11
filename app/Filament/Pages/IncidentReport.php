@@ -18,7 +18,7 @@ class IncidentReport extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ExclamationTriangle;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Labor Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Request & Tracking';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 6;
 }

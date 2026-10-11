@@ -40,6 +40,11 @@ class HolidayExclusions extends Page
             : 'National Holiday Exclusions';
     }
 
+    public function getSubheading(): string
+    {
+        return 'Review holidays and manage employee eligibility.';
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {

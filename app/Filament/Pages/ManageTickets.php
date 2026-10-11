@@ -6,7 +6,6 @@ use App\Models\Ticket;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -17,6 +16,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -30,19 +30,25 @@ class ManageTickets extends Page implements HasTable
     use HasPageShield;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.manage-tickets';
 
     protected static ?string $title = 'Manage Tickets';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employee Request & Tracking';
 
     protected static ?int $navigationSort = 2;
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 
     public function table(Table $table): Table
     {
         return $table
+            ->heading('Employee Tickets')
             ->query(fn (): Builder => Ticket::query()
                 ->with(['employee.user', 'handledBy'])
                 ->latest('created_at'))
@@ -87,34 +93,36 @@ class ManageTickets extends Page implements HasTable
                     ->toggleable(),
             ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('view')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->modalHeading('Ticket Details')
-                        ->modalSubmitAction(false)
-                        ->modalContent(fn (Ticket $record) => view('filament.pages.partials.ticket-details', [
-                            'ticket' => $record,
-                        ])),
+                Action::make('view')
+                    ->label('View')
+                    ->icon(Heroicon::Eye)
+                    ->iconButton()
+                    ->tooltip('View Ticket')
+                    ->modalHeading('Ticket Details')
+                    ->modalSubmitAction(false)
+                    ->modalContent(fn (Ticket $record) => view('filament.pages.partials.ticket-details', [
+                        'ticket' => $record,
+                    ])),
 
-                    Action::make('updateStatus')
-                        ->label('Update Status')
-                        ->icon(Heroicon::PencilSquare)
-                        ->modalHeading('Update Ticket Status')
-                        ->modalSubmitActionLabel('Save Status')
-                        ->schema($this->ticketStatusSchema())
-                        ->fillForm(fn (Ticket $record): array => [
-                            'status' => $record->status,
-                            'hr_comment' => $record->hr_comment,
-                            'hr_attachment_path' => $record->hr_attachment_path,
-                            'hr_attachment_original_name' => $record->hr_attachment_original_name,
-                        ])
-                        ->action(fn (Ticket $record, array $data): mixed => $this->updateTicketStatus($record, $data)),
+                Action::make('updateStatus')
+                    ->label('Update Status')
+                    ->icon(Heroicon::PencilSquare)
+                    ->iconButton()
+                    ->tooltip('Update Ticket')
+                    ->modalHeading('Update Ticket Status')
+                    ->modalSubmitActionLabel('Save Status')
+                    ->schema($this->ticketStatusSchema())
+                    ->fillForm(fn (Ticket $record): array => [
+                        'status' => $record->status,
+                        'hr_comment' => $record->hr_comment,
+                        'hr_attachment_path' => $record->hr_attachment_path,
+                        'hr_attachment_original_name' => $record->hr_attachment_original_name,
+                    ])
+                    ->action(fn (Ticket $record, array $data): mixed => $this->updateTicketStatus($record, $data)),
 
-                    DeleteAction::make(),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal)
-                    ->tooltip('Actions'),
+                DeleteAction::make()
+                    ->iconButton()
+                    ->tooltip('Delete Ticket'),
             ]);
     }
 

@@ -29,48 +29,32 @@
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.65rem 1rem;
-            padding: 0.75rem 1.1rem;
-            border-radius: 0.7rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+            overflow: hidden;
         }
 
         .pbb-topbar::before {
-            content: "";
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: 0;
-            inline-size: 100%;
-            block-size: 3px;
-            background: linear-gradient(90deg, #2563eb 0%, #4f46e5 50%, #0ea5e9 100%);
-            border-top-left-radius: 0.7rem;
-            border-top-right-radius: 0.7rem;
-        }
-
-        .dark .pbb-topbar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
+            content: none;
         }
 
         .pbb-topbar-copy {
             display: flex;
             flex-direction: column;
-            gap: 0.15rem;
+            gap: 0.25rem;
             min-width: 0;
         }
 
         .pbb-eyebrow {
-            color: rgb(37, 99, 235);
-            font-size: 0.65rem;
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
             font-weight: 800;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-
-        .dark .pbb-eyebrow {
-            color: rgb(96, 165, 250);
+            line-height: 1.2;
         }
 
         .pbb-title-row {
@@ -81,34 +65,26 @@
         }
 
         .pbb-title {
-            color: rgb(15, 23, 42);
-            font-size: 1.1rem;
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.65rem;
             font-weight: 800;
             line-height: 1.2;
-            letter-spacing: -0.015em;
-            margin: 0;
-        }
-
-        .dark .pbb-title {
-            color: #ffffff;
         }
 
         .pbb-subtitle {
-            color: rgb(100, 116, 139);
-            font-size: 0.76rem;
-            line-height: 1.3;
             margin: 0;
-        }
-
-        .dark .pbb-subtitle {
-            color: rgb(148, 163, 184);
+            color: #e0ecff;
+            font-size: 0.9rem;
+            line-height: 1.4;
         }
 
         .pbb-actions-row {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 0.4rem;
+            justify-content: flex-end;
+            gap: 0.75rem;
         }
 
         .pbb-btn {
@@ -152,6 +128,25 @@
 
         .dark .pbb-btn.outline:hover {
             background: rgb(51, 65, 85);
+        }
+
+        .pbb-topbar .pbb-btn {
+            min-height: 2.25rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 0.45rem;
+            font-size: 0.75rem;
+        }
+
+        .pbb-topbar .pbb-btn.outline {
+            color: #ffffff;
+            background: rgb(10 31 68 / 0.6);
+            border-color: rgb(147 197 253 / 0.35);
+        }
+
+        .pbb-topbar .pbb-btn.outline:hover {
+            color: #ffffff;
+            background: rgb(10 31 68 / 0.85);
+            border-color: rgb(191 219 254 / 0.65);
         }
 
         .pbb-btn:disabled {
@@ -372,6 +367,20 @@
         }
 
         @media (max-width: 600px) {
+            .pbb-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .pbb-title {
+                font-size: 1.35rem;
+            }
+
+            .pbb-actions-row {
+                justify-content: flex-start;
+                width: 100%;
+            }
+
             .pbb-totals-strip {
                 grid-template-columns: 1fr;
             }
@@ -433,7 +442,7 @@
         {{-- Topbar Header --}}
         <header class="pbb-topbar">
             <div class="pbb-topbar-copy">
-                <span class="pbb-eyebrow">Compensation Operations • Payroll By Branch</span>
+                <span class="pbb-eyebrow">WORKFORCE RECORDS</span>
                 <div class="pbb-title-row">
                     <h2 class="pbb-title">
                         {{ $selectedBranch?->branch_name ?: 'Branch Payroll' }}
@@ -583,6 +592,7 @@
                     :initial-page="$this->payroll_page"
                     :initial-per-page="$this->payroll_per_page"
                     :initial-preset="$this->payroll_preset"
+                    :show-column-presets="false"
                     :show-totals="true"
                     :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id.'-'.$this->payroll_page"
                 />

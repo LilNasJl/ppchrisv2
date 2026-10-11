@@ -18,7 +18,7 @@ class OffboardingAndClearanceFlow extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ArrowRightStartOnRectangle;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Performance Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Company Compliance';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 7;
 }

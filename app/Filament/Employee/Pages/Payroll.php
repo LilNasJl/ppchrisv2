@@ -77,6 +77,11 @@ class Payroll extends Page implements HasForms
         return [];
     }
 
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     protected function getFormSchema(): array
     {
         return [

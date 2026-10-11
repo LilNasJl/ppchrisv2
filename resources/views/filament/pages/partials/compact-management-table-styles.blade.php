@@ -251,4 +251,54 @@
             width: 11rem;
         }
     }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta-header-toolbar {
+        padding: 0.8rem 1.25rem !important;
+        gap: 0.75rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta-header-cell {
+        padding: 0.65rem 0.9rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta-text {
+        padding-inline: 0.9rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta-cell-index {
+        min-width: 5rem !important;
+        width: 5rem !important;
+        max-width: 5rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta table thead tr > :first-child,
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta table tbody tr > :first-child {
+        padding-inline-start: 1.25rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta table thead tr > :last-child,
+    :is(.branch-page, .departments-page, .designations-page) .fi-ta table tbody tr > :last-child {
+        padding-inline-end: 1.25rem !important;
+    }
+
+    :is(.branch-page, .departments-page, .designations-page) .fi-pagination {
+        padding: 0.75rem 1.25rem !important;
+    }
+
+    @media (min-width: 640px) {
+        :is(.branch-page, .departments-page, .designations-page) .fi-ta-header-toolbar,
+        :is(.branch-page, .departments-page, .designations-page) .fi-pagination {
+            padding-inline: 1.5rem !important;
+        }
+
+        :is(.branch-page, .departments-page, .designations-page) .fi-ta table thead tr > :first-child,
+        :is(.branch-page, .departments-page, .designations-page) .fi-ta table tbody tr > :first-child {
+            padding-inline-start: 1.5rem !important;
+        }
+
+        :is(.branch-page, .departments-page, .designations-page) .fi-ta table thead tr > :last-child,
+        :is(.branch-page, .departments-page, .designations-page) .fi-ta table tbody tr > :last-child {
+            padding-inline-end: 1.5rem !important;
+        }
+    }
 </style>

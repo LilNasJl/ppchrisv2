@@ -23,6 +23,120 @@
             color: var(--ofd-text);
         }
 
+        .ofd-page--compact {
+            gap: 12px;
+        }
+
+        .ofd-page--compact .ofd-hero {
+            gap: 16px;
+            padding: 14px 16px;
+            border-color: var(--ofd-border);
+            background: var(--ofd-surface);
+        }
+
+        .ofd-page--compact .ofd-hero-icon {
+            width: 40px;
+            height: 40px;
+            box-shadow: none;
+        }
+
+        .ofd-page--compact .ofd-employee-name {
+            font-size: 19px;
+        }
+
+        .ofd-page--compact .ofd-employee-meta {
+            margin-top: 3px;
+            font-size: 12px;
+        }
+
+        .ofd-page--compact .ofd-meta-grid {
+            gap: 10px 16px;
+            padding: 12px 14px;
+            border: 1px solid var(--ofd-border);
+            border-radius: 8px;
+            background: var(--ofd-surface);
+        }
+
+        .ofd-page--compact .ofd-value {
+            margin-top: 3px;
+            font-size: 13px;
+        }
+
+        .ofd-page--compact .ofd-heading {
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ofd-page--compact .ofd-heading-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .ofd-page--compact .ofd-section-title {
+            font-size: 15px;
+        }
+
+        .ofd-page--compact .ofd-section-copy {
+            margin-top: 1px;
+            font-size: 12px;
+        }
+
+        .ofd-page--compact .ofd-entry-grid {
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .ofd-page--compact .ofd-entry-card {
+            padding: 12px 14px;
+            background: var(--ofd-surface);
+        }
+
+        .ofd-page--compact .ofd-entry-values {
+            gap: 8px 14px;
+            margin-top: 10px;
+        }
+
+        .ofd-page--compact .ofd-document-grid {
+            gap: 10px;
+            padding-top: 12px;
+        }
+
+        .ofd-page--compact .ofd-document-panel {
+            padding: 12px 14px;
+            border: 1px solid var(--ofd-border);
+            border-radius: 8px;
+            background: var(--ofd-surface);
+        }
+
+        .ofd-page--compact .ofd-inline-title {
+            font-size: 14px;
+        }
+
+        .ofd-page--compact .ofd-file-name,
+        .ofd-page--compact .ofd-body-copy {
+            margin-top: 7px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .ofd-page--compact .ofd-actions {
+            margin-top: 10px;
+        }
+
+        .ofd-page--compact .ofd-review {
+            padding: 14px;
+        }
+
+        .ofd-page--compact .ofd-review-grid {
+            gap: 10px 16px;
+            margin-top: 12px;
+        }
+
+        .ofd-page--compact .ofd-review-remarks {
+            margin-top: 12px;
+            padding-top: 10px;
+        }
+
         .dark .ofd-page {
             --ofd-text: #f8fafc;
             --ofd-muted: #94a3b8;
@@ -317,6 +431,18 @@
             .ofd-review-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+
+            .ofd-page--compact .ofd-hero {
+                padding: 12px;
+            }
+
+            .ofd-page--compact .ofd-meta-grid {
+                padding: 10px 12px;
+            }
+
+            .ofd-page--compact .ofd-document-panel {
+                padding: 11px 12px;
+            }
         }
 
         @media (max-width: 520px) {
@@ -334,7 +460,7 @@
     </style>
 @endonce
 
-<div class="ofd-page">
+<div class="ofd-page {{ ($compact ?? false) ? 'ofd-page--compact' : '' }}">
     <section class="ofd-hero">
         <div class="ofd-identity">
             <div class="ofd-hero-icon">

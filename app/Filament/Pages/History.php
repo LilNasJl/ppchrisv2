@@ -26,15 +26,20 @@ class History extends Page implements HasTable
     use HasPageShield;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.history';
 
     protected static ?string $title = 'History';
 
+    public function getSubheading(): string
+    {
+        return 'Review administrative and HR actions recorded in the system.';
+    }
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Bell;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Analytic and Reporting';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 7;
 
     public function table(Table $table): Table
     {

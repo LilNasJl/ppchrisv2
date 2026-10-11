@@ -53,7 +53,7 @@ class PayrollByBranch extends Page implements HasForms
 
     public int $payroll_per_page = 10;
 
-    public string $payroll_preset = 'summary';
+    public string $payroll_preset = 'all';
 
     protected ?PayrollPeriod $cachedSelectedPeriod = null;
 
@@ -101,10 +101,10 @@ class PayrollByBranch extends Page implements HasForms
         $this->payroll_per_page = in_array($requestedPerPage, [10, 25, 50, 100], true)
             ? $requestedPerPage
             : 10;
-        $requestedPreset = (string) request()->query('payrollPreset', 'summary');
+        $requestedPreset = (string) request()->query('payrollPreset', 'all');
         $this->payroll_preset = in_array($requestedPreset, ['summary', 'earnings', 'deductions', 'remittances', 'all'], true)
             ? $requestedPreset
-            : 'summary';
+            : 'all';
 
         $this->form->fill([
             'period_display' => $this->period_display,

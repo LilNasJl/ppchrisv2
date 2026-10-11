@@ -18,6 +18,9 @@ class ReportPrintController extends Controller
             'report_type' => ['required', 'string', 'max:100'],
             'payroll_period_id' => ['nullable', 'integer', 'exists:payroll_periods,id'],
             'branch_id' => ['nullable', 'string', 'max:50'],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
             'month' => ['nullable', 'date_format:Y-m'],
         ]);
 
@@ -37,6 +40,11 @@ class ReportPrintController extends Controller
             ? (string) $validated['payroll_period_id']
             : null;
         $report->branch_id = $branchId;
+        $report->employee_id = isset($validated['employee_id'])
+            ? (string) $validated['employee_id']
+            : null;
+        $report->date_from = $validated['date_from'] ?? null;
+        $report->date_to = $validated['date_to'] ?? null;
         $report->month = $validated['month'] ?? null;
 
         $headers = $report->getReportHeadersProperty();
@@ -44,7 +52,7 @@ class ReportPrintController extends Controller
         return view('reports.print', [
             'title' => $report->getReportTitleProperty(),
             'headers' => $headers,
-            'rows' => $report->getReportRowsProperty(),
+            'rows' => $report->downloadRows(),
             'filters' => $report->getReportFilterLabelsProperty(),
             'isLandscape' => count($headers) > 6,
         ]);

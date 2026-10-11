@@ -12,6 +12,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Override;
 
@@ -70,10 +71,26 @@ class ViewEmployeeDetails extends Page implements HasForms
     }
 
     #[Override]
+    public function getHeader(): ?View
+    {
+        return view('filament.pages.partials.employee-details-view-header', [
+            'employee' => $this->employeeRecord,
+            'headerActions' => $this->getCachedHeaderActions(),
+        ]);
+    }
+
+    #[Override]
     protected function getHeaderActions(): array
     {
         return [
-            $this->employmentTypeHistoryAction(),
+            Action::make('return')
+                ->label('Return')
+                ->icon(Heroicon::ArrowLeft)
+                ->color('gray')
+                ->url(fn (): string => $this->getReturnUrl()),
+
+            $this->employmentTypeHistoryAction()
+                ->color('gray'),
 
             Action::make('edit')
                 ->label('Edit')
@@ -82,11 +99,6 @@ class ViewEmployeeDetails extends Page implements HasForms
                     'employeeId' => $this->employeeRecord?->publicKey(),
                     'returnUrl' => $this->getReturnUrl(),
                 ])),
-
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => $this->getReturnUrl()),
         ];
     }
 

@@ -10,6 +10,8 @@ class EditMemoType extends EditRecord
 {
     protected static string $resource = MemoTypeResource::class;
 
+    protected string $view = 'filament.resources.memo-types.pages.edit-memo-type';
+
     protected function getHeaderActions(): array
     {
         return [

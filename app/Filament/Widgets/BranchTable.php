@@ -22,6 +22,7 @@ use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -46,6 +47,7 @@ class BranchTable extends TableWidget
     {
         return [
             Section::make('Branch Details')
+                ->description('Location, contact, and assignment information.')
                 ->schema([
                     TextInput::make('branch_name')
                         ->label('Branch Name')
@@ -67,16 +69,28 @@ class BranchTable extends TableWidget
                         ->disabled()
                         ->dehydrated(false),
 
+                    TextInput::make('operating_hours')
+                        ->label('Operating Hours')
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    TextInput::make('configured_shifts')
+                        ->label('Configured Shifts')
+                        ->disabled()
+                        ->dehydrated(false),
+
                     Textarea::make('branch_address')
                         ->label('Address')
-                        ->rows(3)
+                        ->rows(2)
                         ->disabled()
                         ->dehydrated(false)
                         ->columnSpanFull(),
                 ])
-                ->columns(2),
+                ->columns(['default' => 1, 'md' => 2])
+                ->compact(),
 
             Section::make('Schedules')
+                ->description('Configured hours for this branch.')
                 ->schema([
                     Fieldset::make('Regular Schedule')
                         ->schema([
@@ -90,7 +104,8 @@ class BranchTable extends TableWidget
                                 ->disabled()
                                 ->dehydrated(false),
                         ])
-                        ->columns(2),
+                        ->columns(['default' => 1, 'sm' => 2])
+                        ->visible(fn (Get $get): bool => filled($get('reg_sched_start')) || filled($get('reg_sched_end'))),
 
                     Fieldset::make('Shifting Schedules')
                         ->schema([
@@ -124,7 +139,9 @@ class BranchTable extends TableWidget
                                 ->disabled()
                                 ->dehydrated(false),
                         ])
-                        ->columns(2),
+                        ->columns(['default' => 1, 'sm' => 2])
+                        ->columnSpanFull()
+                        ->visible(fn (Get $get): bool => filled($get('shift1_start')) || filled($get('shift1_end')) || filled($get('shift2_start')) || filled($get('shift2_end')) || filled($get('shift3_start')) || filled($get('shift3_end'))),
 
                     Fieldset::make('Broken Shift Schedules')
                         ->schema([
@@ -148,8 +165,12 @@ class BranchTable extends TableWidget
                                 ->disabled()
                                 ->dehydrated(false),
                         ])
-                        ->columns(2),
-                ]),
+                        ->columns(['default' => 1, 'sm' => 2])
+                        ->visible(fn (Get $get): bool => filled($get('broken_shift1_start')) || filled($get('broken_shift1_end')) || filled($get('broken_shift2_start')) || filled($get('broken_shift2_end'))),
+                ])
+                ->columns(2)
+                ->compact()
+                ->visible(fn (Get $get): bool => filled($get('reg_sched_start')) || filled($get('reg_sched_end')) || filled($get('shift1_start')) || filled($get('shift1_end')) || filled($get('shift2_start')) || filled($get('shift2_end')) || filled($get('shift3_start')) || filled($get('shift3_end')) || filled($get('broken_shift1_start')) || filled($get('broken_shift1_end')) || filled($get('broken_shift2_start')) || filled($get('broken_shift2_end'))),
         ];
     }
 
@@ -221,6 +242,8 @@ class BranchTable extends TableWidget
                             'branch_name' => $record->branch_name,
                             'mobile_no' => $record->mobile_no,
                             'scheduling' => $record->scheduling,
+                            'operating_hours' => $record->is_24hrs ? '24-hour operation' : 'Standard operation',
+                            'configured_shifts' => $record->no_of_shifts ? $record->no_of_shifts.' shifts' : '—',
                             'sic_name' => $record->employee
                                 ? trim($record->employee->lastname.', '.$record->employee->middlename.' '.$record->employee->firstname)
                                 : 'N/A',
@@ -238,7 +261,10 @@ class BranchTable extends TableWidget
                             'broken_shift2_start' => $record->broken_shift2_start,
                             'broken_shift2_end' => $record->broken_shift2_end,
                         ])
-                        ->schema($this->getBranchViewSchema()),
+                        ->schema($this->getBranchViewSchema())
+                        ->modalWidth('4xl')
+                        ->modalDescription('Review branch details and configured work schedules.')
+                        ->modalCancelActionLabel('Close'),
 
                     DeleteAction::make()
                         ->label('Delete')

@@ -22,11 +22,16 @@ class ActivityCalendar extends Page
 
     protected static ?string $title = 'Activity Calendar';
 
+    public function getSubheading(): string
+    {
+        return 'Plan, review, and manage company activities by date.';
+    }
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::CalendarDateRange;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     public string $calendarMonth;
 

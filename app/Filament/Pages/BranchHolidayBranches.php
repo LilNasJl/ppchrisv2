@@ -22,6 +22,11 @@ class BranchHolidayBranches extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingStorefront;
 
+    public function getSubheading(): string
+    {
+        return 'Choose a branch to manage its holiday calendar.';
+    }
+
     #[Override]
     protected function getHeaderActions(): array
     {

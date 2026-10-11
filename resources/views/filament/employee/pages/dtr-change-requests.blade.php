@@ -13,6 +13,82 @@
             margin-bottom: 0.5rem;
         }
 
+        .dtr-topbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            width: 100%;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid #3b82f6;
+            border-radius: 0.75rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #fff;
+        }
+
+        .dtr-topbar-copy {
+            display: flex;
+            flex: 1 1 20rem;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .dtr-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .dtr-title {
+            margin: 0;
+            color: #fff;
+            font-size: 1.65rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .dtr-subtitle {
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .dtr-actions-row,
+        .dtr-actions-row .fi-ac {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.65rem;
+        }
+
+        .dtr-actions-row .fi-btn {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 640px) {
+            .dtr-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .dtr-title {
+                font-size: 1.35rem;
+            }
+
+            .dtr-actions-row,
+            .dtr-actions-row .fi-ac {
+                justify-content: flex-start;
+                width: 100%;
+            }
+        }
+
         /* Period Select Styling inside Table Header */
         .dtr-period-select-wrap {
             width: 270px;
@@ -203,6 +279,69 @@
             width: 0.95rem !important;
             height: 0.95rem !important;
             flex-shrink: 0 !important;
+        }
+
+        .dtr-table-container .fi-ta-header-ctn {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.65rem 1rem;
+            padding: 0.65rem 0.95rem !important;
+            background: rgb(248, 250, 252);
+            border-bottom: 1px solid rgb(226, 232, 240);
+        }
+
+        .dark .dtr-table-container .fi-ta-header-ctn {
+            background: rgb(30, 41, 59);
+            border-bottom-color: rgb(51, 65, 85);
+        }
+
+        .dtr-table-container .fi-ta-header,
+        .dtr-table-container .fi-ta-header-toolbar {
+            display: contents !important;
+        }
+
+        .dtr-table-container .fi-ta-header .fi-ta-actions {
+            flex: 1 1 16rem;
+            justify-content: flex-start !important;
+        }
+
+        .dtr-table-container .fi-ta-header-toolbar > .fi-ta-actions {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .dtr-table-container .fi-ta-header-toolbar > div:last-of-type {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-inline-start: auto;
+        }
+
+        .dtr-table-container .fi-ta-search-field {
+            width: min(19rem, 38vw);
+        }
+
+        @media (max-width: 640px) {
+            .dtr-table-container .fi-ta-header-ctn {
+                align-items: stretch;
+            }
+
+            .dtr-table-container .fi-ta-header .fi-ta-actions {
+                flex-basis: 100%;
+            }
+
+            .dtr-table-container .fi-ta-header-toolbar > div:last-of-type {
+                justify-content: flex-start;
+                width: 100%;
+                margin-inline-start: 0;
+            }
+
+            .dtr-table-container .fi-ta-search-field {
+                width: min(19rem, 100%);
+            }
         }
 
         .fi-page .fi-ta table {
@@ -398,6 +537,18 @@
     </style>
 
     <div wire:poll.15s="markReviewedRequestsAsSeen" class="dtr-employee-workspace">
+        <header class="dtr-topbar">
+            <div class="dtr-topbar-copy">
+                <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
+                <h2 class="dtr-title">D.T.R Change Requests</h2>
+                <p class="dtr-subtitle">Review attendance corrections and submit On Field DTR entries for HR review.</p>
+            </div>
+
+            <div class="dtr-actions-row">
+                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+            </div>
+        </header>
+
         {{-- Tabs & Table Container --}}
         <section class="dtr-table-container">
             {{ $this->content }}

@@ -6,6 +6,7 @@ use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
 use App\Services\PayrollCalculator;
 use App\Support\CompanyExportHeader;
+use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -20,17 +21,24 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Override;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use UnitEnum;
 
 class PayrollSummary extends Page implements HasForms
 {
     use HasPageShield;
     use InteractsWithForms;
 
-    protected string $view = 'filament.pages.payroll-summary';
-
-    protected static bool $shouldRegisterNavigation = false;
+    protected string $view = 'filament.pages.under-construction';
 
     protected static ?string $title = 'Payroll Summary';
+
+    protected static ?string $navigationLabel = 'Consolidated Report for Payroll';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentCurrencyDollar;
+
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
+
+    protected static ?int $navigationSort = 1;
 
     public ?string $period_id = null;
 
@@ -116,52 +124,7 @@ class PayrollSummary extends Page implements HasForms
     #[Override]
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => filled($this->period_id)
-                    ? Payroll::getUrl(['periodId' => $this->selectedPeriod?->publicKey() ?? $this->period_id])
-                    : Payroll::getUrl()),
-
-            Action::make('signatories')
-                ->label('Signatories')
-                ->icon(Heroicon::UserGroup)
-                ->schema($this->getSignatoryFormSchema())
-                ->fillForm(fn (): array => $this->getSignatoryData())
-                ->modalHeading('Edit Signatories')
-                ->modalSubmitActionLabel('Save')
-                ->action(function (array $data): void {
-                    $this->prepared_by = $data['prepared_by'] ?: 'Prepared By';
-                    $this->checked_by = $data['checked_by'] ?: 'Checked By';
-                    $this->approved_by = $data['approved_by'] ?: 'Approved By';
-
-                    PayrollSignatory::default()->update($this->getSignatoryData());
-
-                    Notification::make()
-                        ->title('Signatories updated')
-                        ->success()
-                        ->send();
-                }),
-
-            ActionGroup::make([
-                Action::make('exportExcel')
-                    ->label('Export Excel')
-                    ->icon(Heroicon::TableCells)
-                    ->action(fn (): StreamedResponse => $this->exportExcel()),
-
-                Action::make('print')
-                    ->label('Print / PDF')
-                    ->icon(Heroicon::Printer)
-                    ->url(fn (): string => route('hr_tools.payroll_summary.print', [
-                        'period_id' => $this->period_id,
-                    ]))
-                    ->openUrlInNewTab(),
-            ])
-                ->label('Export')
-                ->icon(Heroicon::ChevronDown)
-                ->button(),
-        ];
+        return [];
     }
 
     protected function getSignatoryFormSchema(): array

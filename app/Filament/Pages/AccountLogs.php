@@ -30,7 +30,7 @@ class AccountLogs extends Page implements HasTable
 
     protected static ?string $title = 'Account Logs';
 
-    protected static ?string $navigationLabel = 'Account Logs';
+    protected static ?string $navigationLabel = 'Accounts Logs';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Clock;
 

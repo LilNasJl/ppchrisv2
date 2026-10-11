@@ -1,17 +1,21 @@
 <?php
 
+use App\Filament\Pages\ThirteenthMonthPay;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSnapshot;
 use App\Models\ThirteenthMonthRelease;
+use App\Models\User;
 use App\Services\ThirteenthMonthPayService;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-it('calculates each half year from locked payroll snapshots using a divisor of six', function (): void {
-    $branch = Branch::query()->create(['branch_name' => 'Admin']);
+it('calculates accrual using twelve and reconciles the full year from locked snapshots', function (): void {
+    $branch = thirteenthBranch('Admin');
     $employee = Employee::query()->create([
         'uid' => 'PF-0001',
         'firstname' => 'Juan',
@@ -49,19 +53,19 @@ it('calculates each half year from locked payroll snapshots using a divisor of s
     $midyearColumns = $service->periodColumns(2026, ThirteenthMonthPayService::MIDYEAR);
 
     expect($midyear['basis_total'])->toBe(25350.0)
-        ->and($midyear['calculated_amount'])->toBe(4225.0)
+        ->and($midyear['calculated_amount'])->toBe(2112.5)
         ->and($midyear['months'][4])->toBe(0.0)
         ->and($midyear['period_amounts']['4_second'])->toBe(0.0)
         ->and($midyearColumns['4_second']['status'])->toBe('Open')
         ->and($midyearColumns['6_second']['status'])->toBe('Locked')
-        ->and($yearEnd['basis_total'])->toBe(13000.0)
-        ->and($yearEnd['calculated_amount'])->toBe(2166.67)
+        ->and($yearEnd['basis_total'])->toBe(38350.0)
+        ->and($yearEnd['calculated_amount'])->toBe(3195.83)
         ->and($wholeYear['basis_total'])->toBe(38350.0)
         ->and($wholeYear['calculated_amount'])->toBe(3195.83);
 });
 
 it('freezes released amounts in a release ledger', function (): void {
-    $branch = Branch::query()->create(['branch_name' => 'Admin']);
+    $branch = thirteenthBranch('Admin');
     $employee = Employee::query()->create([
         'uid' => 'PF-0002',
         'firstname' => 'Maria',
@@ -81,13 +85,13 @@ it('freezes released amounts in a release ledger', function (): void {
     $releasedRow = $service->rows(2026, ThirteenthMonthPayService::MIDYEAR)->sole();
 
     expect((float) $release->basis_amount)->toBe(5900.0)
-        ->and((float) $release->released_amount)->toBe(983.33)
+        ->and((float) $release->released_amount)->toBe(491.67)
         ->and($releasedRow['released'])->toBeTrue()
         ->and(ThirteenthMonthRelease::query()->count())->toBe(1);
 });
 
-it('keeps Midyear and Year End release statuses independent', function (): void {
-    $branch = Branch::query()->create(['branch_name' => 'Admin']);
+it('deducts the midyear payout from year end and preserves payment history', function (): void {
+    $branch = thirteenthBranch('Admin');
     $employee = Employee::query()->create([
         'uid' => 'PF-0003',
         'firstname' => 'Christopher',
@@ -112,28 +116,104 @@ it('keeps Midyear and Year End release statuses independent', function (): void 
     $service->release($midyear, 2026, ThirteenthMonthPayService::MIDYEAR, null);
 
     expect($service->rows(2026, ThirteenthMonthPayService::MIDYEAR)->sole()['release_status'])->toBe('Released')
-        ->and($service->rows(2026, ThirteenthMonthPayService::YEAR_END)->sole()['release_status'])->toBe('Pending');
+        ->and($service->rows(2026, ThirteenthMonthPayService::YEAR_END)->sole()['pending_amount'])->toBe(1041.66);
 
-    $service->setReleaseStatus(
+    expect(fn () => $service->setReleaseStatus(
         $service->rows(2026, ThirteenthMonthPayService::MIDYEAR),
         2026,
         ThirteenthMonthPayService::MIDYEAR,
         null,
         'pending',
-    );
+    ))->toThrow(InvalidArgumentException::class);
+    $yearEnd = $service->rows(2026, ThirteenthMonthPayService::YEAR_END)->sole();
+    $payment = $service->release($yearEnd, 2026, ThirteenthMonthPayService::YEAR_END, null);
+    $repeat = $service->release($yearEnd, 2026, ThirteenthMonthPayService::YEAR_END, null);
+    expect($repeat->id)->toBe($payment->id)
+        ->and(ThirteenthMonthRelease::query()->count())->toBe(2)
+        ->and($service->rows(2026, ThirteenthMonthPayService::WHOLE_YEAR)->sole()['pending_amount'])->toBe(0.0);
+});
 
-    expect($service->rows(2026, ThirteenthMonthPayService::MIDYEAR)->sole()['release_status'])->toBe('Pending')
-        ->and(ThirteenthMonthRelease::query()->count())->toBe(0);
+it('pays the same annual amount once or in two payouts without including extras', function (bool $split): void {
+    $branch = thirteenthBranch('Admin');
+    $employee = Employee::query()->create(['uid' => 'TEST-1', 'firstname' => 'Test', 'branch_id' => $branch->id]);
+    foreach (range(1, 12) as $month) {
+        payrollSnapshot(payrollPeriod(sprintf('2026-%02d-15', $month), true), $employee, $branch, [
+            'half_month_pay' => 26000, 'overtime' => 4000, 'allowance' => 2000,
+            'holiday_pay' => 1000, 'salary_adjustment' => 500,
+        ]);
+    }
+    $service = app(ThirteenthMonthPayService::class);
+    if ($split) {
+        $payment = $service->release($service->rows(2026, 'midyear')->sole(), 2026, 'midyear', null);
+        expect((float) $payment->released_amount)->toBe(13000.0);
+    }
+    $payment = $service->release($service->rows(2026, 'year_end')->sole(), 2026, 'year_end', null);
+    expect((float) $payment->released_amount)->toBe($split ? 13000.0 : 26000.0)
+        ->and((float) ThirteenthMonthRelease::query()->sum('released_amount'))->toBe(26000.0);
+})->with([true, false]);
 
-    $wholeYear = $service->rows(2026, ThirteenthMonthPayService::WHOLE_YEAR)->sole();
-    $service->release($wholeYear, 2026, ThirteenthMonthPayService::WHOLE_YEAR, null);
+it('aggregates transferred employees across branches and filters by latest payroll branch', function (): void {
+    $a = thirteenthBranch('A');
+    $b = thirteenthBranch('B');
+    $employee = Employee::query()->create(['uid' => 'TRANSFER', 'firstname' => 'Test', 'branch_id' => $b->id]);
+    payrollSnapshot(payrollPeriod('2026-01-15', true), $employee, $a, ['half_month_pay' => 12000]);
+    payrollSnapshot(payrollPeriod('2026-07-15', true), $employee, $b, ['half_month_pay' => 24000]);
+    $service = app(ThirteenthMonthPayService::class);
+    expect($service->rows(2026, 'year_end', $b->id)->sole()['calculated_amount'])->toBe(3000.0)
+        ->and($service->rows(2026, 'year_end', $a->id))->toHaveCount(0);
+});
 
-    expect($service->rows(2026, ThirteenthMonthPayService::WHOLE_YEAR)->sole()['release_status'])->toBe('Released')
-        ->and($service->rows(2026, ThirteenthMonthPayService::MIDYEAR)->sole()['release_status'])->toBe('Released via Whole Year')
-        ->and($service->releaseConflict(2026, ThirteenthMonthPayService::MIDYEAR))->not->toBeNull();
+it('blocks recording while payroll is open and never trusts a supplied amount', function (): void {
+    $branch = thirteenthBranch('A');
+    $employee = Employee::query()->create(['uid' => 'SAFE', 'firstname' => 'Test', 'branch_id' => $branch->id]);
+    payrollSnapshot(payrollPeriod('2026-01-15', true), $employee, $branch, ['half_month_pay' => 12000]);
+    $open = payrollPeriod('2026-02-15', false);
+    $service = app(ThirteenthMonthPayService::class);
+    $row = $service->rows(2026, 'midyear')->sole();
+    expect(fn () => $service->release($row, 2026, 'midyear', null))->toThrow(InvalidArgumentException::class);
+    $open->update(['is_locked' => true, 'locked_at' => now()]);
+    $row['calculated_amount'] = 999999;
+    $row['pending_amount'] = 999999;
+    $payment = $service->release($row, 2026, 'midyear', null);
+    expect((float) $payment->released_amount)->toBe(1000.0);
+});
 
-    expect(fn () => $service->release($midyear, 2026, ThirteenthMonthPayService::MIDYEAR, null))
-        ->toThrow(InvalidArgumentException::class);
+it('flags historical overpayments without rewriting the original payment', function (): void {
+    $branch = thirteenthBranch('A');
+    $employee = Employee::query()->create(['uid' => 'LEGACY', 'firstname' => 'Test', 'branch_id' => $branch->id]);
+    payrollSnapshot(payrollPeriod('2026-01-15', true), $employee, $branch, ['half_month_pay' => 12000]);
+    $payment = ThirteenthMonthRelease::query()->create(['employee_id' => $employee->id, 'year' => 2026, 'segment' => 'midyear', 'released_amount' => 2000, 'basis_amount' => 12000, 'released_at' => now()]);
+    $row = app(ThirteenthMonthPayService::class)->rows(2026, 'whole_year')->sole();
+    expect($row['overpaid_amount'])->toBe(1000.0)->and($row['pending_amount'])->toBe(0.0)
+        ->and((float) $payment->fresh()->released_amount)->toBe(2000.0);
+});
+
+function thirteenthBranch(string $name): Branch
+{
+    return Branch::query()->create(['branch_name' => $name, 'branch_address' => 'Test', 'mobile_no' => '0', 'employee_id' => 0]);
+}
+
+it('renders the revised payout screen and rejects unauthorized print access', function (): void {
+    Filament::setCurrentPanel(Filament::getPanel('hr'));
+    $this->get('/hr-tools/13th-month-pay/print?year=2026&type=year_end&view=summary')->assertForbidden();
+    $user = User::withoutEvents(fn () => User::query()->firstOrCreate(['username' => 'masteradmin'], [
+        'name' => 'Master Admin', 'username' => 'masteradmin', 'email' => 'master@test.invalid',
+        'password' => 'password', 'role' => 'admin',
+    ]));
+    $this->actingAs($user);
+    Livewire::test(ThirteenthMonthPay::class)
+        ->assertSee('Record Payout')->assertSee('Remaining Balance')->assertSee('Accrued Entitlement')
+        ->set('calculation_type', '')
+        ->assertSee('Select a valid payout before recording payment.')
+        ->set('calculation_type', null)
+        ->assertSee('Select a valid payout before recording payment.')
+        ->set('calculation_type', 'unsupported')
+        ->assertSee('Select a valid payout before recording payment.')
+        ->set('calculation_type', 'midyear')->assertSee('January to June')
+        ->set('calculation_type', 'year_end')->assertSee('January to December')
+        ->set('calculation_type', 'whole_year')->assertSee('January to December');
+    $this->get('/hr-tools/13th-month-pay/print?year=2026&type=year_end&view=summary')
+        ->assertOk()->assertSee('divided by 12');
 });
 
 function payrollPeriod(string $payoutDate, bool $locked): PayrollPeriod

@@ -50,7 +50,7 @@
             <div><div class="company-name">{{ \App\Support\CompanyExportHeader::COMPANY_NAME }}</div><div class="company-address">{{ \App\Support\CompanyExportHeader::ADDRESS_LINE }}</div><div class="company-address">{{ \App\Support\CompanyExportHeader::PROVINCE_LINE }}</div></div><div></div>
         </header>
         <h1>{{ $viewMode === 'summary' ? $segmentLabel.' - Summary' : $segmentLabel }}</h1>
-        <div class="subtitle">{{ $periodLabel }} | Eligible basic pay divided by {{ $divisor }}</div>
+        <div class="subtitle">{{ $periodLabel }} | Eligible basic pay divided by {{ $divisor }} | Paid: {{ $money($rows->sum('released_amount')) }} | Remaining: {{ $money($rows->sum('pending_amount')) }}</div>
 
         @if ($viewMode === 'summary')
             <table><thead><tr><th>#</th><th>Branch</th><th>Employees</th><th>Eligible Basic Pay</th><th>Calculated Pay</th><th>Released</th><th>Pending</th></tr></thead>

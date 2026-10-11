@@ -10,6 +10,69 @@
 
 <x-filament-panels::page>
     <style>
+        .fi-page-header-main-ctn > header.fi-header {
+            display: none !important;
+        }
+
+        .thirteenth-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            padding: 1.1rem 1.4rem;
+            border: 1px solid #3b82f6;
+            border-radius: 0.75rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+        }
+
+        .thirteenth-header-copy {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .thirteenth-header-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .thirteenth-header-title {
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .thirteenth-header-subtitle {
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
+
+        .thirteenth-header-actions {
+            flex: 1 1 360px;
+            min-width: 0;
+        }
+
+        .thirteenth-header-actions > div {
+            justify-content: flex-end;
+        }
+
+        .thirteenth-header-actions .fi-btn {
+            min-height: 2.3rem;
+            border-radius: 0.45rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
         .thirteenth-page { display: grid; gap: 16px; }
         .thirteenth-filters {
             background: linear-gradient(135deg, rgba(37, 99, 235, .08), rgba(14, 165, 233, .04));
@@ -66,10 +129,27 @@
         @media (max-width: 900px) {
             .thirteenth-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
+        @media (max-width: 640px) {
+            .thirteenth-header { align-items: stretch; padding: 1rem; }
+            .thirteenth-header-title { font-size: 1.35rem; }
+            .thirteenth-header-actions { flex-basis: 100%; }
+            .thirteenth-header-actions > div { justify-content: flex-start; }
+        }
         @media (max-width: 520px) { .thirteenth-metrics { grid-template-columns: 1fr 1fr; } }
     </style>
 
     <div class="thirteenth-page">
+        <header class="thirteenth-header" aria-labelledby="thirteenth-header-title">
+            <div class="thirteenth-header-copy">
+                <p class="thirteenth-header-eyebrow">COMPENSATION &amp; BENEFITS</p>
+                <h1 class="thirteenth-header-title" id="thirteenth-header-title">13th Month Pay</h1>
+                <p class="thirteenth-header-subtitle">13th Month Payouts</p>
+            </div>
+            <div class="thirteenth-header-actions">
+                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+            </div>
+        </header>
+
         <section class="thirteenth-filters">
             {{ $this->form }}
         </section>
@@ -83,10 +163,11 @@
             </button>
         </div>
 
-        <p class="thirteenth-note">
-            {{ $this->segmentLabel }} for {{ $this->periodLabel }} uses eligible basic pay only from finalized, locked payroll snapshots divided by {{ $this->divisor }}.
-            Allowances, overtime, holiday premiums, government remittances, loans, shortages, and other deductions are excluded.
-        </p>
+        <p class="thirteenth-note">{{ $this->periodLabel }} · Locked payroll basis · Entitlement ÷ {{ $this->divisor }} · Previously paid: {{ $money($releasedTotal) }}</p>
+        <p class="thirteenth-note">Payroll payout-date basis · Branch: latest payroll assignment · Missing payroll slots: {{ collect($periodColumns)->where('status', 'Not Created')->count() }}</p>
+        @if ($rows->sum('overpaid_amount') > 0)
+            <div class="thirteenth-warning">Payments above selected accrual: {{ $money($rows->sum('overpaid_amount')) }}. Existing payments are preserved for reconciliation.</div>
+        @endif
 
         @if ($this->releaseConflict)
             <div class="thirteenth-warning">{{ $this->releaseConflict }}</div>
@@ -94,9 +175,9 @@
 
         <section class="thirteenth-metrics" wire:key="thirteenth-metrics-{{ $this->results_version }}">
             <div class="thirteenth-metric"><span>Employees</span><strong>{{ $rows->count() }}</strong></div>
-            <div class="thirteenth-metric"><span>Eligible Basic Pay</span><strong>{{ $money($rows->sum('basis_total')) }}</strong></div>
-            <div class="thirteenth-metric"><span>Released</span><strong>{{ $money($releasedTotal) }}</strong></div>
-            <div class="thirteenth-metric"><span>Pending</span><strong>{{ $money($pendingTotal) }}</strong></div>
+            <div class="thirteenth-metric"><span>Accrued Entitlement</span><strong>{{ $money($rows->sum('calculated_amount')) }}</strong></div>
+            <div class="thirteenth-metric"><span>Previously Paid</span><strong>{{ $money($releasedTotal) }}</strong></div>
+            <div class="thirteenth-metric"><span>Remaining Balance</span><strong>{{ $money($pendingTotal) }}</strong></div>
         </section>
 
         @if ($this->view_mode === 'summary')
@@ -130,7 +211,7 @@
                             @foreach ($periodColumnGroups as $columns)
                                 <th colspan="{{ $columns->count() }}">{{ $columns->first()['month_label'] }}</th>
                             @endforeach
-                            <th rowspan="2">Eligible Total</th><th rowspan="2">{{ $this->segmentLabel }}</th><th rowspan="2">Status</th>
+                            <th rowspan="2">Eligible Total</th><th rowspan="2">Accrued Entitlement</th><th rowspan="2">Paid</th><th rowspan="2">Balance</th><th rowspan="2">Status / History</th>
                         </tr>
                         <tr>
                             @foreach ($periodColumns as $column)
@@ -153,10 +234,15 @@
                                     <td class="numeric {{ $column['is_locked'] ? '' : 'period-unavailable' }}">{{ $money($row['period_amounts'][$key] ?? 0) }}</td>
                                 @endforeach
                                 <td class="numeric">{{ $money($row['basis_total']) }}</td><td class="numeric">{{ $money($row['calculated_amount']) }}</td>
-                                <td><span class="release-badge {{ $row['released'] ? 'released' : ($row['partially_released'] ? 'partial' : 'pending') }}">{{ $row['release_status'] }}</span></td>
+                                <td class="numeric">{{ $money($row['released_amount']) }}</td><td class="numeric">{{ $money($row['pending_amount']) }}</td>
+                                <td><span class="release-badge {{ $row['released'] ? 'released' : ($row['partially_released'] ? 'partial' : 'pending') }}">{{ $row['release_status'] }}</span>
+                                    @if ($row['release_history'])
+                                        <details><summary>Payment History</summary>@foreach ($row['release_history'] as $payment)<div>{{ $payment['segment'] }} · {{ $money($payment['amount']) }} · {{ $payment['date'] }}</div>@endforeach</details>
+                                    @endif
+                                </td>
                             </tr>
                         @empty
-                            <tr><td colspan="{{ 8 + count($periodColumns) }}" class="thirteenth-empty">No locked payroll data is available for the selected period.</td></tr>
+                            <tr><td colspan="{{ 10 + count($periodColumns) }}" class="thirteenth-empty">No locked payroll data is available for the selected period.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

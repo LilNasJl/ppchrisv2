@@ -18,7 +18,7 @@ class CompanyHandbook extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BookOpen;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Performance Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Company Compliance';
 
     protected static ?int $navigationSort = 2;
 }

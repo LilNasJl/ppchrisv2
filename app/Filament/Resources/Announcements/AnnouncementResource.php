@@ -30,7 +30,7 @@ class AnnouncementResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Megaphone;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
     protected static ?string $navigationLabel = 'Company Memorandum';
 
@@ -38,7 +38,7 @@ class AnnouncementResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Company Memorandum';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 6;
 
     public static function form(Schema $schema): Schema
     {
@@ -56,10 +56,11 @@ class AnnouncementResource extends Resource
                             ->dehydrateStateUsing(fn ($state): bool => (bool) $state),
 
                         Textarea::make('description')
-                            ->rows(6)
+                            ->rows(4)
                             ->columnSpanFull(),
                     ])
-                    ->columns(2),
+                    ->columns(['default' => 1, 'md' => 2])
+                    ->compact(),
             ]);
     }
 

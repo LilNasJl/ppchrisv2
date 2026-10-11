@@ -32,13 +32,13 @@ class ThirteenthMonthPay extends Page implements HasForms
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation & Benefits Mngt';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 3;
 
     public ?string $year = null;
 
-    public string $calculation_type = ThirteenthMonthPayService::MIDYEAR;
+    public ?string $calculation_type = ThirteenthMonthPayService::MIDYEAR;
 
     public ?string $branch_id = null;
 
@@ -50,6 +50,7 @@ class ThirteenthMonthPay extends Page implements HasForms
     {
         $service = app(ThirteenthMonthPayService::class);
         $this->year = (string) array_key_first($service->yearOptions());
+        $this->calculation_type = now()->month <= 6 ? $service::MIDYEAR : $service::YEAR_END;
 
         $this->form->fill([
             'year' => $this->year,
@@ -69,9 +70,10 @@ class ThirteenthMonthPay extends Page implements HasForms
                     ->live(),
 
                 Select::make('calculation_type')
-                    ->label('Calculation Type')
+                    ->label('Payout')
                     ->options(fn (): array => app(ThirteenthMonthPayService::class)->segmentOptions())
                     ->required()
+                    ->selectablePlaceholder(false)
                     ->live(),
 
                 Select::make('branch_id')
@@ -88,7 +90,7 @@ class ThirteenthMonthPay extends Page implements HasForms
 
     public function getRowsProperty(): Collection
     {
-        if (blank($this->year)) {
+        if (blank($this->year) || ! $this->hasValidPayout()) {
             return collect();
         }
 
@@ -106,31 +108,51 @@ class ThirteenthMonthPay extends Page implements HasForms
 
     public function getMonthLabelsProperty(): array
     {
+        if (! $this->hasValidPayout()) {
+            return [];
+        }
+
         return $this->service()->monthLabels($this->calculation_type);
     }
 
     public function getPeriodColumnsProperty(): array
     {
+        if (blank($this->year) || ! $this->hasValidPayout()) {
+            return [];
+        }
+
         return $this->service()->periodColumns((int) $this->year, $this->calculation_type);
     }
 
     public function getSegmentLabelProperty(): string
     {
+        if (! $this->hasValidPayout()) {
+            return 'Select a payout';
+        }
+
         return $this->service()->segmentLabel($this->calculation_type);
     }
 
     public function getPeriodLabelProperty(): string
     {
+        if (blank($this->year) || ! $this->hasValidPayout()) {
+            return 'Select a year and payout';
+        }
+
         return $this->service()->periodLabel((int) $this->year, $this->calculation_type);
     }
 
     public function getDivisorProperty(): int
     {
-        return $this->service()->divisor($this->calculation_type);
+        return ThirteenthMonthPayService::DIVISOR;
     }
 
     public function getReleaseConflictProperty(): ?string
     {
+        if (! $this->hasValidPayout()) {
+            return 'Select a valid payout before recording payment.';
+        }
+
         return blank($this->year)
             ? null
             : $this->service()->releaseConflict((int) $this->year, $this->calculation_type);
@@ -151,44 +173,25 @@ class ThirteenthMonthPay extends Page implements HasForms
     {
         return [
             Action::make('manageRelease')
-                ->label(fn (): string => $this->rows->contains(fn (array $row): bool => $row['pending_amount'] > 0)
-                    ? 'Release Current Results'
-                    : 'Manage Release')
-                ->icon(fn (): Heroicon => $this->rows->contains(fn (array $row): bool => $row['pending_amount'] > 0)
-                    ? Heroicon::CheckCircle
-                    : Heroicon::Cog6Tooth)
-                ->color(fn (): string => $this->rows->contains(fn (array $row): bool => $row['pending_amount'] > 0)
-                    ? 'success'
-                    : 'gray')
-                ->schema([
-                    Select::make('release_status')
-                        ->label('Release Action')
-                        ->options([
-                            'released' => 'Release or refresh current results',
-                            'pending' => 'Reopen current results and set to Pending',
-                        ])
-                        ->helperText('The action applies only to employees shown by the current year, calculation type, and branch filters.')
-                        ->required(),
-                ])
-                ->fillForm(fn (): array => [
-                    'release_status' => $this->rows->contains(fn (array $row): bool => $row['pending_amount'] > 0)
-                        ? 'released'
-                        : 'pending',
-                ])
-                ->modalHeading('Manage current release')
-                ->modalDescription(fn (): string => 'Manage '.$this->segmentLabel.' for '.$this->periodLabel.'. Releasing stores the current locked-payroll calculation. Reopening removes only this calculation type\'s release records.')
-                ->modalSubmitActionLabel('Confirm Action')
+                ->label('Record Payout')
+                ->icon(Heroicon::CheckCircle)
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Record paid 13th month benefit')
+                ->modalDescription(fn (): string => 'Record '.number_format($this->rows->where('can_release', true)->sum('pending_amount'), 2).' for '.$this->rows->where('can_release', true)->count().' employee(s) in the current filters. Previous payments are deducted automatically. This records payment history only; it does not transfer money. Existing payout records will not be overwritten.')
+                ->modalSubmitActionLabel('Confirm Paid')
                 ->modalCancelActionLabel('Cancel')
                 ->modalWidth('md')
-                ->visible(fn (): bool => $this->rows->isNotEmpty() && blank($this->releaseConflict))
-                ->action(function (array $data): void {
+                ->disabled(fn (): bool => ! $this->rows->contains('can_release', true) || filled($this->releaseConflict))
+                ->action(function (): void {
+                    abort_unless(static::canAccess(), 403);
                     try {
                         $affected = $this->service()->setReleaseStatus(
                             $this->rows,
                             (int) $this->year,
                             $this->calculation_type,
                             auth()->id(),
-                            $data['release_status'],
+                            'released',
                         );
                     } catch (InvalidArgumentException $exception) {
                         Notification::make()
@@ -203,8 +206,8 @@ class ThirteenthMonthPay extends Page implements HasForms
                     $this->refreshCalculationResults();
 
                     Notification::make()
-                        ->title('Release status updated')
-                        ->body($affected.' release record(s) affected for the current results.')
+                        ->title('Payout recorded')
+                        ->body($affected.' new payout record(s) saved. Previous payment history is unchanged.')
                         ->success()
                         ->send();
                 }),
@@ -241,6 +244,12 @@ class ThirteenthMonthPay extends Page implements HasForms
     protected function service(): ThirteenthMonthPayService
     {
         return app(ThirteenthMonthPayService::class);
+    }
+
+    protected function hasValidPayout(): bool
+    {
+        return $this->calculation_type !== null
+            && array_key_exists($this->calculation_type, $this->service()->segmentOptions());
     }
 
     protected function refreshCalculationResults(): void

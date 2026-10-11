@@ -8,6 +8,7 @@
     <div class="cb-workspace">
         <header class="cb-topbar">
             <div class="cb-copy">
+                <p class="cb-eyebrow">WORKFORCE RECORDS</p>
                 <h2 class="cb-title">{{ $emp?->full_name ?? 'Employee Deductions' }}</h2>
                 <div class="cb-meta-row">
                     <span class="cb-chip">

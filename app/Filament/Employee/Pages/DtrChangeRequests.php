@@ -2,8 +2,9 @@
 
 namespace App\Filament\Employee\Pages;
 
-use App\Models\DtrChangeRequest;
+use App\Filament\Employee\Pages\Station\StationProofSubmissions;
 use App\Models\Branch;
+use App\Models\DtrChangeRequest;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrChangeRequestService;
@@ -213,20 +214,9 @@ class DtrChangeRequests extends Page implements HasTable
                     ->with(['payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
                     ->latest('created_at')
             ))
-            ->heading('D.T.R Change Requests')
-            ->description('Track, submit, and manage attendance correction and approval requests.')
             ->headerActions([
                 Action::make('periodSelector')
                     ->view('filament.employee.pages.partials.dtr-period-select-action'),
-
-                $this->getMissingDtrEntriesAction(),
-
-                Action::make('returnToDtr')
-                    ->label('Return to D.T.R')
-                    ->icon(Heroicon::ArrowLeft)
-                    ->color('gray')
-                    ->outlined()
-                    ->url(fn (): string => $this->getDtrUrl()),
             ])
             ->recordClasses('text-xs')
             ->columns([
@@ -379,11 +369,25 @@ class DtrChangeRequests extends Page implements HasTable
     {
         return [
             $this->getMissingDtrEntriesAction(),
+            $this->getOnFieldDtrAction(),
             Action::make('return')
-                ->label('Return')
+                ->label('Return to D.T.R')
                 ->icon(Heroicon::ArrowLeft)
+                ->color('gray')
+                ->outlined()
                 ->url(fn (): string => $this->getDtrUrl()),
         ];
+    }
+
+    protected function getOnFieldDtrAction(): Action
+    {
+        return Action::make('onFieldDtr')
+            ->label('On Field DTR')
+            ->icon(Heroicon::MapPin)
+            ->color('success')
+            ->url(fn (): string => StationProofSubmissions::getUrl(array_filter([
+                'periodId' => $this->selectedPeriod?->publicKey(),
+            ])));
     }
 
     protected function getMissingDtrEntriesAction(): Action

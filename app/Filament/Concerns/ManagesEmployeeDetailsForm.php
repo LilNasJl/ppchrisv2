@@ -18,7 +18,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -384,7 +384,7 @@ trait ManagesEmployeeDetailsForm
             ->implode('');
 
         return new HtmlString(
-            '<div style="overflow:auto;">'
+            '<div class="employee-deductions-table" style="overflow:auto;">'
             .'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
             .'<thead><tr>'
             .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Group</th>'
@@ -433,7 +433,7 @@ trait ManagesEmployeeDetailsForm
             ->implode('');
 
         return new HtmlString(
-            '<div style="overflow:auto;">'
+            '<div class="employee-loans-table" style="overflow:auto;">'
             .'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
             .'<thead><tr>'
             .'<th style="padding:8px;text-align:left;border-bottom:1px solid rgba(148,163,184,.35);">Loan Type</th>'
@@ -478,27 +478,35 @@ trait ManagesEmployeeDetailsForm
                 ->tabs([
                     Tabs\Tab::make('Account')
                         ->icon(Heroicon::UserCircle)
+                        ->columns($isReadOnly ? ['default' => 1, 'xl' => 2] : ['default' => 1, 'xl' => 3])
                         ->schema([
-                            Placeholder::make('profile_card')
-                                ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->profilePreview($record ?? ($this->employeeRecord ?? null)))
-                                ->columnSpanFull(),
+                            Section::make('Profile')
+                                ->contained(false)
+                                ->schema([
+                                    Placeholder::make('profile_card')
+                                        ->hiddenLabel()
+                                        ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->profilePreview($record ?? ($this->employeeRecord ?? null)))
+                                        ->columnSpanFull(),
 
-                            FileUpload::make('profile_photo_path')
-                                ->label('Profile Picture')
-                                ->image()
-                                ->previewable()
-                                ->openable()
-                                ->downloadable()
-                                ->acceptedFileTypes(['image/png', 'image/jpeg'])
-                                ->maxSize(3072)
-                                ->disk('public')
-                                ->directory('profile-photos')
-                                ->visibility('public')
-                                ->fetchFileInformation(false)
-                                ->columnSpanFull(),
+                                    FileUpload::make('profile_photo_path')
+                                        ->label('Profile Picture')
+                                        ->hidden($isReadOnly)
+                                        ->image()
+                                        ->previewable()
+                                        ->openable()
+                                        ->downloadable()
+                                        ->acceptedFileTypes(['image/png', 'image/jpeg'])
+                                        ->maxSize(3072)
+                                        ->disk('public')
+                                        ->directory('profile-photos')
+                                        ->visibility('public')
+                                        ->fetchFileInformation(false)
+                                        ->columnSpanFull(),
+                                ])
+                                ->columnSpan(1),
 
-                            Group::make()
+                            Section::make('Account access')
+                                ->contained(false)
                                 ->schema([
                                     TextInput::make('account_username')
                                         ->label('Username')
@@ -508,6 +516,7 @@ trait ManagesEmployeeDetailsForm
 
                                     TextInput::make('account_password')
                                         ->label('New Password')
+                                        ->hidden($isReadOnly)
                                         ->password()
                                         ->revealable()
                                         ->dehydrated(fn (?string $state): bool => filled($state))
@@ -515,12 +524,14 @@ trait ManagesEmployeeDetailsForm
 
                                     Placeholder::make('account_status')
                                         ->label('Account Status')
-                                        ->content(fn (?ModelsEmployee $record = null): string => $record?->user?->is_disabled ? 'Disabled' : 'Enabled'),
+                                        ->content(fn (?ModelsEmployee $record = null): HtmlString => new HtmlString(match (true) {
+                                            $record?->user === null => '<span class="employee-account-status is-missing">No account</span>',
+                                            $record->user->is_disabled => '<span class="employee-account-status is-disabled">Disabled</span>',
+                                            default => '<span class="employee-account-status is-enabled">Enabled</span>',
+                                        })),
                                 ])
-                                ->columns([
-                                    'default' => 1,
-                                    'md' => 2,
-                                ]),
+                                ->columns($isReadOnly ? ['default' => 1, 'md' => 2] : 1)
+                                ->columnSpan($isReadOnly ? 1 : ['default' => 1, 'xl' => 2]),
                         ]),
 
                     Tabs\Tab::make('Basic Info')
@@ -528,7 +539,8 @@ trait ManagesEmployeeDetailsForm
                         ->badge(fn (): ?string => $this->profileCompletionBadge('basic'))
                         ->badgeColor('warning')
                         ->schema([
-                            Group::make()
+                            Section::make('Identity')
+                                ->contained(false)
                                 ->schema([
                                     TextInput::make('firstname')
                                         ->placeholder('e.g., Juan')
@@ -546,7 +558,8 @@ trait ManagesEmployeeDetailsForm
                                     'md' => 3,
                                 ]),
 
-                            Group::make()
+                            Section::make('Personal and contact')
+                                ->contained(false)
                                 ->schema([
                                     DatePicker::make('birthdate')
                                         ->placeholder('Birth Date')
@@ -603,11 +616,8 @@ trait ManagesEmployeeDetailsForm
                                     'md' => 3,
                                 ]),
 
-                            Placeholder::make('divider2')
-                                ->label('GOVERNMENT AND BANK ID')
-                                ->content(new HtmlString('<hr class="my-4">')),
-
-                            Group::make()
+                            Section::make('Government and bank IDs')
+                                ->contained(false)
                                 ->schema([
                                     TextInput::make('gsis')
                                         ->label('GSIS BP #')
@@ -667,48 +677,60 @@ trait ManagesEmployeeDetailsForm
                         ->badge(fn (): ?string => $this->profileCompletionBadge('designation'))
                         ->badgeColor('warning')
                         ->schema([
-                            TextInput::make('fingerprint_id')
-                                ->placeholder('e.g., 1234567'),
+                            Section::make('Position and assignment')
+                                ->contained(false)
+                                ->schema([
+                                    TextInput::make('fingerprint_id')
+                                        ->label('Fingerprint ID')
+                                        ->placeholder('e.g., 1234567'),
 
-                            Select::make('designation_id')
-                                ->relationship('designation', 'title')
-                                ->required(),
+                                    Select::make('designation_id')
+                                        ->relationship('designation', 'title')
+                                        ->required(),
 
-                            Select::make('department_id')
-                                ->relationship('department', 'name')
-                                ->required(),
+                                    Select::make('department_id')
+                                        ->relationship('department', 'name')
+                                        ->required(),
 
-                            Select::make('branch_id')
-                                ->relationship('branch', 'branch_name')
-                                ->required(),
+                                    Select::make('branch_id')
+                                        ->relationship('branch', 'branch_name')
+                                        ->required(),
+                                ])
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
 
-                            DatePicker::make('hired_date')
-                                ->label('Hired Date')
-                                ->required(),
+                            Section::make('Employment')
+                                ->contained(false)
+                                ->schema([
+                                    DatePicker::make('hired_date')
+                                        ->label('Hired Date')
+                                        ->required(),
 
-                            TextInput::make('tenure')
-                                ->label('Tenure')
-                                ->disabled()
-                                ->dehydrated(false),
+                                    TextInput::make('tenure')
+                                        ->label('Tenure')
+                                        ->disabled()
+                                        ->dehydrated(false),
 
-                            Select::make('employment_type')
-                                ->label('Employment Type')
-                                ->options(ModelsEmployee::employmentTypeOptions())
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->helperText($isReadOnly
-                                    ? 'Employment type changes include an effective date and explanation.'
-                                    : 'Use the Change Employment Type action at the top of this page.'),
+                                    Select::make('employment_type')
+                                        ->label('Employment Type')
+                                        ->options(ModelsEmployee::employmentTypeOptions())
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->helperText($isReadOnly
+                                            ? 'Employment type changes include an effective date and explanation.'
+                                            : 'Use the Change Employment Type action at the top of this page.'),
 
-                            Placeholder::make('employment_type_change_summary')
-                                ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->employmentTypeChangeSummary($record ?? ($this->employeeRecord ?? null)))
-                                ->columnSpanFull(),
-
-                        ])
-                        ->columns([
-                            'default' => 1,
-                            'md' => 2,
+                                    Placeholder::make('employment_type_change_summary')
+                                        ->hiddenLabel()
+                                        ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->employmentTypeChangeSummary($record ?? ($this->employeeRecord ?? null)))
+                                        ->columnSpanFull(),
+                                ])
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 2,
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Education')
@@ -716,12 +738,14 @@ trait ManagesEmployeeDetailsForm
                         ->badge(fn (): ?string => $this->profileCompletionBadge('education'))
                         ->badgeColor('warning')
                         ->schema([
-                            TextInput::make('school_name')
-                                ->label('School Name')
-                                ->placeholder('e.g., University of Mindanao'),
-
-                            Group::make()
+                            Section::make('Education background')
+                                ->contained(false)
                                 ->schema([
+                                    TextInput::make('school_name')
+                                        ->label('School Name')
+                                        ->placeholder('e.g., University of Mindanao')
+                                        ->columnSpanFull(),
+
                                     Select::make('school_level')
                                         ->label('Highest Level Attended')
                                         ->options([
@@ -744,25 +768,34 @@ trait ManagesEmployeeDetailsForm
                     Tabs\Tab::make('Deductions')
                         ->icon(Heroicon::MinusCircle)
                         ->schema([
-                            Placeholder::make('deduction_summary')
-                                ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->deductionSummary($record ?? ($this->employeeRecord ?? null)))
-                                ->columnSpanFull(),
+                            Section::make('Active deductions')
+                                ->contained(false)
+                                ->schema([
+                                    Placeholder::make('deduction_summary')
+                                        ->hiddenLabel()
+                                        ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->deductionSummary($record ?? ($this->employeeRecord ?? null)))
+                                        ->columnSpanFull(),
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Loan Details')
                         ->icon(Heroicon::Banknotes)
                         ->schema([
-                            Placeholder::make('loan_summary')
-                                ->hiddenLabel()
-                                ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->loanSummary($record ?? ($this->employeeRecord ?? null)))
-                                ->columnSpanFull(),
+                            Section::make('Employee loans')
+                                ->contained(false)
+                                ->schema([
+                                    Placeholder::make('loan_summary')
+                                        ->hiddenLabel()
+                                        ->content(fn (?ModelsEmployee $record = null): HtmlString => $this->loanSummary($record ?? ($this->employeeRecord ?? null)))
+                                        ->columnSpanFull(),
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Leave')
                         ->icon(Heroicon::CalendarDays)
                         ->schema([
-                            Group::make()
+                            Section::make('Leave balances')
+                                ->contained(false)
                                 ->schema([
                                     TextInput::make('leave_credits')
                                         ->label('Leave Count')
@@ -795,7 +828,8 @@ trait ManagesEmployeeDetailsForm
                         ->badge(fn (): ?string => $this->profileCompletionBadge('salary'))
                         ->badgeColor('warning')
                         ->schema([
-                            Group::make()
+                            Section::make('Compensation and payment')
+                                ->contained(false)
                                 ->schema([
                                     Select::make('rate_type')
                                         ->label('Rate Type')

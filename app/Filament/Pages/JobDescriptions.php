@@ -18,7 +18,9 @@ class JobDescriptions extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ClipboardDocumentCheck;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Organizational Set Up';
+    protected static ?string $navigationLabel = 'Job Description';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
     protected static ?int $navigationSort = 4;
 }

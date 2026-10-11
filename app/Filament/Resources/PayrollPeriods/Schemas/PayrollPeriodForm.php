@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\PayrollPeriods\Schemas;
 
+use App\Models\PayrollPeriod;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -46,6 +48,12 @@ class PayrollPeriodForm
                             ->label('Lock Payroll Period')
                             ->helperText('Restrict DTR changes and freeze calculation for this cutoff period.')
                             ->default(false),
+
+                        Select::make('loan_quincena')
+                            ->label('Loan Deduction Quincena')
+                            ->options(['first' => 'First Quincena', 'second' => 'Second Quincena'])
+                            ->placeholder('Automatic from standard cutoff dates')
+                            ->disabled(fn (?PayrollPeriod $record): bool => (bool) $record?->is_locked),
 
                         Textarea::make('description')
                             ->label('Description / Notes')

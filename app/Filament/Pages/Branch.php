@@ -31,11 +31,16 @@ class Branch extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::BuildingOffice2;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Organizational Set Up';
+    protected static string|UnitEnum|null $navigationGroup = 'Organizational Setup';
 
     protected static ?string $navigationLabel = 'Branch';
 
     protected static ?int $navigationSort = 1;
+
+    public function getSubheading(): string
+    {
+        return 'Manage branch locations, contacts, and work schedules.';
+    }
 
     protected function getHeaderActions(): array
     {

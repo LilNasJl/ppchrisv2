@@ -40,7 +40,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
     use InteractsWithForms;
     use InteractsWithTable;
 
-    protected string $view = 'filament.employee.pages.table-page';
+    protected string $view = 'filament.employee.pages.leave-requests';
 
     protected static ?string $slug = 'leave-requests';
 
@@ -57,6 +57,16 @@ class LeaveRequests extends Page implements HasForms, HasTable
     public function mount(): void
     {
         $this->loadDefaultActiveTab();
+    }
+
+    public function getHeading(): string
+    {
+        return 'Leave Requests';
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [];
     }
 
     public function table(Table $table): Table

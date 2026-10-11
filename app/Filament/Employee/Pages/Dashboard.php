@@ -9,6 +9,7 @@ use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
+use Override;
 
 class Dashboard extends Page
 {
@@ -21,6 +22,18 @@ class Dashboard extends Page
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
     protected static ?int $navigationSort = 1;
+
+    #[Override]
+    public function getHeading(): ?string
+    {
+        return null;
+    }
+
+    #[Override]
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
 
     public function getAnnouncementsProperty(): Collection
     {
@@ -49,5 +62,15 @@ class Dashboard extends Page
     public function showUpcomingHolidays(): void
     {
         $this->dispatch('open-modal', id: 'employee-upcoming-holidays');
+    }
+
+    public function showAnnouncements(): void
+    {
+        $this->dispatch('open-modal', id: 'employee-announcements');
+    }
+
+    public function showUpcomingActivities(): void
+    {
+        $this->dispatch('open-modal', id: 'employee-upcoming-activities');
     }
 }

@@ -45,9 +45,9 @@ class Dashboard extends Page
     public string $viewMode = 'primary';
 
     #[Override]
-    public function getHeading(): string
+    public function getHeading(): ?string
     {
-        return 'HRIS Dashboard';
+        return null;
     }
 
     #[Override]
@@ -59,17 +59,19 @@ class Dashboard extends Page
     #[Override]
     protected function getHeaderActions(): array
     {
-        $showAnalytics = $this->viewMode !== 'analytics';
+        if ($this->viewMode !== 'analytics') {
+            return [];
+        }
 
         return [
             Action::make('dashboard-view')
-                ->label($showAnalytics ? 'Dashboard Analytics' : 'Back to Dashboard')
-                ->icon($showAnalytics ? Heroicon::ChartBar : Heroicon::ArrowLeft)
+                ->label('Back to Dashboard')
+                ->icon(Heroicon::ArrowLeft)
                 ->iconButton()
-                ->tooltip($showAnalytics ? 'Dashboard Analytics' : 'Back to Dashboard')
+                ->tooltip('Back to Dashboard')
                 ->size(Size::Small)
                 ->color('primary')
-                ->url(static::getUrl($showAnalytics ? ['view' => 'analytics'] : [])),
+                ->url(static::getUrl()),
         ];
     }
 
@@ -125,12 +127,19 @@ class Dashboard extends Page
             View::make('filament.pages.partials.employee-snapshot-header')
                 ->viewData([
                     'eyebrow' => 'Workforce Overview',
-                    'title' => 'Employee Snapshot',
+                    'title' => 'Dashboard: Employee Snapshot',
                     'description' => 'Workforce status, pending tickets, and monthly movement.',
+                    'dashboardActionUrl' => static::getUrl(['view' => 'analytics']),
                 ])
                 ->columnSpanFull(),
             Grid::make($this->getHeaderWidgetsColumns())
-                ->schema(fn (): array => $this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())),
+                ->schema(fn (): array => $this->getWidgetsSchemaComponents([EmployeeStatusSummary::class]))
+                ->columnSpanFull(),
+            View::make('filament.pages.partials.dashboard-shoutout-hall')
+                ->columnSpanFull(),
+            Grid::make($this->getHeaderWidgetsColumns())
+                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getEmployeeSnapshotChartWidgets()))
+                ->columnSpanFull(),
             View::make('filament.pages.partials.employee-snapshot-header')
                 ->viewData([
                     'eyebrow' => 'Attendance Overview',
@@ -151,6 +160,14 @@ class Dashboard extends Page
             OverallDailyAttendanceSummaryChart::class,
             OvertimeLogHoursChart::class,
             HolidayCalendarHighlights::class,
+        ];
+    }
+
+    protected function getEmployeeSnapshotChartWidgets(): array
+    {
+        return [
+            DepartmentEmployeeCountChart::class,
+            MonthlyEmployeeMovementChart::class,
         ];
     }
 }

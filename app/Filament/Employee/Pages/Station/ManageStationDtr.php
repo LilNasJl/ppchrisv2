@@ -24,7 +24,7 @@ class ManageStationDtr extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.employee.pages.station.table-page';
 
     protected static ?string $slug = 'station/dtr';
 
@@ -48,6 +48,11 @@ class ManageStationDtr extends Page implements HasTable
         if (! StationManagementAccess::canAccessStationManagement(auth()->user())) {
             abort(403, 'Unauthorized access to Station Management.');
         }
+    }
+
+    public function getSubheading(): string
+    {
+        return 'Select an assigned station branch to manage its employee attendance records.';
     }
 
     public function table(Table $table): Table
@@ -121,16 +126,6 @@ class ManageStationDtr extends Page implements HasTable
         return $schema->components([
             EmbeddedTable::make(),
         ]);
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('submitDtrProof')
-                ->label('On Field DTR')
-                ->icon(Heroicon::DocumentCheck)
-                ->url(StationProofSubmissions::getUrl()),
-        ];
     }
 
     protected function assignedBranchIds(): array

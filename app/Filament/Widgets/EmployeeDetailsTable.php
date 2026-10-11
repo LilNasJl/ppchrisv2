@@ -11,13 +11,8 @@ use App\Models\Deduction;
 use App\Models\Employee as ModelsEmployee;
 use App\Models\EmployeeDeduction;
 use App\Models\User;
-use App\Services\EmployeeProfileCompletionService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
@@ -31,8 +26,8 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
@@ -579,6 +574,7 @@ class EmployeeDetailsTable extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->selectable(false)
             ->query(fn (): Builder => User::query()
                 ->with(['employee.designation', 'employee.department', 'employee.branch'])
                 ->where('role', 'employee')
@@ -589,28 +585,21 @@ class EmployeeDetailsTable extends TableWidget
                 ->select('users.*'))
             ->defaultSort(fn (Builder $query): Builder => $query
                 ->orderBy('account_employees.uid'))
+            ->recordClasses(fn (User $record): ?string => $record->employee?->hasEndedEmployment()
+                ? 'employee-employment-ended'
+                : null)
+            ->recordUrl(fn (User $record): string => ViewEmployeeDetails::getUrl([
+                'employeeId' => $record->employee?->publicKey(),
+                'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+            ]))
             ->columns([
                 TextColumn::make('index')
                     ->label('#')
                     ->rowIndex(),
 
-                ImageColumn::make('profile_photo')
+                ViewColumn::make('profile_photo')
                     ->label('Profile')
-                    ->getStateUsing(fn (User $record): ?string => $record->profile_photo_url)
-                    ->defaultImageUrl(fn (): string => asset('image/ppc-circle-white.png'))
-                    ->circular(),
-
-                TextColumn::make('profile_completion')
-                    ->label('User Profile')
-                    ->getStateUsing(function (User $record): ?int {
-                        $count = app(EmployeeProfileCompletionService::class)->total($record->employee);
-
-                        return $count > 0 ? $count : null;
-                    })
-                    ->badge()
-                    ->color('warning')
-                    ->placeholder('Complete')
-                    ->tooltip('Number of incomplete required fields across Basic Information, Designation, Education, and Salary.'),
+                    ->view('filament.pages.employee-profile-photo'),
 
                 TextColumn::make('employee.uid')
                     ->label('ID No.')
@@ -659,12 +648,6 @@ class EmployeeDetailsTable extends TableWidget
                             : ($state ?: 'N/A')
                     )
                     ->color(fn (User $record): string => $record->employee?->hasEndedEmployment() ? 'danger' : 'success'),
-
-                TextColumn::make('is_disabled')
-                    ->label('Account')
-                    ->badge()
-                    ->formatStateUsing(fn (bool $state): string => $state ? 'Disabled' : 'Enabled')
-                    ->color(fn (bool $state): string => $state ? 'danger' : 'success'),
 
                 TextColumn::make('created_at')
                     ->label('Created At')
@@ -755,13 +738,6 @@ class EmployeeDetailsTable extends TableWidget
                             || $record->employee->hasEndedEmployment()),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                ]),
             ]);
     }
 

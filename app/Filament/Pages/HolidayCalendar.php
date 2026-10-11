@@ -27,11 +27,16 @@ class HolidayCalendar extends Page
 
     protected static ?string $title = 'Holiday Calendar';
 
+    public function getSubheading(): string
+    {
+        return 'Review national and branch holidays, then manage dates and types.';
+    }
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::CalendarDays;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Updates and Activities';
+    protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 5;
 
     public string $calendarMonth;
 

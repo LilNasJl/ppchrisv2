@@ -2,28 +2,30 @@
 
 namespace App\Filament\Resources\MemoTypes\Pages;
 
-use App\Filament\Pages\Memo;
 use App\Filament\Resources\MemoTypes\MemoTypeResource;
-use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 class ListMemoTypes extends ListRecords
 {
     protected static string $resource = MemoTypeResource::class;
 
+    protected string $view = 'filament.resources.memo-types.pages.list-memo-types';
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(Memo::getUrl()),
-
             CreateAction::make()
-                ->label('Add Memo Type')
-                ->icon(Heroicon::Plus),
+                ->label('Add Notice Type')
+                ->icon(Heroicon::Plus)
+                ->schema(fn (): array => MemoTypeResource::form(Schema::make())->getComponents())
+                ->modalHeading('Add Notice Type')
+                ->modalSubmitActionLabel('Create Notice Type')
+                ->modalWidth(Width::Large)
+                ->createAnother(false),
         ];
     }
 }

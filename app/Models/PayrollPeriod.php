@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 class PayrollPeriod extends Model
 {
@@ -26,6 +27,7 @@ class PayrollPeriod extends Model
         'auto_lock_blocked_reason',
         'deductions_processed_at',
         'loan_payments_processed_at',
+        'loan_quincena',
     ];
 
     protected $casts = [
@@ -43,6 +45,9 @@ class PayrollPeriod extends Model
     protected static function booted(): void
     {
         static::saving(function (PayrollPeriod $payrollPeriod): void {
+            if ($payrollPeriod->exists && $payrollPeriod->getOriginal('is_locked') && $payrollPeriod->isDirty('loan_quincena')) {
+                throw ValidationException::withMessages(['loan_quincena' => 'Unlock the payroll period before changing its loan deduction quincena.']);
+            }
             if ($payrollPeriod->is_locked && (blank($payrollPeriod->description) || $payrollPeriod->description === 'Payroll currently running')) {
                 $payrollPeriod->description = 'Payroll not currently running';
             } elseif (! $payrollPeriod->is_locked && (blank($payrollPeriod->description) || $payrollPeriod->description === 'Payroll not currently running')) {

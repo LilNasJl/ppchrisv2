@@ -13,6 +13,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Override;
 
@@ -70,6 +71,16 @@ class EditEmployeeDetails extends Page implements HasForms
         return Width::Full;
     }
 
+    #[Override]
+    public function getHeader(): ?View
+    {
+        return view('filament.pages.partials.employee-details-view-header', [
+            'employee' => $this->employeeRecord,
+            'headerActions' => $this->getCachedHeaderActions(),
+            'eyebrow' => 'EDIT EMPLOYEE',
+        ]);
+    }
+
     public function save(): void
     {
         if (! $this->employeeRecord) {
@@ -93,22 +104,24 @@ class EditEmployeeDetails extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
-            $this->employmentTypeChangeAction(),
-
-            $this->employmentTypeHistoryAction(),
+            Action::make('return')
+                ->label('Return')
+                ->icon(Heroicon::ArrowLeft)
+                ->color('gray')
+                ->url(fn (): string => $this->getReturnUrl()),
 
             Action::make('view')
                 ->label('View')
                 ->icon(Heroicon::Eye)
+                ->color('gray')
                 ->url(fn (): string => ViewEmployeeDetails::getUrl([
                     'employeeId' => $this->employeeRecord?->publicKey(),
                     'returnUrl' => $this->getReturnUrl(),
                 ])),
 
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => $this->getReturnUrl()),
+            $this->employmentTypeHistoryAction(),
+
+            $this->employmentTypeChangeAction(),
         ];
     }
 

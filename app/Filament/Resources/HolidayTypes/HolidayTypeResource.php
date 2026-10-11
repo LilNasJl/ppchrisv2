@@ -12,6 +12,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Actions\ActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -48,7 +49,8 @@ class HolidayTypeResource extends Resource
                             ->maxLength(255)
                             ->columnSpanFull(),
                     ])
-                    ->columns(2),
+                    ->columns(['default' => 1, 'md' => 2])
+                    ->compact(),
             ]);
     }
 
@@ -73,8 +75,12 @@ class HolidayTypeResource extends Resource
                     ->wrap(),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ])
+                    ->icon(\Filament\Support\Icons\Heroicon::EllipsisHorizontal)
+                    ->tooltip('Holiday type actions'),
             ]);
     }
 

@@ -6,12 +6,20 @@ use App\Filament\Resources\Leaves\LeaveResource;
 use App\Models\Employee;
 use App\Models\Leave;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Enums\Width;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class CreateLeave extends CreateRecord
 {
     protected static string $resource = LeaveResource::class;
+
+    protected string $view = 'filament.resources.leaves.pages.create-leave';
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 
     protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
     {

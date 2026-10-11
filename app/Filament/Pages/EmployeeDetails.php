@@ -10,6 +10,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Url;
 use Override;
 use UnitEnum;
@@ -22,11 +23,11 @@ class EmployeeDetails extends Page
 
     protected static ?string $title = 'Accounts & Records';
 
-    protected static ?string $navigationLabel = 'Masterdata';
+    protected static ?string $navigationLabel = 'Master Data';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Identification;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Employee Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Employees Relation & Performance Mngt';
 
     protected static ?int $navigationSort = 1;
 
@@ -61,6 +62,15 @@ class EmployeeDetails extends Page
         return $this->branch
             ? 'Accounts & Records - '.$this->branch->branch_name
             : 'Accounts & Records';
+    }
+
+    public function getHeader(): ?View
+    {
+        return view('filament.pages.partials.employee-details-header', [
+            'branch' => $this->branch,
+            'viewMode' => $this->viewMode,
+            'headerActions' => $this->getCachedHeaderActions(),
+        ]);
     }
 
     #[Override]

@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    @include('filament.pages.partials.system-gradient-page-header-styles')
     <style>
         .birthday-page {
             display: grid;

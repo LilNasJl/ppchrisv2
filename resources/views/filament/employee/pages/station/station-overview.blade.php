@@ -1,76 +1,139 @@
 <x-filament-panels::page>
+    @include('filament.employee.pages.partials.employee-gradient-page-header-styles')
+
     <style>
+        .fi-page-header-main-ctn > header.fi-header .fi-header-heading::before {
+            content: "STATION MANAGEMENT";
+        }
+
+        .station-overview-content {
+            --station-surface: #fff;
+            --station-muted-surface: #f8fafc;
+            --station-border: #dbe5f1;
+            --station-text: #0f172a;
+            --station-muted: #64748b;
+            --station-blue: #2563eb;
+            --station-blue-soft: #eff6ff;
+            display: grid;
+            gap: .85rem;
+            min-width: 0;
+        }
+
+        .dark .station-overview-content {
+            --station-surface: #0f172a;
+            --station-muted-surface: #111827;
+            --station-border: rgba(148, 163, 184, .24);
+            --station-text: #f8fafc;
+            --station-muted: #94a3b8;
+            --station-blue: #60a5fa;
+            --station-blue-soft: rgba(37, 99, 235, .16);
+        }
+
         .station-stat-grid {
             display: grid;
+            gap: .85rem;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1.25rem;
             width: 100%;
         }
 
         .station-stat-card {
-            border: 1px solid rgb(191 219 254 / 0.85);
-            border-radius: 0.75rem;
-            background: rgb(255, 255, 255);
-            padding: 1.5rem;
-            box-shadow: 0 8px 20px rgb(15 71 148 / 0.08);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            align-content: start;
+            background: var(--station-surface);
+            border: 1px solid var(--station-border);
+            border-radius: 8px;
+            display: grid;
+            gap: .7rem;
+            min-width: 0;
+            padding: 1rem 1.1rem;
         }
 
-        .station-stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgb(15 71 148 / 0.12);
-        }
-
-        .dark .station-stat-card {
-            border-color: rgb(59 130 246 / 0.28);
-            background: rgb(17, 24, 39);
+        .station-stat-top {
+            align-items: center;
+            display: flex;
+            gap: .75rem;
+            justify-content: space-between;
         }
 
         .station-stat-label {
-            color: rgb(71, 85, 105);
-            font-size: 0.875rem;
-            font-weight: 700;
+            color: var(--station-muted);
+            font-size: .75rem;
+            font-weight: 750;
+            line-height: 1.25;
+            margin: 0;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .dark .station-stat-label,
-        .dark .station-stat-copy {
-            color: rgb(203, 213, 225);
         }
 
         .station-stat-value {
-            margin-top: 0.75rem;
-            color: rgb(37, 99, 235);
-            font-size: clamp(2rem, 4vw, 3rem);
-            font-weight: 900;
+            color: var(--station-text);
+            font-size: 1.65rem;
+            font-weight: 850;
             line-height: 1;
+            margin: .4rem 0 0;
+        }
+
+        .station-stat-icon {
+            align-items: center;
+            background: var(--station-blue-soft);
+            border: 1px solid var(--station-border);
+            border-radius: 8px;
+            color: var(--station-blue);
+            display: inline-flex;
+            flex: 0 0 38px;
+            height: 38px;
+            justify-content: center;
+            width: 38px;
+        }
+
+        .station-stat-icon svg {
+            height: 19px;
+            width: 19px;
         }
 
         .station-stat-copy {
-            margin-top: 0.65rem;
-            color: rgb(100, 116, 139);
-            font-size: 0.9rem;
+            color: var(--station-muted);
+            font-size: .8rem;
+            line-height: 1.4;
+            margin: 0;
         }
 
         @media (max-width: 640px) {
             .station-stat-grid {
                 grid-template-columns: 1fr;
             }
+
+            .station-stat-card {
+                padding: .85rem .95rem;
+            }
         }
     </style>
 
-    <div class="station-stat-grid">
-        <section class="station-stat-card">
-            <p class="station-stat-label">Assigned Stations</p>
-            <p class="station-stat-value">{{ number_format($this->branchCount()) }}</p>
-            <p class="station-stat-copy">Station branches connected to your management account.</p>
-        </section>
+    <div class="station-overview-content">
+        <div class="station-stat-grid" aria-label="Station management summary">
+            <section class="station-stat-card">
+                <div class="station-stat-top">
+                    <div>
+                        <p class="station-stat-label">Assigned Stations</p>
+                        <p class="station-stat-value">{{ number_format($this->branchCount()) }}</p>
+                    </div>
+                    <span class="station-stat-icon" aria-hidden="true">
+                        <x-filament::icon icon="heroicon-o-building-storefront" />
+                    </span>
+                </div>
+                <p class="station-stat-copy">Station branches connected to your management account.</p>
+            </section>
 
-        <section class="station-stat-card">
-            <p class="station-stat-label">Station Employees</p>
-            <p class="station-stat-value">{{ number_format($this->employeeCount()) }}</p>
-            <p class="station-stat-copy">Active employees under your managed station branches.</p>
-        </section>
+            <section class="station-stat-card">
+                <div class="station-stat-top">
+                    <div>
+                        <p class="station-stat-label">Station Employees</p>
+                        <p class="station-stat-value">{{ number_format($this->employeeCount()) }}</p>
+                    </div>
+                    <span class="station-stat-icon" aria-hidden="true">
+                        <x-filament::icon icon="heroicon-o-users" />
+                    </span>
+                </div>
+                <p class="station-stat-copy">Active employees under your managed station branches.</p>
+            </section>
+        </div>
     </div>
 </x-filament-panels::page>

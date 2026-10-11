@@ -29,12 +29,16 @@ class PayrollPeriodLockService
     public function lock(PayrollPeriod $period, bool $manuallyRequested = false): void
     {
         DB::transaction(function () use ($period, $manuallyRequested): void {
-            $period->refresh();
+            $period->setRawAttributes(PayrollPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail()->getAttributes(), true);
 
             if (! $period->is_locked) {
                 if ($manuallyRequested) {
                     $this->assertManualLockAllowed($period);
                 }
+
+                EmployeeLoan::query()
+                    ->whereIn('employee_id', app(PayrollCalculator::class)->includedEmployeeIds($period))
+                    ->orderBy('id')->lockForUpdate()->get();
 
                 app(PayrollCalculator::class)->snapshotPeriod($period);
 
@@ -68,7 +72,7 @@ class PayrollPeriodLockService
     public function unlock(PayrollPeriod $period): void
     {
         DB::transaction(function () use ($period): void {
-            $period->refresh();
+            $period->setRawAttributes(PayrollPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail()->getAttributes(), true);
 
             $this->rollbackLoanPayments($period);
 
@@ -197,6 +201,8 @@ class PayrollPeriodLockService
             ->whereIn('employee_id', $employeeIds)
             ->where('status', EmployeeLoan::STATUS_ACTIVE)
             ->where('payment_amount', '>', 0)
+            ->orderBy('id')
+            ->lockForUpdate()
             ->get()
             ->filter(fn (EmployeeLoan $loan): bool => $loan->canPostPaymentForPeriod($period))
             ->each(function (EmployeeLoan $loan) use ($period): void {
@@ -217,7 +223,7 @@ class PayrollPeriodLockService
                     return;
                 }
 
-                $payment = min((float) $loan->payment_amount, $balance);
+                $payment = $loan->paymentAmountForPeriod($period);
                 $balanceAfter = round(max(0, $balance - $payment), 2);
 
                 $paymentRecord = $existingPayment ?: new EmployeeLoanPayment([
@@ -234,6 +240,11 @@ class PayrollPeriodLockService
                     'void_reason' => null,
                 ]);
                 $paymentRecord->save();
+                $paymentRecord->events()->create([
+                    'status' => EmployeeLoanPayment::STATUS_POSTED, 'amount' => $payment,
+                    'balance_after' => $balanceAfter, 'occurred_at' => now(),
+                    'user_id' => auth()->id(), 'reason' => 'Payroll period locked',
+                ]);
 
                 $loan->forceFill([
                     'paid_amount' => round((float) $loan->paid_amount + $payment, 2),
@@ -250,7 +261,7 @@ class PayrollPeriodLockService
             ->where('status', EmployeeLoanPayment::STATUS_POSTED)
             ->get()
             ->each(function (EmployeeLoanPayment $payment): void {
-                $loan = $payment->loan;
+                $loan = EmployeeLoan::withTrashed()->whereKey($payment->employee_loan_id)->lockForUpdate()->first();
 
                 if (! $loan) {
                     return;
@@ -266,6 +277,11 @@ class PayrollPeriodLockService
                     'voided_at' => now(),
                     'void_reason' => 'Payroll period unlocked',
                 ])->save();
+                $payment->events()->create([
+                    'status' => EmployeeLoanPayment::STATUS_VOIDED, 'amount' => $payment->amount,
+                    'balance_after' => $loan->balance_amount, 'occurred_at' => now(),
+                    'user_id' => auth()->id(), 'reason' => 'Payroll period unlocked',
+                ]);
             });
     }
 }

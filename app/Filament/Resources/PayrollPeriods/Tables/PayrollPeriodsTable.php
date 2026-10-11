@@ -147,13 +147,6 @@ class PayrollPeriodsTable
                     ->icon('heroicon-m-ellipsis-vertical')
                     ->tooltip('Actions')
                     ->color('primary'),
-            ])
-            ->toolbarActions([
-                Action::make('return')
-                    ->label('Return')
-                    ->icon('heroicon-o-arrow-left')
-                    ->color('gray')
-                    ->url(Payroll::getUrl()),
             ]);
     }
 }

@@ -13,6 +13,18 @@ class ListHolidayTypes extends ListRecords
 {
     protected static string $resource = HolidayTypeResource::class;
 
+    protected string $view = 'filament.resources.holiday-types.pages.list-holiday-types';
+
+    public function getSubheading(): string
+    {
+        return 'Configure holiday categories and their payroll rates.';
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     protected function getHeaderActions(): array
     {
         return [

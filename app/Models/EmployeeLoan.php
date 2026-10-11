@@ -6,6 +6,7 @@ use App\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 class EmployeeLoan extends Model
 {
@@ -60,6 +61,17 @@ class EmployeeLoan extends Model
     protected static function booted(): void
     {
         static::saving(function (EmployeeLoan $loan): void {
+            if ($loan->exists && $loan->payments()->exists()) {
+                if ($loan->isDirty([
+                    'employee_id', 'loan_date', 'loan_amount', 'loan_interest', 'interest_rate',
+                    'loan_terms_months', 'terms_basis', 'payment_amount', 'schedule', 'amortization_start_payroll_period_id',
+                ])) {
+                    throw ValidationException::withMessages(['loan_amount' => 'Loan terms cannot be changed after payment history exists.']);
+                }
+                $loan->paid_amount = max(0, (float) ($loan->paid_amount ?? 0));
+
+                return;
+            }
             $loan->loan_terms_months = max(1, (int) ($loan->loan_terms_months ?: 1));
             $loan->loan_amount = max(0, (float) ($loan->loan_amount ?? 0));
             $loan->loan_interest = max(0, (float) ($loan->loan_interest ?? 0));
@@ -86,6 +98,11 @@ class EmployeeLoan extends Model
             $loan->paid_amount = max(0, (float) ($loan->paid_amount ?? 0));
             $loan->status ??= self::STATUS_ACTIVE;
             $loan->schedule = self::normalizeSchedule($loan->schedule);
+        });
+        static::deleting(function (EmployeeLoan $loan): void {
+            if ($loan->payments()->exists()) {
+                throw ValidationException::withMessages(['loan_amount' => 'Loans with payment history must be retained.']);
+            }
         });
     }
 
@@ -270,7 +287,11 @@ class EmployeeLoan extends Model
             ? $this->scheduled_deductions_count
             : max(1, (int) $this->loan_terms_months);
 
-        return $this->postedPaymentsCount() < $maximumDeductions;
+        // Previously exhausted loans may still carry a rounding remainder.
+        $roundingRemainder = $this->usesCalendarMonthTerms() && $this->balance_amount > 0
+            && $this->balance_amount <= max(0.01, $maximumDeductions * 0.005 + 0.001);
+
+        return $this->postedPaymentsCount() < $maximumDeductions || $roundingRemainder;
     }
 
     public function postedPaymentForPeriod(PayrollPeriod $period): ?EmployeeLoanPayment
@@ -308,7 +329,9 @@ class EmployeeLoan extends Model
             return 0.0;
         }
 
-        return round(min($this->payment_amount, $balance), 2);
+        $lastDeduction = $this->postedPaymentsCount() + 1 >= $this->scheduled_deductions_count;
+
+        return round($lastDeduction ? $balance : min($this->payment_amount, $balance), 2);
     }
 
     public function hasStartedForPeriod(PayrollPeriod $period): bool
@@ -340,10 +363,15 @@ class EmployeeLoan extends Model
 
         $startDay = (int) $period->date_start?->format('j');
         $endDay = (int) $period->date_end?->format('j');
+        $quincena = $period->loan_quincena ?: match (true) {
+            $startDay === 26 && $endDay === 10 => 'first',
+            $startDay === 11 && $endDay === 25 => 'second',
+            default => null,
+        };
 
         return match ($this->schedule) {
-            self::SCHEDULE_FIRST_QUINCENA => $startDay === 26 && $endDay === 10,
-            self::SCHEDULE_SECOND_QUINCENA => $startDay === 11 && $endDay === 25,
+            self::SCHEDULE_FIRST_QUINCENA => $quincena === 'first',
+            self::SCHEDULE_SECOND_QUINCENA => $quincena === 'second',
             default => true,
         };
     }

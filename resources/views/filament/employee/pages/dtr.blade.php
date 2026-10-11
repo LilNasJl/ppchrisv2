@@ -22,6 +22,61 @@
             margin-bottom: 0.5rem;
         }
 
+        .dtr-topbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid #3b82f6;
+            border-radius: 0.75rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+        }
+
+        .dtr-topbar-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .dtr-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .dtr-title {
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.65rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .dtr-subtitle {
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .dtr-actions-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .dtr-topbar .dtr-btn-badge {
+            margin-left: 0.15rem;
+        }
+
         /* Filter / Toolbar Section Card */
         .dtr-filter-bar {
             position: relative;
@@ -668,10 +723,51 @@
                 min-width: 0;
             }
         }
+
+        @media (max-width: 640px) {
+            .dtr-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .dtr-title {
+                font-size: 1.35rem;
+            }
+
+            .dtr-actions-row {
+                justify-content: flex-start;
+                width: 100%;
+            }
+        }
     </style>
 
     <div wire:poll.15s class="dtr-employee-workspace">
-        {{-- Toolbar / Filter Bar with Horizontal Dropdown and Action Buttons --}}
+        <header class="dtr-topbar">
+            <div class="dtr-topbar-copy">
+                <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
+                <h2 class="dtr-title">Daily Time Record</h2>
+                <p class="dtr-subtitle">Review your attendance and track DTR requests by payroll period.</p>
+            </div>
+
+            <div class="dtr-actions-row">
+                <a href="{{ $changeRequestsUrl }}" class="dtr-btn" title="View Change Requests">
+                    <x-filament::icon icon="heroicon-m-document-text" class="dtr-btn-icon" />
+                    <span>Change Requests</span>
+                    @if ($unseenCount > 0)
+                        <span class="dtr-btn-badge">{{ $unseenCount }}</span>
+                    @endif
+                </a>
+
+                @if ($canPrint)
+                    <a href="{{ $printUrl }}" target="_blank" class="dtr-btn" title="Print / PDF D.T.R">
+                        <x-filament::icon icon="heroicon-m-printer" class="dtr-btn-icon" />
+                        <span>Print D.T.R</span>
+                    </a>
+                @endif
+            </div>
+        </header>
+
+        {{-- Payroll period filter --}}
         <section class="dtr-filter-bar">
             <div class="dtr-filter-heading">
                 <div class="dtr-filter-icon">
@@ -699,20 +795,6 @@
                     </div>
                 </div>
 
-                <a href="{{ $changeRequestsUrl }}" class="dtr-btn outline" title="View Change Requests">
-                    <x-filament::icon icon="heroicon-m-document-text" class="dtr-btn-icon" />
-                    <span>Change Requests</span>
-                    @if ($unseenCount > 0)
-                        <span class="dtr-btn-badge">{{ $unseenCount }}</span>
-                    @endif
-                </a>
-
-                @if ($canPrint)
-                    <a href="{{ $printUrl }}" target="_blank" class="dtr-btn outline" title="Print / PDF D.T.R">
-                        <x-filament::icon icon="heroicon-m-printer" class="dtr-btn-icon" />
-                        <span>Print D.T.R</span>
-                    </a>
-                @endif
             </div>
         </section>
 

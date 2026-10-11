@@ -6,6 +6,8 @@ use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanRequest;
 use App\Models\PayrollPeriod;
 use App\Services\EmployeeLoanRequestService;
+use App\Services\LoanAccessService;
+use App\Support\LoanAmortizationPreview;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
@@ -44,6 +46,8 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
     public function table(Table $table): Table
     {
+        app(LoanAccessService::class)->authorizeManagement(auth()->user());
+
         return $table
             ->heading('Loan Requests')
             ->description('Review employee loan requests before they become active payroll deductions.')
@@ -198,6 +202,8 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
     public function render()
     {
+        app(LoanAccessService::class)->authorizeManagement(auth()->user());
+
         return view('livewire.loan-request-management-table');
     }
 
@@ -213,7 +219,9 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
 
                     Hidden::make('terms_basis'),
 
-                    Hidden::make('loan_interest'),
+                    TextInput::make('loan_interest')
+                        ->label('Total Interest')->numeric()->minValue(0)->live(onBlur: true)
+                        ->visible(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD),
 
                     TextInput::make('loan_type')
                         ->label('Loan Type')
@@ -228,7 +236,6 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->options(EmployeeLoan::scheduleOptions())
                         ->live()
                         ->afterStateUpdated(function (Get $get, Set $set): void {
-                            $set('amortization_start_payroll_period_id', null);
                             $this->syncCalculatedPayment($get, $set);
                         })
                         ->required(),
@@ -260,14 +267,17 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->helperText('Uses flat add-on interest across the final loan term months.')
                         ->numeric()
                         ->minValue(0)
+                        ->maxValue(100)
                         ->live(onBlur: true)
                         ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
-                        ->required(),
+                        ->visible(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH)
+                        ->required(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH),
 
                     TextInput::make('loan_terms_months')
-                        ->label('Loan Terms (Months)')
-                        ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
+                        ->label(fn (Get $get): string => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD ? 'Terms (Payroll Periods)' : 'Loan Terms (Months)')
+                        ->helperText(fn (Get $get): string => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD ? 'Existing loan: one term equals one payroll deduction.' : 'Every Payroll: two deductions per month. Quincena: one deduction per month.')
                         ->numeric()
+                        ->integer()
                         ->minValue(1)
                         ->live(onBlur: true)
                         ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
@@ -276,8 +286,9 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                     TextInput::make('payment_amount')
                         ->label('Payment per Payroll')
                         ->numeric()
+                        ->live(onBlur: true)
                         ->minValue(0)
-                        ->readOnly()
+                        ->readOnly(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH)
                         ->helperText('Calculated from the final amount, interest, schedule, and term months.')
                         ->required(),
 
@@ -287,7 +298,10 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->options(fn (): array => $this->openPayrollPeriodOptions())
                         ->searchable()
                         ->preload()
+                        ->live()
                         ->required(),
+
+                    LoanAmortizationPreview::make('amortization_start_payroll_period_id'),
 
                     Textarea::make('hr_comment')
                         ->label('HR Comment')

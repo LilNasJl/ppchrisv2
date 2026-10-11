@@ -83,18 +83,6 @@ class ViewOnFieldDtrSubmission extends Page
                 ->icon(Heroicon::ArrowLeft)
                 ->url(DtrProofSubmissions::getUrl()),
 
-            Action::make('viewProof')
-                ->label('View Proof')
-                ->icon(Heroicon::Eye)
-                ->url(fn (): string => route('hr_tools.dtr_submissions.view', $this->submission))
-                ->openUrlInNewTab(),
-
-            Action::make('downloadProof')
-                ->label('Download Proof')
-                ->icon(Heroicon::ArrowDownTray)
-                ->url(fn (): string => route('hr_tools.dtr_submissions.download', $this->submission))
-                ->openUrlInNewTab(),
-
             Action::make('approve')
                 ->label('Approve')
                 ->icon(Heroicon::CheckCircle)

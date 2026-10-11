@@ -45,6 +45,11 @@ class StationOverview extends Page
         return Width::Full;
     }
 
+    public function getSubheading(): string
+    {
+        return 'Assigned stations, active employees, and attendance at a glance.';
+    }
+
     public function branchCount(): int
     {
         return count($this->assignedBranchIds());

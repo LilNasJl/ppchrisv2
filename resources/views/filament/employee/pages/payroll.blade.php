@@ -46,28 +46,20 @@
             gap: 0.75rem 1rem;
             padding: 0.75rem 1.15rem;
             border-radius: 0.75rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            box-shadow: none;
             overflow: visible;
         }
 
         .employee-payroll-toolbar::before {
-            content: "";
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: 0;
-            inline-size: 100%;
-            block-size: 3px;
-            background: linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
-            border-top-left-radius: 0.75rem;
-            border-top-right-radius: 0.75rem;
+            display: none;
         }
 
         .dark .employee-payroll-toolbar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border-color: #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            box-shadow: none;
         }
 
         .employee-payroll-heading {
@@ -84,14 +76,15 @@
             width: 2.25rem;
             height: 2.25rem;
             border-radius: 0.5rem;
-            background: rgb(239, 246, 255);
-            color: #2563eb;
+            background: rgba(255, 255, 255, .12);
+            border: 1px solid rgba(219, 234, 254, .35);
+            color: #ffffff;
             flex-shrink: 0;
         }
 
         .dark .employee-payroll-heading-icon {
-            background: rgba(37, 99, 235, 0.18);
-            color: #60a5fa;
+            background: rgba(255, 255, 255, .12);
+            color: #ffffff;
         }
 
         .employee-payroll-heading-copy {
@@ -99,10 +92,19 @@
             flex-direction: column;
         }
 
+        .employee-payroll-eyebrow {
+            color: #d9f722;
+            font-size: .65rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: .2rem;
+            text-transform: uppercase;
+        }
+
         .employee-payroll-heading h3 {
             font-size: 0.95rem;
             font-weight: 800;
-            color: rgb(15, 23, 42);
+            color: #ffffff;
             line-height: 1.2;
             margin: 0;
             letter-spacing: -0.01em;
@@ -114,12 +116,12 @@
 
         .employee-payroll-heading p {
             font-size: 0.75rem;
-            color: rgb(100, 116, 139);
+            color: #e0ecff;
             margin: 0.15rem 0 0;
         }
 
         .dark .employee-payroll-heading p {
-            color: rgb(148, 163, 184);
+            color: #e0ecff;
         }
 
         .employee-payroll-controls {
@@ -150,13 +152,13 @@
             left: 0.65rem;
             width: 0.95rem;
             height: 0.95rem;
-            color: rgb(100, 116, 139);
+            color: #bfdbfe;
             pointer-events: none;
             z-index: 1;
         }
 
         .dark .employee-payroll-select-icon {
-            color: rgb(148, 163, 184);
+            color: #bfdbfe;
         }
 
         .employee-payroll-select-chevron {
@@ -164,13 +166,13 @@
             right: 0.65rem;
             width: 0.85rem;
             height: 0.85rem;
-            color: rgb(100, 116, 139);
+            color: #bfdbfe;
             pointer-events: none;
             z-index: 1;
         }
 
         .dark .employee-payroll-select-chevron {
-            color: rgb(148, 163, 184);
+            color: #bfdbfe;
         }
 
         .employee-payroll-native-select {
@@ -180,9 +182,9 @@
             box-sizing: border-box;
             padding: 0.25rem 1.85rem 0.25rem 2rem;
             border-radius: 0.45rem;
-            border: 1px solid rgb(203, 213, 225);
-            background-color: #ffffff;
-            color: rgb(15, 23, 42);
+            border: 1px solid rgba(191, 219, 254, .45);
+            background-color: rgba(10, 31, 68, .55);
+            color: #ffffff;
             font-size: 0.775rem;
             font-weight: 600;
             line-height: 1.4;
@@ -192,7 +194,7 @@
             -webkit-appearance: none;
             -moz-appearance: none;
             appearance: none;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            box-shadow: none;
             text-overflow: ellipsis;
             white-space: nowrap;
             overflow: hidden;
@@ -204,8 +206,8 @@
         }
 
         .dark .employee-payroll-native-select {
-            border-color: rgb(71, 85, 105);
-            background-color: rgb(30, 41, 59);
+            border-color: rgba(191, 219, 254, .45);
+            background-color: rgba(10, 31, 68, .55);
             color: #ffffff;
             box-shadow: none;
         }
@@ -216,7 +218,7 @@
         }
 
         .dark .employee-payroll-native-select option {
-            background-color: rgb(30, 41, 59);
+            background-color: #173c70;
             color: #ffffff;
         }
 
@@ -234,10 +236,10 @@
             font-size: 0.775rem;
             font-weight: 600;
             text-decoration: none;
-            color: rgb(30, 41, 59);
-            background: #ffffff;
-            border: 1px solid rgb(203, 213, 225);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            color: #ffffff;
+            background: rgba(10, 31, 68, .55);
+            border: 1px solid rgba(191, 219, 254, .45);
+            box-shadow: none;
             transition: all 130ms ease;
             cursor: pointer;
             white-space: nowrap;
@@ -245,42 +247,42 @@
         }
 
         .employee-payroll-print-btn:hover {
-            background: rgb(248, 250, 252);
-            border-color: rgb(148, 163, 184);
-            color: rgb(15, 23, 42);
+            background: rgba(10, 31, 68, .85);
+            border-color: rgba(191, 219, 254, .75);
+            color: #ffffff;
         }
 
         .employee-payroll-print-btn svg {
             width: 0.9rem;
             height: 0.9rem;
             flex-shrink: 0;
-            color: rgb(71, 85, 105);
+            color: #bfdbfe;
             transition: color 130ms ease;
         }
 
         .employee-payroll-print-btn:hover svg {
-            color: rgb(37, 99, 235);
+            color: #ffffff;
         }
 
         .dark .employee-payroll-print-btn {
-            color: rgb(226, 232, 240);
-            background: rgb(30, 41, 59);
-            border-color: rgb(71, 85, 105);
+            color: #ffffff;
+            background: rgba(10, 31, 68, .55);
+            border-color: rgba(191, 219, 254, .45);
             box-shadow: none;
         }
 
         .dark .employee-payroll-print-btn:hover {
-            background: rgb(51, 65, 85);
-            border-color: rgb(100, 116, 139);
+            background: rgba(10, 31, 68, .85);
+            border-color: rgba(191, 219, 254, .75);
             color: #ffffff;
         }
 
         .dark .employee-payroll-print-btn svg {
-            color: rgb(148, 163, 184);
+            color: #bfdbfe;
         }
 
         .dark .employee-payroll-print-btn:hover svg {
-            color: rgb(96, 165, 250);
+            color: #ffffff;
         }
 
         /* Thematic Stat & Information Cards (Exact Match to /hr/dtr) */
@@ -525,6 +527,7 @@
                     <x-filament::icon icon="heroicon-o-banknotes" class="w-4 h-4" />
                 </div>
                 <div class="employee-payroll-heading-copy">
+                    <span class="employee-payroll-eyebrow">Employee Self Service</span>
                     <h3>Payroll Summary</h3>
                     <p>View your finalized payroll and compensation breakdown by period.</p>
                 </div>

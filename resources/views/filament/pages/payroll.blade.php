@@ -22,57 +22,50 @@
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.75rem 1rem;
-            padding: 0.875rem 1.125rem;
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
             border-radius: 0.75rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: #ffffff;
-        }
-
-        .dark .payroll-topbar {
-            border-color: rgb(51, 65, 85);
-            background: rgb(15, 23, 42);
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
         }
 
         .payroll-topbar-copy {
             display: flex;
             flex-direction: column;
-            gap: 0.15rem;
+            gap: 0.25rem;
+            min-width: 0;
         }
 
         .payroll-eyebrow {
-            color: rgb(37, 99, 235);
+            margin: 0;
+            color: #d9f722;
             font-size: 0.7rem;
             font-weight: 800;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
+            line-height: 1.2;
         }
 
         .payroll-title {
-            color: rgb(15, 23, 42);
-            font-size: 1.15rem;
-            font-weight: 800;
-            line-height: 1.25;
-        }
-
-        .dark .payroll-title {
+            margin: 0;
             color: #ffffff;
+            font-size: 1.65rem;
+            font-weight: 800;
+            line-height: 1.2;
         }
 
         .payroll-subtitle {
-            color: rgb(100, 116, 139);
-            font-size: 0.82rem;
-        }
-
-        .dark .payroll-subtitle {
-            color: rgb(148, 163, 184);
+            margin: 0;
+            color: #e0ecff;
+            font-size: 0.9rem;
+            line-height: 1.4;
         }
 
         .payroll-actions-row {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: flex-end;
+            gap: 0.75rem;
         }
 
         .payroll-btn {
@@ -114,6 +107,27 @@
             color: rgb(226, 232, 240);
             background: rgb(30, 41, 59);
             border-color: rgb(71, 85, 105);
+        }
+
+        .payroll-topbar .payroll-btn {
+            min-height: 2.25rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 0.45rem;
+            font-size: 0.75rem;
+        }
+
+        .payroll-topbar .payroll-btn.outline,
+        .payroll-topbar .payroll-btn.secondary {
+            color: #ffffff;
+            background: rgb(10 31 68 / 0.6);
+            border-color: rgb(147 197 253 / 0.35);
+        }
+
+        .payroll-topbar .payroll-btn.outline:hover,
+        .payroll-topbar .payroll-btn.secondary:hover {
+            color: #ffffff;
+            background: rgb(10 31 68 / 0.85);
+            border-color: rgb(191 219 254 / 0.65);
         }
 
         .payroll-btn-icon {
@@ -381,6 +395,20 @@
         }
 
         @media (max-width: 640px) {
+            .payroll-topbar {
+                align-items: stretch;
+                padding: 1rem;
+            }
+
+            .payroll-title {
+                font-size: 1.35rem;
+            }
+
+            .payroll-actions-row {
+                justify-content: flex-start;
+                width: 100%;
+            }
+
             .payroll-filter-card {
                 grid-template-columns: 1fr;
             }
@@ -390,10 +418,10 @@
     <div class="payroll-workspace">
         <header class="payroll-topbar">
             <div class="payroll-topbar-copy">
-                <span class="payroll-eyebrow">Compensation Operations</span>
+                <span class="payroll-eyebrow">WORKFORCE RECORDS</span>
                 <h2 class="payroll-title">Payroll Processing</h2>
                 <p class="payroll-subtitle">
-                    Filter payroll periods, branches, and employees directly or open period-wide branch and summary payrolls.
+                    Process payroll by selected period, branch, and employee.
                 </p>
             </div>
 

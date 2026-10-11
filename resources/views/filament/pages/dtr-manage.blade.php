@@ -34,29 +34,31 @@
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.6rem 1rem;
-            padding: 0.85rem 1.15rem;
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
             border-radius: 0.75rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #fff;
             overflow: hidden;
         }
 
         .dtr-topbar::before {
-            content: "";
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: 0;
-            inline-size: 100%;
-            block-size: 3px;
-            background: linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+            content: none;
         }
 
-        .dark .dtr-topbar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        .dtr-manage-copy {
+            display: grid;
+            gap: .45rem;
+            min-width: 0;
+        }
+
+        .dtr-eyebrow {
+            color: #d9f722;
+            font-size: .7rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin: 0;
         }
 
         .dtr-emp-profile {
@@ -72,7 +74,8 @@
             width: 2.5rem;
             height: 2.5rem;
             border-radius: 9999px;
-            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            background: rgb(10 31 68 / .6);
+            border: 1px solid rgb(147 197 253 / .5);
             color: #ffffff;
             font-size: 0.875rem;
             font-weight: 800;
@@ -90,7 +93,8 @@
         .dtr-emp-details {
             display: flex;
             flex-direction: column;
-            gap: 0.2rem;
+            gap: 0.3rem;
+            min-width: 0;
         }
 
         .dtr-emp-name-row {
@@ -101,15 +105,11 @@
         }
 
         .dtr-title {
-            color: rgb(15, 23, 42);
-            font-size: 1.15rem;
+            color: #fff;
+            font-size: 1.65rem;
             font-weight: 800;
             line-height: 1.2;
-            letter-spacing: -0.02em;
-        }
-
-        .dark .dtr-title {
-            color: #ffffff;
+            margin: 0;
         }
 
         .dtr-emp-subtitle {
@@ -117,22 +117,14 @@
             flex-wrap: wrap;
             align-items: center;
             gap: 0.35rem 0.5rem;
-            font-size: 0.765rem;
-            color: rgb(100, 116, 139);
-            line-height: 1.3;
-        }
-
-        .dark .dtr-emp-subtitle {
-            color: rgb(148, 163, 184);
+            font-size: 0.85rem;
+            color: #e0ecff;
+            line-height: 1.4;
         }
 
         .dtr-meta-dot {
-            color: rgb(203, 213, 225);
+            color: rgb(191 219 254 / .7);
             font-size: 0.75rem;
-        }
-
-        .dark .dtr-meta-dot {
-            color: rgb(71, 85, 105);
         }
 
         .dtr-badge-code {
@@ -143,24 +135,19 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             font-size: 0.7rem;
             font-weight: 600;
-            background: transparent;
-            color: rgb(100, 116, 139);
-            border: 1px solid rgb(226, 232, 240);
+            background: rgb(10 31 68 / .5);
+            color: #dbeafe;
+            border: 1px solid rgb(147 197 253 / .45);
             white-space: nowrap;
-        }
-
-        .dark .dtr-badge-code {
-            background: transparent;
-            border-color: rgb(51, 65, 85);
-            color: rgb(148, 163, 184);
         }
 
         .dtr-actions-row {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             align-items: center;
-            gap: 0.4rem;
+            justify-content: flex-end;
+            gap: 0.75rem;
         }
 
         .dtr-btn {
@@ -189,44 +176,24 @@
         }
 
         .dtr-btn.outline {
-            color: rgb(30, 41, 59);
-            background: #ffffff;
-            border-color: rgb(203, 213, 225);
+            color: #fff;
+            background: rgb(10 31 68 / .45);
+            border-color: rgb(147 197 253 / .35);
             box-shadow: none;
         }
 
         .dtr-btn.outline:hover {
-            background: rgb(248, 250, 252);
-            border-color: rgb(148, 163, 184);
-            color: rgb(15, 23, 42);
-        }
-
-        .dark .dtr-btn.outline {
-            color: rgb(226, 232, 240);
-            background: rgb(30, 41, 59);
-            border-color: rgb(71, 85, 105);
-        }
-
-        .dark .dtr-btn.outline:hover {
-            background: rgb(51, 65, 85);
-            border-color: rgb(100, 116, 139);
+            background: rgb(10 31 68 / .8);
+            border-color: rgb(191 219 254 / .65);
         }
 
         .dtr-btn.secondary {
-            background: rgb(15, 23, 42);
+            background: rgb(10 31 68 / .6);
+            border-color: rgb(147 197 253 / .35);
         }
 
         .dtr-btn.secondary:hover {
-            background: rgb(30, 41, 59);
-        }
-
-        .dark .dtr-btn.secondary {
-            background: rgb(51, 65, 85);
-            color: #f8fafc;
-        }
-
-        .dark .dtr-btn.secondary:hover {
-            background: rgb(71, 85, 105);
+            background: rgb(10 31 68 / .85);
         }
 
         .dtr-btn-icon {
@@ -544,6 +511,10 @@
         }
 
         @media (max-width: 640px) {
+            .dtr-topbar { align-items: stretch; padding: 1rem; }
+            .dtr-emp-profile { align-items: flex-start; }
+            .dtr-title { font-size: 1.35rem; }
+            .dtr-actions-row { justify-content: flex-start; width: 100%; }
             .dtr-summary-strip {
                 grid-template-columns: 1fr;
             }
@@ -553,40 +524,43 @@
     <div class="dtr-manage-workspace">
         {{-- Topbar Header --}}
         <header class="dtr-topbar">
-            <div class="dtr-emp-profile">
-                <div class="dtr-emp-avatar">
-                    @if ($employee?->user?->profile_photo_url)
-                        <img src="{{ $employee->user->profile_photo_url }}" alt="{{ $employee->full_name }}" />
-                    @else
-                        <span>{{ $initials }}</span>
-                    @endif
-                </div>
-
-                <div class="dtr-emp-details">
-                    <div class="dtr-emp-name-row">
-                        <h2 class="dtr-title">{{ $employee?->full_name ?? 'Employee DTR' }}</h2>
-                        <span class="dtr-badge-code">{{ $employee?->company_id ?? $employee?->uid ?? 'N/A' }}</span>
+            <div class="dtr-manage-copy">
+                <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
+                <div class="dtr-emp-profile">
+                    <div class="dtr-emp-avatar">
+                        @if ($employee?->user?->profile_photo_url)
+                            <img src="{{ $employee->user->profile_photo_url }}" alt="{{ $employee->full_name }}" />
+                        @else
+                            <span>{{ $initials }}</span>
+                        @endif
                     </div>
 
-                    <div class="dtr-emp-subtitle">
-                        @if ($branch)
-                            <span>{{ $branch->branch_name }}</span>
-                        @endif
+                    <div class="dtr-emp-details">
+                        <div class="dtr-emp-name-row">
+                            <h2 class="dtr-title">{{ $employee?->full_name ?? 'Employee DTR' }}</h2>
+                            <span class="dtr-badge-code">{{ $employee?->company_id ?? $employee?->uid ?? 'N/A' }}</span>
+                        </div>
 
-                        @if ($employee?->designation)
-                            <span class="dtr-meta-dot">&bull;</span>
-                            <span>{{ $employee->designation->title }}</span>
-                        @endif
+                        <div class="dtr-emp-subtitle">
+                            @if ($branch)
+                                <span>{{ $branch->branch_name }}</span>
+                            @endif
 
-                        @if ($employee?->department)
-                            <span class="dtr-meta-dot">&bull;</span>
-                            <span>{{ $employee->department->name }}</span>
-                        @endif
+                            @if ($employee?->designation)
+                                <span class="dtr-meta-dot">&bull;</span>
+                                <span>{{ $employee->designation->title }}</span>
+                            @endif
 
-                        @if ($period)
-                            <span class="dtr-meta-dot">&bull;</span>
-                            <span>{{ $period->title }} ({{ $period->is_locked ? 'Locked' : 'Open' }})</span>
-                        @endif
+                            @if ($employee?->department)
+                                <span class="dtr-meta-dot">&bull;</span>
+                                <span>{{ $employee->department->name }}</span>
+                            @endif
+
+                            @if ($period)
+                                <span class="dtr-meta-dot">&bull;</span>
+                                <span>{{ $period->title }} ({{ $period->is_locked ? 'Locked' : 'Open' }})</span>
+                            @endif
+                        </div>
                     </div>
                 </div>
             </div>

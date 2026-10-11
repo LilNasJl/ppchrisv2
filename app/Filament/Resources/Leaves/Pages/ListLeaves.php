@@ -6,12 +6,20 @@ use App\Filament\Resources\Leaves\LeaveResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 
 class ListLeaves extends ListRecords
 {
     protected static string $resource = LeaveResource::class;
+
+    protected string $view = 'filament.resources.leaves.pages.list-leaves';
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 
     public function getTabs(): array
     {

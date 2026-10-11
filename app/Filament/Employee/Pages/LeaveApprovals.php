@@ -27,7 +27,7 @@ class LeaveApprovals extends Page implements HasTable
     use HasTabs;
     use InteractsWithTable;
 
-    protected string $view = 'filament.employee.pages.table-page';
+    protected string $view = 'filament.employee.pages.station.table-page';
     protected static ?string $title = 'Leave Approvals';
     protected static string|BackedEnum|null $navigationIcon = Heroicon::ClipboardDocumentCheck;
     protected static string|\UnitEnum|null $navigationGroup = 'Station Management';
@@ -67,6 +67,11 @@ class LeaveApprovals extends Page implements HasTable
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;
+    }
+
+    public function getSubheading(): string
+    {
+        return 'Review leave requests submitted by employees in your assigned stations.';
     }
 
     public function getTabs(): array

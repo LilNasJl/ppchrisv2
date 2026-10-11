@@ -6,6 +6,7 @@
         $selectedBranch = $this->selectedBranch();
         $rows = $this->filteredEmployeeRows();
         $summary = $this->periodSummary($rows);
+        $lastSyncAt = $this->lastSyncAt();
     @endphp
 
     <style>
@@ -23,66 +24,56 @@
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 0.6rem 1rem;
-            padding: 0.85rem 1.15rem;
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
             border-radius: 0.75rem;
-            border: 1px solid rgb(226, 232, 240);
-            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+            border: 1px solid #3b82f6;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #fff;
             overflow: hidden;
         }
 
         .dtr-topbar::before {
-            content: "";
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: 0;
-            inline-size: 100%;
-            block-size: 3px;
-            background: linear-gradient(90deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
-        }
-
-        .dark .dtr-topbar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            content: none;
         }
 
         .dtr-topbar-copy {
             display: flex;
             flex-direction: column;
-            gap: 0.1rem;
+            gap: 0.25rem;
+            min-width: 0;
         }
 
-
-        .dtr-title {
-            color: rgb(15, 23, 42);
-            font-size: 1.15rem;
+        .dtr-eyebrow {
+            color: #d9f722;
+            font-size: .7rem;
             font-weight: 800;
             line-height: 1.2;
-            letter-spacing: -0.02em;
+            margin: 0;
         }
 
-        .dark .dtr-title {
-            color: #ffffff;
+        .dtr-title {
+            color: #fff;
+            font-size: 1.65rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin: 0;
         }
 
         .dtr-subtitle {
-            color: rgb(100, 116, 139);
-            font-size: 0.775rem;
-            line-height: 1.3;
-        }
-
-        .dark .dtr-subtitle {
-            color: rgb(148, 163, 184);
+            color: #e0ecff;
+            font-size: .9rem;
+            line-height: 1.4;
+            margin: 0;
         }
 
         .dtr-actions-row {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             align-items: center;
-            gap: 0.4rem;
+            justify-content: flex-end;
+            gap: 0.75rem;
         }
 
         .dtr-btn {
@@ -111,20 +102,12 @@
         }
 
         .dtr-btn.secondary {
-            background: rgb(15, 23, 42);
+            background: rgb(10 31 68 / .6);
+            border-color: rgb(147 197 253 / .35);
         }
 
         .dtr-btn.secondary:hover {
-            background: rgb(30, 41, 59);
-        }
-
-        .dark .dtr-btn.secondary {
-            background: rgb(51, 65, 85);
-            color: #f8fafc;
-        }
-
-        .dark .dtr-btn.secondary:hover {
-            background: rgb(71, 85, 105);
+            background: rgb(10 31 68 / .85);
         }
 
         .dtr-btn.outline {
@@ -253,7 +236,7 @@
         /* Thematic Stat Summary Cards */
         .dtr-summary-strip {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 0.65rem;
         }
 
@@ -798,11 +781,14 @@
                 grid-template-columns: 1fr 1fr;
             }
             .dtr-summary-strip {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
 
         @media (max-width: 640px) {
+            .dtr-topbar { align-items: stretch; padding: 1rem; }
+            .dtr-title { font-size: 1.35rem; }
+            .dtr-actions-row { justify-content: flex-start; width: 100%; }
             .dtr-filter-card {
                 grid-template-columns: 1fr;
             }
@@ -892,7 +878,8 @@
         {{-- Topbar Header --}}
         <header class="dtr-topbar">
             <div class="dtr-topbar-copy">
-                <h2 class="dtr-title">Daily Time Record Management</h2>
+                <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
+                <h2 class="dtr-title">Daily Time Record</h2>
                 <p class="dtr-subtitle">
                     Live synchronized station and HR attendance records with instant payroll period, branch, and employee filters.
                 </p>
@@ -1077,6 +1064,28 @@
                         @else
                             <x-filament::icon icon="heroicon-m-check" class="w-3 h-3 text-slate-400" />
                             <span>All overtime reviewed</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            {{-- Card 5: Last Sync --}}
+            <div class="dtr-stat-card theme-blue">
+                <div class="dtr-stat-header">
+                    <span class="dtr-stat-label">Last Sync</span>
+                    <div class="dtr-stat-icon-wrapper">
+                        <x-filament::icon icon="heroicon-o-arrow-path" class="w-3.5 h-3.5" />
+                    </div>
+                </div>
+                <div>
+                    <div class="dtr-stat-value">{{ $lastSyncAt?->diffForHumans() ?? 'Not yet synced' }}</div>
+                    <div class="dtr-stat-meta" style="margin-top: 0.2rem;">
+                        @if ($lastSyncAt)
+                            <x-filament::icon icon="heroicon-m-clock" class="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                            <span>{{ $lastSyncAt->format('M j, Y g:i A') }}</span>
+                        @else
+                            <x-filament::icon icon="heroicon-m-information-circle" class="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                            <span>No sync event for this selection</span>
                         @endif
                     </div>
                 </div>

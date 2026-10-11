@@ -10,6 +10,13 @@ class ListDepartments extends ListRecords
 {
     protected static string $resource = DepartmentResource::class;
 
+    protected string $view = 'filament.resources.departments.pages.list-departments';
+
+    public function getSubheading(): string
+    {
+        return 'Manage company departments, acronyms, and organizational descriptions.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

@@ -33,7 +33,12 @@ class EmployeeLoanPayment extends Model
 
     public function loan()
     {
-        return $this->belongsTo(EmployeeLoan::class, 'employee_loan_id');
+        return $this->belongsTo(EmployeeLoan::class, 'employee_loan_id')->withTrashed();
+    }
+
+    public function events()
+    {
+        return $this->hasMany(EmployeeLoanPaymentEvent::class);
     }
 
     public function payrollPeriod()

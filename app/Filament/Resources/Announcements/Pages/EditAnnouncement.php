@@ -9,6 +9,13 @@ class EditAnnouncement extends EditRecord
 {
     protected static string $resource = AnnouncementResource::class;
 
+    protected string $view = 'filament.resources.announcements.pages.announcement-form';
+
+    public function getSubheading(): string
+    {
+        return 'Update memorandum details and publication status.';
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         if (($data['is_published'] ?? false) && blank($this->record->published_at)) {

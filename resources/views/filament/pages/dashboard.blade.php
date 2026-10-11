@@ -30,6 +30,34 @@
             width: 100%;
         }
 
+        .ppc-dashboard-group-header--with-action {
+            align-items: center;
+            flex-direction: row;
+            gap: 1rem;
+            justify-content: space-between;
+        }
+
+        .ppc-dashboard-group-copy { min-width: 0; }
+
+        .ppc-dashboard-header-action {
+            align-items: center;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(219, 234, 254, 0.45);
+            border-radius: 8px;
+            color: #ffffff;
+            display: inline-flex;
+            flex: 0 0 auto;
+            height: 2.5rem;
+            justify-content: center;
+            transition: background-color 150ms ease, border-color 150ms ease;
+            width: 2.5rem;
+        }
+
+        .ppc-dashboard-header-action:hover {
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+
         .ppc-dashboard-group-eyebrow {
             color: #d9f75a;
             font-size: 0.75rem;
@@ -267,6 +295,8 @@
                 min-height: 6.75rem;
                 padding: 0.85rem 1rem;
             }
+
+            .ppc-dashboard-group-header--with-action { gap: 0.75rem; }
 
             .ppc-dashboard-group-header h2 {
                 font-size: 1.4rem;

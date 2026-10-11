@@ -1,0 +1,212 @@
+resources/views/filament/resources/activities/pages/list-activities.blade.php:8:    {{ $this->content }}
+resources/views/filament/resources/payroll-periods/widgets/payroll-period-stats-overview.blade.php:3:        $metrics = $this->getMetrics();
+resources/views/filament/resources/payroll-periods/pages/list-payroll-periods.blade.php:282:    {{ $this->content }}
+resources/views/filament/resources/announcements/pages/list-announcements.blade.php:3:    {{ $this->content }}
+resources/views/filament/resources/leaves/pages/view-leave.blade.php:13:            {{ $this->content }}
+resources/views/filament/resources/leaves/pages/create-leave.blade.php:13:            {{ $this->content }}
+resources/views/filament/resources/leaves/pages/list-leaves.blade.php:12:            {{ $this->content }}
+resources/views/filament/resources/memo-types/pages/list-memo-types.blade.php:11:            {{ $this->content }}
+resources/views/filament/resources/memo-types/pages/create-memo-type.blade.php:11:            {{ $this->content }}
+resources/views/filament/resources/memo-types/pages/edit-memo-type.blade.php:7:            'subtitle' => $this->getRecord()->title,
+resources/views/filament/resources/memo-types/pages/edit-memo-type.blade.php:11:            {{ $this->content }}
+resources/views/filament/widgets/dashboard-card.blade.php:2:    $columns = $this->getColumns();
+resources/views/filament/widgets/dashboard-card.blade.php:3:    $pollingInterval = $this->getPollingInterval();
+resources/views/filament/widgets/dashboard-card.blade.php:4:    $attritionBreakdown = $this->getAttritionBreakdown();
+resources/views/filament/widgets/dashboard-card.blade.php:6:    $heading = $this->getHeading();
+resources/views/filament/widgets/dashboard-card.blade.php:7:    $description = $this->getDescription();
+resources/views/filament/widgets/dashboard-card.blade.php:153:    {{ $this->content }}
+resources/views/filament/widgets/dashboard-card.blade.php:155:    @if ($this->showAttritionBreakdown)
+resources/views/filament/pages/partials/memo-page-header.blade.php:14:        <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/pages/kpi.blade.php:266:                @foreach ($this->viewOptions() as $key => $label)
+resources/views/filament/pages/kpi.blade.php:303:                    @forelse ($this->rows() as $row)
+resources/views/filament/pages/thirteenth-month-pay.blade.php:2:    $rows = $this->rows;
+resources/views/filament/pages/thirteenth-month-pay.blade.php:3:    $summaryRows = $this->summaryRows;
+resources/views/filament/pages/thirteenth-month-pay.blade.php:4:    $periodColumns = $this->periodColumns;
+resources/views/filament/pages/thirteenth-month-pay.blade.php:149:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/pages/thirteenth-month-pay.blade.php:154:            {{ $this->form }}
+resources/views/filament/pages/thirteenth-month-pay.blade.php:158:            <button type="button" class="thirteenth-tab {{ $this->view_mode === 'details' ? 'active' : '' }}" wire:click="showDetails">
+resources/views/filament/pages/thirteenth-month-pay.blade.php:161:            <button type="button" class="thirteenth-tab {{ $this->view_mode === 'summary' ? 'active' : '' }}" wire:click="showSummary">
+resources/views/filament/pages/thirteenth-month-pay.blade.php:166:        <p class="thirteenth-note">{{ $this->periodLabel }} · Locked payroll basis · Entitlement ÷ {{ $this->divisor }} · Previously paid: {{ $money($releasedTotal) }}</p>
+resources/views/filament/pages/thirteenth-month-pay.blade.php:172:        @if ($this->releaseConflict)
+resources/views/filament/pages/thirteenth-month-pay.blade.php:173:            <div class="thirteenth-warning">{{ $this->releaseConflict }}</div>
+resources/views/filament/pages/thirteenth-month-pay.blade.php:176:        <section class="thirteenth-metrics" wire:key="thirteenth-metrics-{{ $this->results_version }}">
+resources/views/filament/pages/thirteenth-month-pay.blade.php:183:        @if ($this->view_mode === 'summary')
+resources/views/filament/pages/thirteenth-month-pay.blade.php:184:            <div class="thirteenth-table-wrap" wire:key="thirteenth-summary-{{ $this->results_version }}">
+resources/views/filament/pages/thirteenth-month-pay.blade.php:206:            <div class="thirteenth-table-wrap" wire:key="thirteenth-details-{{ $this->results_version }}">
+resources/views/filament/pages/employee-memo.blade.php:6:            'title' => $this->employeeName(),
+resources/views/filament/pages/employee-memo.blade.php:11:            {{ $this->content }}
+resources/views/filament/pages/employee-details-edit.blade.php:169:        {{ $this->form }}
+resources/views/filament/pages/history.blade.php:3:    {{ $this->content }}
+resources/views/filament/pages/payroll-summary.blade.php:2:    $rows = $this->summaryRows;
+resources/views/filament/pages/payroll-summary.blade.php:567:                <p class="summary-subtitle">Consolidated payroll totals for {{ $this->selectedPeriod?->title ?: 'the selected period' }}.</p>
+resources/views/filament/pages/payroll-summary.blade.php:571:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/pages/payroll-summary.blade.php:577:                {{ $this->form }}
+resources/views/filament/pages/payroll-summary.blade.php:589:                    <caption class="summary-accessible-caption">Payroll summary by branch for {{ $this->selectedPeriod?->title ?: 'the selected period' }}</caption>
+resources/views/filament/pages/payroll-summary.blade.php:594:                                <p class="summary-report-period">Payroll period: {{ $this->selectedPeriod?->title ?: '-' }}</p>
+resources/views/filament/pages/payroll-summary.blade.php:649:                'preparedBy' => $this->prepared_by,
+resources/views/filament/pages/payroll-summary.blade.php:650:                'checkedBy' => $this->checked_by,
+resources/views/filament/pages/payroll-summary.blade.php:651:                'approvedBy' => $this->approved_by,
+resources/views/filament/pages/reports.blade.php:11:        $filterLabels = $this->reportFilterLabels;
+resources/views/filament/pages/reports.blade.php:516:                    @foreach ($this->reportCards as $category => $reportCard)
+resources/views/filament/pages/reports.blade.php:520:                            @class(['reports-category', 'active' => $this->report_category === $category])
+resources/views/filament/pages/reports.blade.php:521:                            aria-pressed="{{ $this->report_category === $category ? 'true' : 'false' }}"
+resources/views/filament/pages/reports.blade.php:534:                        {{ $this->form }}
+resources/views/filament/pages/reports.blade.php:553:                        <span>{{ $this->reportTitle }}</span>
+resources/views/filament/pages/reports.blade.php:555:                    @if ($this->hasCurrentPreview)
+resources/views/filament/pages/reports.blade.php:557:                            {{ number_format($this->previewCount) }} {{ \Illuminate\Support\Str::plural('row', $this->previewCount) }}
+resources/views/filament/pages/reports.blade.php:562:                @if ($this->hasCurrentPreview)
+resources/views/filament/pages/reports.blade.php:564:                        <a class="reports-button secondary" href="{{ $this->printUrl() }}" target="_blank" rel="noopener">
+resources/views/filament/pages/reports.blade.php:576:            @if ($this->hasCurrentPreview)
+resources/views/filament/pages/reports.blade.php:581:                                @foreach ($this->reportHeaders as $header)
+resources/views/filament/pages/reports.blade.php:587:                            @forelse ($this->previewRows as $row)
+resources/views/filament/pages/reports.blade.php:595:                                    <td colspan="{{ max(count($this->reportHeaders), 1) }}" class="reports-empty">
+resources/views/filament/pages/reports.blade.php:603:                @if ($this->previewCount > count($this->previewRows))
+resources/views/filament/pages/reports.blade.php:605:                        Showing the first {{ count($this->previewRows) }} rows. Export or print includes all {{ number_format($this->previewCount) }} rows.
+resources/views/filament/pages/reports.blade.php:614:                        {{ $this->generatedSignature ? 'Filters changed. Generate again to refresh the preview.' : 'Select a report and generate it to view results.' }}
+resources/views/filament/pages/manage-tickets.blade.php:106:            {{ $this->content }}
+resources/views/filament/pages/employee-payroll.blade.php:234:                <span class="employee-payroll-period">{{ $this->selectedPeriod?->title ?: 'No payroll period selected' }}</span>
+resources/views/filament/pages/employee-payroll.blade.php:235:                @if ($this->employee)
+resources/views/filament/pages/employee-payroll.blade.php:236:                    <strong class="employee-payroll-name">{{ trim($this->employee->lastname . ', ' . (filled($this->employee->middlename) ? $this->employee->middlename . '. ' : '') . $this->employee->firstname) }}</strong>
+resources/views/filament/pages/employee-payroll.blade.php:239:            @if ($this->employee)
+resources/views/filament/pages/employee-payroll.blade.php:241:                    <div><dt>Designation</dt><dd>{{ $this->employee->designation?->title ?: '-' }}</dd></div>
+resources/views/filament/pages/employee-payroll.blade.php:242:                    <div><dt>Department</dt><dd>{{ $this->employee->department?->name ?: '-' }}</dd></div>
+resources/views/filament/pages/employee-payroll.blade.php:243:                    <div><dt>Branch</dt><dd>{{ $this->employee->branch?->branch_name ?: '-' }}</dd></div>
+resources/views/filament/pages/employee-payroll.blade.php:249:            $payrollRow = $this->payrollRow;
+resources/views/filament/pages/employee-payroll.blade.php:284:                {{ $this->form }}
+resources/views/filament/pages/employee-payroll.blade.php:348:                'rows' => $this->payrollRow ? collect([$this->payrollRow]) : collect(),
+resources/views/filament/pages/employee-compliance-benefits.blade.php:5:        $emp = $this->employee;
+resources/views/filament/pages/employee-compliance-benefits.blade.php:29:                <a href="{{ $this->returnLink() }}" class="cb-btn outline">
+resources/views/filament/pages/employee-compliance-benefits.blade.php:41:            {{ $this->form }}
+resources/views/filament/pages/view-on-field-dtr-submission.blade.php:94:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/pages/view-on-field-dtr-submission.blade.php:99:        'submission' => $this->submission,
+resources/views/filament/pages/payroll.blade.php:3:        $periods = $this->payrollPeriods();
+resources/views/filament/pages/payroll.blade.php:4:        $branches = $this->branches();
+resources/views/filament/pages/payroll.blade.php:5:        $selectedPeriod = $this->selectedPeriod();
+resources/views/filament/pages/payroll.blade.php:6:        $selectedBranch = $this->selectedBranch();
+resources/views/filament/pages/payroll.blade.php:7:        $rows = $this->filteredEmployeeRows();
+resources/views/filament/pages/payroll.blade.php:429:                @if ($this->payrollByBranchUrl())
+resources/views/filament/pages/payroll.blade.php:430:                    <a href="{{ $this->payrollByBranchUrl() }}" class="payroll-btn outline">
+resources/views/filament/pages/payroll.blade.php:436:                @if ($this->payrollSummaryUrl())
+resources/views/filament/pages/payroll.blade.php:437:                    <a href="{{ $this->payrollSummaryUrl() }}" class="payroll-btn outline">
+resources/views/filament/pages/payroll.blade.php:454:                            :href="$this->managePayrollPeriodsUrl()"
+resources/views/filament/pages/payroll.blade.php:462:                            :href="$this->payrollVisibilityUrl()"
+resources/views/filament/pages/birthday-calendar.blade.php:249:                <h2 style="font-size: 20px; font-weight: 700;">{{ $this->monthLabel }}</h2>
+resources/views/filament/pages/birthday-calendar.blade.php:262:                    @foreach (array_chunk($this->calendarDays, 7) as $week)
+resources/views/filament/pages/birthday-calendar.blade.php:302:            Birthdays on {{ $this->selectedBirthdayLabel }}
+resources/views/filament/pages/activity-calendar.blade.php:236:                <h2 style="font-size: 20px; font-weight: 700;">{{ $this->monthLabel }}</h2>
+resources/views/filament/pages/activity-calendar.blade.php:250:                    @foreach (array_chunk($this->calendarDays, 7) as $week)
+resources/views/filament/pages/activity-calendar.blade.php:283:                    {{ $this->editingActivityId ? 'Update Activity' : 'Add Activity' }}
+resources/views/filament/pages/activity-calendar.blade.php:309:                        {{ $this->editingActivityId ? 'Save Changes' : 'Save Activity' }}
+resources/views/filament/pages/activity-calendar.blade.php:312:                    @if ($this->editingActivityId)
+resources/views/filament/pages/memo.blade.php:10:            {{ $this->content }}
+resources/views/filament/pages/payroll-calculation.blade.php:62:            {{ $this->form }}
+resources/views/filament/pages/payroll-calculation.blade.php:65:                <x-filament::button type="submit" icon="heroicon-m-check" :disabled="(bool) ($this->period?->is_locked)">
+resources/views/filament/pages/payroll-calculation.blade.php:84:                    @foreach ($this->formulaRows as $row)
+resources/views/filament/pages/payroll-visibility.blade.php:357:    {{ $this->content }}
+resources/views/filament/pages/dtr-viewer.blade.php:44:            $payrollPeriodOptions = base64_encode((string) json_encode($this->getPayrollPeriodOptions(), JSON_UNESCAPED_UNICODE));
+resources/views/filament/pages/dtr-viewer.blade.php:45:            $branchOptions = base64_encode((string) json_encode($this->getBranchOptions(), JSON_UNESCAPED_UNICODE));
+resources/views/filament/pages/under-construction.blade.php:5:            title="{{ $this->getTitle() }} under construction"
+resources/views/filament/pages/dtr-manage.blade.php:3:        $employee = $this->getEmployee();
+resources/views/filament/pages/dtr-manage.blade.php:4:        $branch = $this->getBranch();
+resources/views/filament/pages/dtr-manage.blade.php:5:        $period = $this->getSelectedPayrollPeriod();
+resources/views/filament/pages/dtr-manage.blade.php:6:        $metrics = $this->getSummaryMetrics();
+resources/views/filament/pages/dtr-manage.blade.php:7:        $returnUrl = $this->getReturnUrl();
+resources/views/filament/pages/dtr-manage.blade.php:8:        $printUrl = $this->getPrintUrl();
+resources/views/filament/pages/dtr-manage.blade.php:9:        $exportUrl = $this->getExportUrl();
+resources/views/filament/pages/holiday-calendar.blade.php:254:                <h2 style="font-size: 20px; font-weight: 700;">{{ $this->monthLabel }}</h2>
+resources/views/filament/pages/holiday-calendar.blade.php:268:                    @foreach (array_chunk($this->calendarDays, 7) as $week)
+resources/views/filament/pages/holiday-calendar.blade.php:301:                    {{ $this->calendarScopeLabel }} holiday. Saved dates repeat every year automatically.
+resources/views/filament/pages/holiday-calendar.blade.php:314:                            @foreach ($this->holidayTypes as $holidayType)
+resources/views/filament/pages/dtr.blade.php:3:        $periods = $this->payrollPeriods();
+resources/views/filament/pages/dtr.blade.php:4:        $branches = $this->branches();
+resources/views/filament/pages/dtr.blade.php:5:        $selectedPeriod = $this->selectedPeriod();
+resources/views/filament/pages/dtr.blade.php:6:        $selectedBranch = $this->selectedBranch();
+resources/views/filament/pages/dtr.blade.php:7:        $rows = $this->filteredEmployeeRows();
+resources/views/filament/pages/dtr.blade.php:8:        $summary = $this->periodSummary($rows);
+resources/views/filament/pages/dtr.blade.php:9:        $lastSyncAt = $this->lastSyncAt();
+resources/views/filament/pages/dtr.blade.php:889:                <a href="{{ $this->dtrChangeRequestsUrl() }}" class="dtr-btn">
+resources/views/filament/pages/dtr.blade.php:892:                    @if ($this->dtrChangeRequestCount() > 0)
+resources/views/filament/pages/dtr.blade.php:893:                        <span class="dtr-badge">{{ $this->dtrChangeRequestCount() }}</span>
+resources/views/filament/pages/dtr.blade.php:897:                <a href="{{ $this->dtrProofSubmissionsUrl() }}" class="dtr-btn">
+resources/views/filament/pages/dtr.blade.php:900:                    @if ($this->dtrProofSubmissionCount() > 0)
+resources/views/filament/pages/dtr.blade.php:901:                        <span class="dtr-badge">{{ $this->dtrProofSubmissionCount() }}</span>
+resources/views/filament/pages/dtr.blade.php:905:                <a href="{{ $this->dtrImporterUrl() }}" class="dtr-btn secondary">
+resources/views/filament/pages/dtr.blade.php:972:                    @if ($this->unsyncedStationRecordCount() > 0)
+resources/views/filament/pages/dtr.blade.php:973:                        <span class="dtr-badge">{{ $this->unsyncedStationRecordCount() }}</span>
+resources/views/filament/pages/payroll-roster.blade.php:4:            href="{{ $this->branchExemptionUrl() }}"
+resources/views/filament/pages/payroll-roster.blade.php:15:            href="{{ $this->employeeExemptionUrl() }}"
+resources/views/filament/pages/loan-management.blade.php:140:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/pages/loan-management.blade.php:146:                {{ $this->table }}
+resources/views/filament/pages/loan-management.blade.php:154:                {{ $this->form }}
+resources/views/filament/pages/employee-details-view.blade.php:158:        {{ $this->form }}
+resources/views/filament/pages/payroll-by-branch.blade.php:3:        $periods = $this->payrollPeriods();
+resources/views/filament/pages/payroll-by-branch.blade.php:4:        $branchOptions = $this->branchOptions();
+resources/views/filament/pages/payroll-by-branch.blade.php:5:        $selectedPeriod = $this->selectedPeriod;
+resources/views/filament/pages/payroll-by-branch.blade.php:6:        $selectedBranch = $this->selectedBranch();
+resources/views/filament/pages/payroll-by-branch.blade.php:7:        $metrics = $this->branchMetrics();
+resources/views/filament/pages/payroll-by-branch.blade.php:8:        $prevBranchId = $this->previousBranchId();
+resources/views/filament/pages/payroll-by-branch.blade.php:9:        $nextBranchId = $this->nextBranchId();
+resources/views/filament/pages/payroll-by-branch.blade.php:460:                <a href="{{ $this->returnUrl() }}" class="pbb-btn outline">
+resources/views/filament/pages/payroll-by-branch.blade.php:465:                @if ($this->payrollSummaryUrl())
+resources/views/filament/pages/payroll-by-branch.blade.php:466:                    <a href="{{ $this->payrollSummaryUrl() }}" class="pbb-btn outline">
+resources/views/filament/pages/payroll-by-branch.blade.php:494:                        @if ($this->printUrl())
+resources/views/filament/pages/payroll-by-branch.blade.php:496:                                :href="$this->printUrl()"
+resources/views/filament/pages/payroll-by-branch.blade.php:588:                    :period-id="(int) $this->period_id"
+resources/views/filament/pages/payroll-by-branch.blade.php:589:                    :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
+resources/views/filament/pages/payroll-by-branch.blade.php:591:                    :initial-search="$this->payroll_search"
+resources/views/filament/pages/payroll-by-branch.blade.php:592:                    :initial-page="$this->payroll_page"
+resources/views/filament/pages/payroll-by-branch.blade.php:593:                    :initial-per-page="$this->payroll_per_page"
+resources/views/filament/pages/payroll-by-branch.blade.php:594:                    :initial-preset="$this->payroll_preset"
+resources/views/filament/pages/payroll-by-branch.blade.php:597:                    :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id.'-'.$this->payroll_page"
+resources/views/filament/pages/payroll-by-branch.blade.php:602:                    'rows' => $this->rows,
+resources/views/filament/pages/payroll-by-branch.blade.php:607:                'preparedBy' => $this->prepared_by,
+resources/views/filament/pages/payroll-by-branch.blade.php:608:                'checkedBy' => $this->checked_by,
+resources/views/filament/pages/payroll-by-branch.blade.php:609:                'approvedBy' => $this->approved_by,
+resources/views/filament/pages/compliance-benefits.blade.php:5:        $branches = $this->branches();
+resources/views/filament/pages/compliance-benefits.blade.php:6:        $departments = $this->departments();
+resources/views/filament/pages/compliance-benefits.blade.php:7:        $selectedBranch = $this->selectedBranch();
+resources/views/filament/pages/compliance-benefits.blade.php:8:        $selectedDepartment = $this->selectedDepartment();
+resources/views/filament/pages/compliance-benefits.blade.php:9:        $rows = $this->filteredEmployeeRows();
+resources/views/filament/pages/compliance-benefits.blade.php:10:        $summary = $this->deductionSummary($rows);
+resources/views/filament/pages/compliance-benefits.blade.php:764:                <a href="{{ $this->manageDeductionsUrl() }}" class="dtr-btn">
+resources/views/filament/employee/pages/partials/dtr-period-select-action.blade.php:6:            @foreach ($this->payrollPeriods() as $periodOption)
+resources/views/filament/employee/pages/partials/dtr-period-select-action.blade.php:7:                <option value="{{ $periodOption->id }}" @selected((string) $periodOption->id === (string) $this->periodId)>
+resources/views/filament/employee/pages/station/station-biometrics.blade.php:29:            src="{{ $this->biometricsUrl }}"
+resources/views/filament/employee/pages/station/station-dtr-import.blade.php:37:        $payrollPeriodOptions = base64_encode((string) json_encode($this->getPayrollPeriodOptions(), JSON_UNESCAPED_UNICODE));
+resources/views/filament/employee/pages/station/station-dtr-import.blade.php:38:        $branchOptions = base64_encode((string) json_encode($this->getBranchOptions(), JSON_UNESCAPED_UNICODE));
+resources/views/filament/employee/pages/station/station-dtr-import.blade.php:43:            src="{{ $this->getIframeUrl() }}"
+resources/views/filament/employee/pages/station/station-overview.blade.php:66:            <p class="station-stat-value">{{ number_format($this->branchCount()) }}</p>
+resources/views/filament/employee/pages/station/station-overview.blade.php:72:            <p class="station-stat-value">{{ number_format($this->employeeCount()) }}</p>
+resources/views/filament/employee/pages/my-account.blade.php:34:            {{ $this->form }}
+resources/views/filament/employee/pages/table-page.blade.php:6:        {{ $this->content }}
+resources/views/filament/employee/pages/payroll.blade.php:539:                            @foreach ($this->availablePayrollPeriods() as $periodOption)
+resources/views/filament/employee/pages/payroll.blade.php:540:                                <option value="{{ $periodOption->id }}" @selected((string) $periodOption->id === (string) $this->period_id)>
+resources/views/filament/employee/pages/payroll.blade.php:549:                @if ($this->selectedPeriod && (bool) $this->selectedPeriod->is_locked && filled($this->payrollRow))
+resources/views/filament/employee/pages/payroll.blade.php:550:                    <a href="{{ route('payroll.payslip.print', ['period' => $this->selectedPeriod->publicKey()]) }}"
+resources/views/filament/employee/pages/payroll.blade.php:562:        @if (! $this->selectedPeriod)
+resources/views/filament/employee/pages/payroll.blade.php:564:        @elseif ($this->employee)
+resources/views/filament/employee/pages/payroll.blade.php:574:                    <div class="employee-payroll-value">{{ $this->employee->full_name }}</div>
+resources/views/filament/employee/pages/payroll.blade.php:585:                    <div class="employee-payroll-value">{{ $this->employee->designation?->title ?: '-' }}</div>
+resources/views/filament/employee/pages/payroll.blade.php:596:                    <div class="employee-payroll-value">{{ $this->employee->department?->name ?: '-' }}</div>
+resources/views/filament/employee/pages/payroll.blade.php:607:                    <div class="employee-payroll-value">{{ $this->employee->branch?->branch_name ?: '-' }}</div>
+resources/views/filament/employee/pages/payroll.blade.php:612:                'rows' => $this->payrollRow ? collect([$this->payrollRow]) : collect(),
+resources/views/filament/employee/pages/dashboard.blade.php:3:        $announcements = $this->announcements;
+resources/views/filament/employee/pages/dashboard.blade.php:4:        $upcomingHolidays = $this->upcomingHolidays;
+resources/views/filament/employee/pages/dashboard.blade.php:5:        $upcomingActivities = $this->upcomingActivities;
+resources/views/filament/employee/pages/my-profile.blade.php:112:        {{ $this->form }}
+resources/views/filament/employee/pages/dtr-change-requests.blade.php:548:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/employee/pages/dtr-change-requests.blade.php:554:            {{ $this->content }}
+resources/views/filament/employee/pages/loan.blade.php:135:                    {{ $this->table }}
+resources/views/filament/employee/pages/dtr.blade.php:3:        $selectedPeriod = $this->selectedPeriod;
+resources/views/filament/employee/pages/dtr.blade.php:4:        $overview = $this->overview;
+resources/views/filament/employee/pages/dtr.blade.php:5:        $changeRequestsUrl = $this->getChangeRequestsUrl();
+resources/views/filament/employee/pages/dtr.blade.php:6:        $unseenCount = $this->getUnseenReviewedRequestCount();
+resources/views/filament/employee/pages/dtr.blade.php:7:        $printUrl = $this->getPrintUrl();
+resources/views/filament/employee/pages/dtr.blade.php:8:        $canPrint = $this->canPrintDtr();
+resources/views/filament/employee/pages/dtr.blade.php:788:                            @foreach ($this->payrollPeriods() as $periodOption)
+resources/views/filament/employee/pages/dtr.blade.php:789:                                <option value="{{ $periodOption->id }}" @selected((string) $periodOption->id === (string) $this->period_id)>
+resources/views/filament/employee/pages/dtr.blade.php:815:                        <div class="dtr-stat-value">{{ $this->formatDayUnits($overview['present_entries']) }} Days</div>
+resources/views/filament/employee/pages/dtr.blade.php:882:                {{ $this->table }}
+resources/views/filament/employee/pages/station-proof-submissions.blade.php:182:                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+resources/views/filament/employee/pages/station-proof-submissions.blade.php:187:            {{ $this->content }}
+resources/views/filament/auth/login.blade.php:399:                {{ $this->content }}

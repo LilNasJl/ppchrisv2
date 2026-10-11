@@ -12,6 +12,8 @@ class OrganizationalStructure extends Page
 {
     use HasPageShield;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected string $view = 'filament.pages.under-construction';
 
     protected static ?string $title = 'Organizational Structure';

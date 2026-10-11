@@ -5,6 +5,9 @@ namespace App\Filament\Pages;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\PayrollPeriod;
+use App\Services\LoanAccessService;
+use App\Services\LoanTermsService;
+use App\Support\LoanAmortizationPreview;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -29,6 +32,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Override;
 use UnitEnum;
@@ -47,9 +51,9 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Banknotes;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Compensation and Benefits Management';
+    protected static string|UnitEnum|null $navigationGroup = 'Compensation & Benefits Mngt';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 4;
 
     public string $activeLoanTab = 'list';
 
@@ -90,6 +94,8 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     public function table(Table $table): Table
     {
+        app(LoanAccessService::class)->authorizeManagement(auth()->user());
+
         return $table
             ->heading('Loan List')
             ->description('Manage active employee loans and their amortization status.')
@@ -190,6 +196,8 @@ class LoanManagement extends Page implements HasForms, HasTable
                     Action::make('edit')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
+                        ->disabled(fn (EmployeeLoan $record): bool => $record->payments()->exists())
+                        ->tooltip(fn (EmployeeLoan $record): ?string => $record->payments()->exists() ? 'Payment history exists; loan terms are protected.' : null)
                         ->schema($this->loanFormSchema())
                         ->fillForm(fn (EmployeeLoan $record): array => [
                             'employee_id' => $record->employee_id,
@@ -210,6 +218,8 @@ class LoanManagement extends Page implements HasForms, HasTable
 
                     DeleteAction::make()
                         ->label('Delete')
+                        ->icon(Heroicon::Trash)
+                        ->disabled(fn (EmployeeLoan $record): bool => $record->payments()->exists())
                         ->modalHeading('Delete loan record'),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal)
@@ -257,21 +267,29 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     public function createLoan(): void
     {
-        EmployeeLoan::query()->create($this->normalizeLoanData($this->form->getState()));
+        app(LoanAccessService::class)->authorizeManagement(auth()->user());
+        $data = $this->form->getState();
+        $loan = DB::transaction(fn () => EmployeeLoan::query()->create($this->normalizeLoanData($data)), 3);
 
-        $this->form->fill($this->blankLoanData());
-        $this->activeLoanTab = 'information';
+        $this->form->fill($this->defaultLoanData());
+        $this->activeLoanTab = 'list';
         $this->resetTable();
+        $this->mountTableAction('ledger', (string) $loan->id);
 
         Notification::make()
-            ->title('Amortization generated')
+            ->title('Loan created')
+            ->body('The loan is ready for scheduled payroll deductions. Use View Ledger to track payments.')
             ->success()
             ->send();
     }
 
     protected function updateLoan(EmployeeLoan $loan, array $data): void
     {
-        $loan->update($this->normalizeLoanData($data, $loan));
+        app(LoanAccessService::class)->authorizeManagement(auth()->user());
+        DB::transaction(function () use ($loan, $data): void {
+            $loan = EmployeeLoan::query()->whereKey($loan->id)->lockForUpdate()->firstOrFail();
+            $loan->update($this->normalizeLoanData($data, $loan));
+        }, 3);
 
         Notification::make()
             ->title('Loan updated')
@@ -287,8 +305,10 @@ class LoanManagement extends Page implements HasForms, HasTable
                     Hidden::make('terms_basis')
                         ->default(EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH),
 
-                    Hidden::make('loan_interest')
-                        ->default(0),
+                    TextInput::make('loan_interest')
+                        ->label('Total Interest')
+                        ->numeric()->minValue(0)->default(0)->live(onBlur: true)
+                        ->visible(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD),
 
                     Fieldset::make('Employee Loan Details')
                         ->schema([
@@ -316,7 +336,6 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->default(EmployeeLoan::SCHEDULE_EVERY_PAYROLL)
                                 ->live()
                                 ->afterStateUpdated(function (Get $get, Set $set): void {
-                                    $set('amortization_start_payroll_period_id', null);
                                     $this->syncCalculatedPayment($get, $set);
                                 })
                                 ->required(),
@@ -331,7 +350,7 @@ class LoanManagement extends Page implements HasForms, HasTable
                             TextInput::make('loan_amount')
                                 ->label('Loan Amount')
                                 ->numeric()
-                                ->minValue(0)
+                                ->minValue(0.01)
                                 ->default(0)
                                 ->live(onBlur: true)
                                 ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
@@ -342,15 +361,18 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->helperText('Uses flat add-on interest across the selected loan term months.')
                                 ->numeric()
                                 ->minValue(0)
+                                ->maxValue(100)
                                 ->default(0)
                                 ->live(onBlur: true)
                                 ->afterStateUpdated(fn (Get $get, Set $set): mixed => $this->syncCalculatedPayment($get, $set))
-                                ->required(),
+                                ->visible(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH)
+                                ->required(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH),
 
                             TextInput::make('loan_terms_months')
-                                ->label('Loan Terms (Months)')
-                                ->helperText('One term equals one calendar month. Every Payroll deducts twice per month; quincena schedules deduct once per month.')
+                                ->label(fn (Get $get): string => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD ? 'Terms (Payroll Periods)' : 'Loan Terms (Months)')
+                                ->helperText(fn (Get $get): string => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD ? 'Existing loan: one term equals one payroll deduction.' : 'Every Payroll: two deductions per month. Quincena: one deduction per month.')
                                 ->numeric()
+                                ->integer()
                                 ->minValue(1)
                                 ->default(1)
                                 ->live(onBlur: true)
@@ -360,8 +382,9 @@ class LoanManagement extends Page implements HasForms, HasTable
                             TextInput::make('payment_amount')
                                 ->label('Payment per Payroll')
                                 ->numeric()
+                                ->live(onBlur: true)
                                 ->minValue(0)
-                                ->readOnly()
+                                ->readOnly(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH)
                                 ->helperText('Calculated from the total loan, selected schedule, and loan terms. The final payroll payment is adjusted for any centavo balance.')
                                 ->required(),
 
@@ -372,7 +395,10 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->getOptionLabelUsing(fn (mixed $value): ?string => $this->payrollPeriodOptionLabel($value))
                                 ->searchable()
                                 ->preload()
+                                ->live()
                                 ->required(),
+
+                            LoanAmortizationPreview::make('amortization_start_payroll_period_id'),
                         ])
                         ->columns([
                             'default' => 1,
@@ -419,41 +445,20 @@ class LoanManagement extends Page implements HasForms, HasTable
 
     protected function normalizeLoanData(array $data, ?EmployeeLoan $loan = null): array
     {
+        if ($loan && $loan->payments()->exists()) {
+            throw ValidationException::withMessages(['loan_amount' => 'Loan terms cannot be changed after payment history exists.']);
+        }
         $termsBasis = EmployeeLoan::normalizeTermsBasis(
-            $data['terms_basis'] ?? $loan?->terms_basis ?? EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
+            $loan?->terms_basis ?? EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
         );
-        $schedule = EmployeeLoan::normalizeSchedule($data['schedule'] ?? null);
-        $terms = max(1, (int) ($data['loan_terms_months'] ?? 1));
-        $loanAmount = (float) ($data['loan_amount'] ?? 0);
-        $interestRate = filled($data['interest_rate'] ?? null)
-            ? (float) $data['interest_rate']
-            : $loan?->interest_rate;
-        $loanInterest = EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH
-            ? EmployeeLoan::flatAddOnInterest($loanAmount, $interestRate ?? 0, $terms)
-            : (float) ($data['loan_interest'] ?? $loan?->loan_interest ?? 0);
-        $selectedStartPeriodId = filled($data['amortization_start_payroll_period_id'] ?? null)
-            ? (int) $data['amortization_start_payroll_period_id']
-            : null;
+        $data = app(LoanTermsService::class)->validate($data, 'amortization_start_payroll_period_id', $termsBasis);
 
-        $startPeriodId = $this->resolveAmortizationStartPeriod($selectedStartPeriodId, $schedule, $termsBasis, $loan);
-
-        return [
-            'employee_id' => (int) $data['employee_id'],
-            'loan_type' => $data['loan_type'] ?? 'Company Loan',
+        return array_replace($data, [
             'loan_date' => $data['loan_date'] ?? now()->toDateString(),
-            'schedule' => $schedule,
-            'loan_amount' => $loanAmount,
-            'loan_interest' => $loanInterest,
-            'interest_rate' => $interestRate,
-            'loan_terms_months' => $terms,
             'terms_basis' => $termsBasis,
-            'payment_amount' => EmployeeLoan::normalizeTermsBasis($termsBasis) === EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH
-                ? EmployeeLoan::plannedPaymentAmount($loanAmount, $loanInterest, $terms, $schedule, $termsBasis)
-                : (float) ($data['payment_amount'] ?? $loan?->payment_amount ?? 0),
-            'paid_amount' => (float) ($data['paid_amount'] ?? $loan?->paid_amount ?? 0),
-            'amortization_start_payroll_period_id' => $startPeriodId,
-            'status' => $data['status'] ?? $loan?->status ?? EmployeeLoan::STATUS_ACTIVE,
-        ];
+            'paid_amount' => (float) ($loan?->paid_amount ?? 0),
+            'status' => $loan?->status ?? EmployeeLoan::STATUS_ACTIVE,
+        ]);
     }
 
     protected function employeeSearchResults(string $search): array
@@ -534,37 +539,6 @@ class LoanManagement extends Page implements HasForms, HasTable
             $get('schedule'),
             EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH,
         ));
-    }
-
-    protected function resolveAmortizationStartPeriod(
-        ?int $periodId,
-        string $schedule,
-        string $termsBasis,
-        ?EmployeeLoan $loan = null,
-    ): ?int {
-        $period = $periodId ? PayrollPeriod::query()->find($periodId) : null;
-
-        if (! $period) {
-            throw ValidationException::withMessages([
-                'data.amortization_start_payroll_period_id' => 'Select a payroll period.',
-            ]);
-        }
-
-        if (EmployeeLoan::normalizeTermsBasis($termsBasis) !== EmployeeLoan::TERMS_BASIS_CALENDAR_MONTH) {
-            return $period->id;
-        }
-
-        if ($loan && $loan->amortization_start_payroll_period_id === $period->id) {
-            return $period->id;
-        }
-
-        if ($period->is_locked) {
-            throw ValidationException::withMessages([
-                'data.amortization_start_payroll_period_id' => 'Select an open payroll period.',
-            ]);
-        }
-
-        return $period->id;
     }
 
     protected function money(mixed $amount): string

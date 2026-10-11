@@ -13,6 +13,13 @@ class ListActivities extends ListRecords
 {
     protected static string $resource = ActivityResource::class;
 
+    protected string $view = 'filament.resources.activities.pages.list-activities';
+
+    public function getSubheading(): string
+    {
+        return 'Plan and manage company activities by date.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
