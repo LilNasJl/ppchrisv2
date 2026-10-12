@@ -6,13 +6,13 @@ use App\Filament\Widgets\Concerns\HasDashboardDtrFilters;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
-use Livewire\Attributes\Url;
 
 class OvertimeLogHoursChart extends ChartWidget
 {
     use HasDashboardDtrFilters;
 
-    #[Url(as: 'overtimeFilters')]
+    protected string $filterQueryKey = 'overtimeFilters';
+
     public ?array $filters = [];
 
     protected ?string $description = 'Approved, rejected, and pending overtime and early time-in hours.';

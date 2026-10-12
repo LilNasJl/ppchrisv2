@@ -64,9 +64,32 @@ class LeaveRequests extends Page implements HasForms, HasTable
         return 'Leave Requests';
     }
 
+    public function getSubheading(): ?string
+    {
+        return 'File leave applications, track approval stages, and view remaining leave credits.';
+    }
+
     public function getBreadcrumbs(): array
     {
         return [];
+    }
+
+    public function getLeaveStats(): array
+    {
+        $employee = $this->employee();
+        $total = Leave::query()->where('employee_id', $employee->id)->count();
+        $pending = Leave::query()->where('employee_id', $employee->id)->where('status', 'Pending')->count();
+        $approved = Leave::query()->where('employee_id', $employee->id)->where('status', 'Approved')->count();
+        $credits = (float) ($employee->leave_credits ?? 0);
+        $bdayCredits = (float) ($employee->birthday_leave_credits ?? 0);
+
+        return [
+            'total' => $total,
+            'pending' => $pending,
+            'approved' => $approved,
+            'credits' => $credits,
+            'bday_credits' => $bdayCredits,
+        ];
     }
 
     public function table(Table $table): Table
@@ -85,51 +108,87 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
                 TextColumn::make('created_at')
                     ->label('Date Filed')
+                    ->icon('heroicon-m-calendar')
                     ->dateTime('M d, Y h:i A')
                     ->sortable(),
 
                 TextColumn::make('leave_type')
-                    ->label('Type')
+                    ->label('Leave Type')
+                    ->badge()
+                    ->color(fn (string $state): string => match (true) {
+                        str_contains(strtolower($state), 'vacation') => 'info',
+                        str_contains(strtolower($state), 'sick') => 'warning',
+                        str_contains(strtolower($state), 'birthday') => 'success',
+                        str_contains(strtolower($state), 'half') => 'gray',
+                        default => 'purple',
+                    })
+                    ->icon('heroicon-m-tag')
                     ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
+                TextColumn::make('leave_from')
+                    ->label('Start Date')
+                    ->icon('heroicon-m-calendar-days')
+                    ->date('M d, Y')
                     ->sortable(),
 
-                TextColumn::make('leave_from')->label('From')->date('M d, Y'),
-                TextColumn::make('leave_to')->label('To')->date('M d, Y'),
-                TextColumn::make('requested_days')->label('Days')->state(fn (Leave $record) => $record->getRequestedLeaveDays()),
+                TextColumn::make('leave_to')
+                    ->label('End Date')
+                    ->icon('heroicon-m-calendar-days')
+                    ->date('M d, Y')
+                    ->sortable(),
+
+                TextColumn::make('requested_days')
+                    ->label('Duration')
+                    ->state(fn (Leave $record) => $record->getRequestedLeaveDays() . ' ' . \Illuminate\Support\Str::plural('day', $record->getRequestedLeaveDays()))
+                    ->badge()
+                    ->color('primary')
+                    ->icon('heroicon-m-clock')
+                    ->alignCenter(),
 
                 TextColumn::make('status')
+                    ->label('Approval Status')
                     ->formatStateUsing(fn (Leave $record) => $record->approval_label)
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn (string $state, Leave $record): string => match ($record->status) {
                         'Pending' => 'warning',
                         'Approved' => 'success',
                         'Rejected' => 'danger',
+                        'Cancelled' => 'gray',
                         default => 'gray',
+                    })
+                    ->icon(fn (string $state, Leave $record): string => match ($record->status) {
+                        'Pending' => 'heroicon-m-clock',
+                        'Approved' => 'heroicon-m-check-circle',
+                        'Rejected' => 'heroicon-m-x-circle',
+                        'Cancelled' => 'heroicon-m-no-symbol',
+                        default => 'heroicon-m-question-mark-circle',
                     })
                     ->sortable(),
             ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('viewLeave')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->modalSubmitAction(false)
-                        ->modalHeading('Leave Request Details')
-                        ->modalContent(fn (Leave $record) => view('filament.employee.pages.partials.leave-request-details', [
-                            'leave' => $record,
-                        ])),
+                Action::make('viewLeave')
+                    ->label('View')
+                    ->icon(Heroicon::Eye)
+                    ->color('primary')
+                    ->modalSubmitAction(false)
+                    ->modalHeading('Leave Request Details')
+                    ->modalContent(fn (Leave $record) => view('filament.employee.pages.partials.leave-request-details', [
+                        'leave' => $record,
+                    ])),
 
-                    Action::make('cancel')
-                        ->label('Cancel')
-                        ->icon(Heroicon::XCircle)
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->visible(fn (Leave $record): bool => $record->status === 'Pending')
-                        ->action(fn (Leave $record): mixed => $this->cancelLeave($record)),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal)
-                    ->tooltip('Actions'),
-            ]);
+                Action::make('cancel')
+                    ->label('Cancel')
+                    ->icon(Heroicon::XCircle)
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->visible(fn (Leave $record): bool => $record->status === 'Pending')
+                    ->action(fn (Leave $record): mixed => $this->cancelLeave($record)),
+            ])
+            ->emptyStateHeading('No leave requests found')
+            ->emptyStateDescription('There are no leave requests under this category. Click "New Leave Request" to submit one.')
+            ->emptyStateIcon(Heroicon::CalendarDays);
     }
 
     public function content(Schema $schema): Schema
@@ -143,18 +202,36 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     public function getTabs(): array
     {
+        $employee = $this->employee();
+
         return [
-            'all' => Tab::make('All'),
+            'all' => Tab::make('All Requests')
+                ->icon(Heroicon::ListBullet)
+                ->badge(fn () => Leave::query()->where('employee_id', $employee->id)->count())
+                ->badgeColor('gray'),
 
             'pending' => Tab::make('Pending')
+                ->icon(Heroicon::Clock)
+                ->badge(fn () => Leave::query()->where('employee_id', $employee->id)->where('status', 'Pending')->count())
+                ->badgeColor('warning')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Pending')),
 
             'approved' => Tab::make('Approved')
+                ->icon(Heroicon::CheckCircle)
+                ->badge(fn () => Leave::query()->where('employee_id', $employee->id)->where('status', 'Approved')->count())
+                ->badgeColor('success')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Approved')),
 
             'rejected' => Tab::make('Rejected')
+                ->icon(Heroicon::XCircle)
+                ->badge(fn () => Leave::query()->where('employee_id', $employee->id)->where('status', 'Rejected')->count())
+                ->badgeColor('danger')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Rejected')),
+
             'cancelled' => Tab::make('Cancelled')
+                ->icon(Heroicon::NoSymbol)
+                ->badge(fn () => Leave::query()->where('employee_id', $employee->id)->where('status', 'Cancelled')->count())
+                ->badgeColor('gray')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'Cancelled')),
         ];
     }

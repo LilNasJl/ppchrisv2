@@ -25,17 +25,44 @@ class SendTicket extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament.employee.pages.table-page';
+    protected string $view = 'filament.employee.pages.send-ticket';
 
     protected static ?string $slug = 'send-ticket';
 
     protected static ?string $title = 'Send Ticket';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
+    protected static ?string $navigationLabel = 'Send Ticket';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::Ticket;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Reports & Updates';
 
     protected static ?int $navigationSort = 2;
+
+    public function getSubheading(): ?string
+    {
+        return 'Submit inquiries, requests, or concerns to HR and track resolution status in real time.';
+    }
+
+    public function getTicketStats(): array
+    {
+        $employee = $this->employee();
+        $total = Ticket::query()->where('employee_id', $employee->id)->count();
+        $pending = Ticket::query()->where('employee_id', $employee->id)->where('status', Ticket::STATUS_PENDING)->count();
+        $done = Ticket::query()->where('employee_id', $employee->id)->where('status', Ticket::STATUS_DONE)->count();
+        $withComments = Ticket::query()
+            ->where('employee_id', $employee->id)
+            ->whereNotNull('hr_comment')
+            ->where('hr_comment', '!=', '')
+            ->count();
+
+        return [
+            'total' => $total,
+            'pending' => $pending,
+            'done' => $done,
+            'with_comments' => $withComments,
+        ];
+    }
 
     public function table(Table $table): Table
     {
@@ -50,41 +77,51 @@ class SendTicket extends Page implements HasTable
 
                 TextColumn::make('created_at')
                     ->label('Date Sent')
+                    ->icon('heroicon-m-calendar')
                     ->dateTime('M d, Y h:i A')
                     ->sortable(),
 
                 TextColumn::make('title')
-                    ->label('Ticket')
+                    ->label('Ticket Subject')
+                    ->icon('heroicon-m-document-text')
                     ->searchable()
                     ->sortable()
+                    ->weight('bold')
                     ->wrap(),
 
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => $state === Ticket::STATUS_DONE ? 'success' : 'warning')
+                    ->icon(fn (string $state): string => $state === Ticket::STATUS_DONE ? 'heroicon-m-check-circle' : 'heroicon-m-clock')
                     ->sortable(),
 
                 TextColumn::make('hr_comment')
-                    ->label('HR Comment')
-                    ->placeholder('No comment yet')
-                    ->limit(70)
+                    ->label('HR Response')
+                    ->icon(fn ($record) => filled($record->hr_comment) ? 'heroicon-m-chat-bubble-left-ellipsis' : null)
+                    ->placeholder('Waiting for HR review')
+                    ->limit(65)
                     ->wrap(),
 
                 TextColumn::make('employee_attachment_name')
                     ->label('Attached File')
-                    ->placeholder('No file')
+                    ->icon(fn ($record) => filled($record->employee_attachment_path) ? 'heroicon-m-paper-clip' : null)
+                    ->placeholder('None')
                     ->toggleable(),
             ])
             ->recordActions([
                 Action::make('view')
                     ->label('View')
                     ->icon(Heroicon::Eye)
-                    ->modalHeading('Ticket Details')
+                    ->color('primary')
+                    ->modalHeading('Ticket Details & Status')
                     ->modalSubmitAction(false)
                     ->modalContent(fn (Ticket $record) => view('filament.pages.partials.ticket-details', [
                         'ticket' => $record,
                     ])),
-            ]);
+            ])
+            ->emptyStateHeading('No tickets found')
+            ->emptyStateDescription('You have not submitted any inquiries or tickets to HR yet. Click "New Ticket" to send an inquiry.')
+            ->emptyStateIcon(Heroicon::Ticket);
     }
 
     public function content(Schema $schema): Schema
@@ -100,9 +137,10 @@ class SendTicket extends Page implements HasTable
         return [
             Action::make('newTicket')
                 ->label('New Ticket')
-                ->icon(Heroicon::Plus)
-                ->modalHeading('Send Ticket')
-                ->modalSubmitActionLabel('Send Ticket')
+                ->icon(Heroicon::PlusCircle)
+                ->modalHeading('Submit HR Support Ticket')
+                ->modalDescription('Send an inquiry, clarification, or document request directly to HR.')
+                ->modalSubmitActionLabel('Submit Ticket')
                 ->schema($this->ticketFormSchema())
                 ->action(fn (array $data): mixed => $this->createTicket($data)),
         ];
@@ -111,20 +149,26 @@ class SendTicket extends Page implements HasTable
     protected function ticketFormSchema(): array
     {
         return [
-            Section::make()
+            Section::make('Ticket Information')
+                ->description('Provide the details of your inquiry or concern.')
                 ->schema([
                     TextInput::make('title')
-                        ->label('Ticket Title')
+                        ->label('Ticket Subject')
+                        ->placeholder('e.g., Attendance Discrepancy, COE Request, Payroll Clarification')
+                        ->prefixIcon(Heroicon::DocumentText)
                         ->required()
-                        ->maxLength(255),
+                        ->maxLength(255)
+                        ->columnSpanFull(),
 
                     Textarea::make('description')
+                        ->label('Concern / Inquiries Description')
+                        ->placeholder('Describe your concern or inquiry in detail so HR can assist you promptly...')
                         ->required()
-                        ->rows(5)
+                        ->rows(4)
                         ->columnSpanFull(),
 
                     FileUpload::make('employee_attachment_path')
-                        ->label('Attached File')
+                        ->label('Supporting Attachment (Optional)')
                         ->disk('local')
                         ->directory('tickets/employee')
                         ->previewable(false)
@@ -137,10 +181,11 @@ class SendTicket extends Page implements HasTable
                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         ])
                         ->maxSize(2048)
+                        ->helperText('Allowed formats: PDF, JPG, PNG, Excel (Max: 2MB).')
                         ->fetchFileInformation(false)
                         ->columnSpanFull(),
                 ])
-                ->columns(2),
+                ->columns(1),
         ];
     }
 
@@ -152,8 +197,8 @@ class SendTicket extends Page implements HasTable
                     TextInput::make('date_sent')->label('Date Sent')->disabled()->dehydrated(false),
                     TextInput::make('status')->disabled()->dehydrated(false),
                     TextInput::make('title')->disabled()->dehydrated(false)->columnSpanFull(),
-                    Textarea::make('description')->rows(5)->disabled()->dehydrated(false)->columnSpanFull(),
-                    Textarea::make('hr_comment')->label('HR Comment')->rows(4)->disabled()->dehydrated(false)->columnSpanFull(),
+                    Textarea::make('description')->rows(4)->disabled()->dehydrated(false)->columnSpanFull(),
+                    Textarea::make('hr_comment')->label('HR Response')->rows(3)->disabled()->dehydrated(false)->columnSpanFull(),
                 ])
                 ->columns(2),
         ];
@@ -170,7 +215,7 @@ class SendTicket extends Page implements HasTable
         if ($pendingTickets >= 3) {
             Notification::make()
                 ->title('Ticket limit reached')
-                ->body('You already have 3 pending tickets. Please wait until HR marks one ticket as done before sending another request.')
+                ->body('You already have 3 pending tickets. Please wait until HR resolves a ticket before submitting another.')
                 ->danger()
                 ->send();
 
@@ -189,7 +234,8 @@ class SendTicket extends Page implements HasTable
         ]);
 
         Notification::make()
-            ->title('Ticket sent')
+            ->title('Ticket submitted successfully')
+            ->body('Your ticket has been sent to Human Resources.')
             ->success()
             ->send();
     }

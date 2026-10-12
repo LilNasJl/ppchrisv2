@@ -6,9 +6,9 @@ use App\Models\Deduction;
 use App\Models\Employee;
 use App\Services\EmployeeProfileCompletionService;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -19,6 +19,8 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\View;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -70,6 +72,26 @@ class MyProfile extends Page implements HasForms
         return 'warning';
     }
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('saveProfile')
+                ->label('Save Changes')
+                ->icon(Heroicon::CheckCircle)
+                ->action(fn () => $this->save()),
+        ];
+    }
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
+
+    public function getSubheading(): string
+    {
+        return 'Review your personal information, employment details, statutory IDs, and account settings.';
+    }
+
     public function mount(): void
     {
         $user = auth()->user();
@@ -107,19 +129,45 @@ class MyProfile extends Page implements HasForms
             Tabs::make('Profile Details')
                 ->tabs([
                     Tabs\Tab::make('My Account')
+                        ->icon(Heroicon::UserCircle)
                         ->schema([
-                            Section::make('Account Overview')
-                                ->description('Review your account identity and update your sign-in details.')
+                            View::make('filament.employee.pages.partials.profile-account-card')
+                                ->columnSpanFull(),
+
+                            Section::make('Account Credentials & Sign-In Details')
+                                ->description('Manage your login identity and update your system notification email.')
                                 ->schema([
-                                    Placeholder::make('profile_photo_preview')
-                                        ->hiddenLabel()
-                                        ->content(fn () => view('filament.resources.users.partials.profile-picture', [
-                                            'record' => auth()->user(),
-                                        ]))
-                                        ->columnSpanFull(),
+                                    TextInput::make('account_full_name')
+                                        ->label('Full Name')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::User),
+
+                                    TextInput::make('account_employee_id')
+                                        ->label('Employee ID')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::Identification),
+
+                                    TextInput::make('account_fingerprint_id')
+                                        ->label('Biometric / Fingerprint ID')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::FingerPrint),
+
+                                    TextInput::make('email')
+                                        ->label('Account Email Address')
+                                        ->email()
+                                        ->required()
+                                        ->prefixIcon(Heroicon::Envelope)
+                                        ->rules(fn () => [
+                                            Rule::unique('users', 'email')->ignore(auth()->id()),
+                                        ])
+                                        ->helperText('Used for system sign-in and communications.')
+                                        ->columnSpan(['default' => 1, 'sm' => 2, 'xl' => 2]),
 
                                     FileUpload::make('profile_photo_path')
-                                        ->label('Profile Picture')
+                                        ->label('Update Profile Photo')
                                         ->image()
                                         ->previewable()
                                         ->openable()
@@ -130,129 +178,239 @@ class MyProfile extends Page implements HasForms
                                         ->directory('profile-photos')
                                         ->visibility('public')
                                         ->fetchFileInformation(false)
-                                        ->columnSpanFull(),
-
-                                    TextInput::make('account_employee_id')
-                                        ->label('Employee ID')
-                                        ->disabled()
-                                        ->dehydrated(false),
-
-                                    TextInput::make('account_fingerprint_id')
-                                        ->label('Fingerprint ID')
-                                        ->disabled()
-                                        ->dehydrated(false),
-
-                                    TextInput::make('account_full_name')
-                                        ->label('Full Name')
-                                        ->disabled()
-                                        ->dehydrated(false),
-
-                                    TextInput::make('email')
-                                        ->label('Email')
-                                        ->email()
-                                        ->required()
-                                        ->rules(fn () => [
-                                            Rule::unique('users', 'email')->ignore(auth()->id()),
-                                        ]),
+                                        ->helperText('Supported formats: PNG, JPG (Max 3MB).')
+                                        ->columnSpan(['default' => 1, 'sm' => 2, 'xl' => 1]),
                                 ])
-                                ->columns(2),
+                                ->columns(['default' => 1, 'sm' => 2, 'xl' => 3]),
 
-                            Section::make('Security')
+                            Section::make('Security & Password')
+                                ->description('Leave blank to retain your existing login password. Minimum 8 characters.')
                                 ->schema([
                                     TextInput::make('password')
                                         ->label('New Password')
                                         ->password()
                                         ->revealable()
                                         ->confirmed()
+                                        ->minLength(8)
+                                        ->prefixIcon(Heroicon::LockClosed)
+                                        ->placeholder('Enter new password (min. 8 characters)')
                                         ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? Hash::make($state) : null)
-                                        ->dehydrated(fn (?string $state): bool => filled($state))
-                                        ->minLength(8),
+                                        ->dehydrated(fn (?string $state): bool => filled($state)),
 
                                     TextInput::make('password_confirmation')
                                         ->label('Confirm New Password')
                                         ->password()
                                         ->revealable()
+                                        ->prefixIcon(Heroicon::ShieldCheck)
+                                        ->placeholder('Confirm your new password')
                                         ->dehydrated(false),
                                 ])
-                                ->columns(2),
+                                ->columns(['default' => 1, 'sm' => 2]),
                         ]),
 
                     Tabs\Tab::make('Basic Info')
+                        ->icon(Heroicon::Identification)
                         ->badge(fn (): ?string => $this->profileCompletionBadge('basic'))
                         ->badgeColor('warning')
                         ->schema([
-                            Section::make()
+                            Section::make('Personal Details & Permanent Address')
+                                ->description('Keep your personal details, emergency contact, and residence records current.')
                                 ->schema([
-                                    TextInput::make('lastname')->disabled()->dehydrated(false),
-                                    TextInput::make('middlename')->disabled()->dehydrated(false),
-                                    TextInput::make('firstname')->disabled()->dehydrated(false),
-                                    DatePicker::make('birthdate')->required(),
-                                    Select::make('status')
-                                        ->label('Civil Status')
-                                        ->options([
-                                            'single' => 'Single',
-                                            'married' => 'Married',
-                                            'divorce' => 'Divorce',
-                                            'widowed' => 'Widowed',
-                                            'separated' => 'Separated',
-                                            'annuled' => 'Annuled',
+                                    Fieldset::make('Official Legal Name')
+                                        ->schema([
+                                            TextInput::make('firstname')
+                                                ->label('First Name')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::User),
+
+                                            TextInput::make('middlename')
+                                                ->label('Middle Name')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::User),
+
+                                            TextInput::make('lastname')
+                                                ->label('Last Name')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::User),
                                         ])
-                                        ->required(),
-                                    TextInput::make('gender')->disabled()->dehydrated(false),
-                                    TextInput::make('mobile')->label('Mobile Number'),
-                                    TextInput::make('kids')->label('No. of Kids')->numeric(),
-                                    Textarea::make('address')->label('Permanent Address')->required()->columnSpanFull(),
-                                ])
-                                ->columns(3),
+                                        ->columns(['default' => 1, 'sm' => 3]),
+
+                                    Fieldset::make('Demographics & Dependents')
+                                        ->schema([
+                                            DatePicker::make('birthdate')
+                                                ->label('Date of Birth')
+                                                ->required()
+                                                ->prefixIcon(Heroicon::Calendar),
+
+                                            TextInput::make('gender')
+                                                ->label('Gender')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::UserGroup),
+
+                                            Select::make('status')
+                                                ->label('Civil Status')
+                                                ->options([
+                                                    'single' => 'Single',
+                                                    'married' => 'Married',
+                                                    'divorce' => 'Divorce',
+                                                    'widowed' => 'Widowed',
+                                                    'separated' => 'Separated',
+                                                    'annuled' => 'Annuled',
+                                                ])
+                                                ->required()
+                                                ->prefixIcon(Heroicon::Heart),
+
+                                            TextInput::make('kids')
+                                                ->label('No. of Kids / Dependents')
+                                                ->numeric()
+                                                ->placeholder('0')
+                                                ->prefixIcon(Heroicon::UserPlus),
+                                        ])
+                                        ->columns(['default' => 1, 'sm' => 2, 'xl' => 4]),
+
+                                    Fieldset::make('Contact & Permanent Residence')
+                                        ->schema([
+                                            TextInput::make('mobile')
+                                                ->label('Mobile Number')
+                                                ->placeholder('e.g. 09123456789')
+                                                ->prefixIcon(Heroicon::Phone)
+                                                ->columnSpan(['default' => 1, 'lg' => 1]),
+
+                                            Textarea::make('address')
+                                                ->label('Permanent Address')
+                                                ->required()
+                                                ->rows(2)
+                                                ->placeholder('House / Unit No., Street, Barangay, City, Province')
+                                                ->columnSpan(['default' => 1, 'lg' => 2]),
+                                        ])
+                                        ->columns(['default' => 1, 'lg' => 3]),
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Designation')
+                        ->icon(Heroicon::Briefcase)
                         ->badge(fn (): ?string => $this->profileCompletionBadge('designation'))
                         ->badgeColor('warning')
                         ->schema([
-                            Section::make()
+                            Section::make('Employment & Company Designation')
+                                ->description('Official company role, organizational placement, and service record.')
                                 ->schema([
-                                    TextInput::make('fingerprint_id')->label('Fingerprint ID')->disabled()->dehydrated(false),
-                                    TextInput::make('designation')->disabled()->dehydrated(false),
-                                    TextInput::make('department')->disabled()->dehydrated(false),
-                                    TextInput::make('branch')->disabled()->dehydrated(false),
-                                    DatePicker::make('hired_date')->disabled()->dehydrated(false),
-                                    TextInput::make('tenure')->label('Employee Tenure')->disabled()->dehydrated(false),
-                                    TextInput::make('employment_type')->disabled()->dehydrated(false),
-                                ])
-                                ->columns(2),
+                                    Fieldset::make('Organizational Placement')
+                                        ->schema([
+                                            TextInput::make('designation')
+                                                ->label('Job Designation / Role')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::Briefcase),
+
+                                            TextInput::make('department')
+                                                ->label('Department')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::BuildingOffice2),
+
+                                            TextInput::make('branch')
+                                                ->label('Branch / Location')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::BuildingStorefront),
+                                        ])
+                                        ->columns(['default' => 1, 'sm' => 3]),
+
+                                    Fieldset::make('Employment Records & Biometrics')
+                                        ->schema([
+                                            TextInput::make('employment_type')
+                                                ->label('Employment Status')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::CheckBadge),
+
+                                            DatePicker::make('hired_date')
+                                                ->label('Date Hired')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::CalendarDays),
+
+                                            TextInput::make('tenure')
+                                                ->label('Length of Service')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::Clock),
+
+                                            TextInput::make('fingerprint_id')
+                                                ->label('Biometric / Fingerprint ID')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->prefixIcon(Heroicon::FingerPrint),
+                                        ])
+                                        ->columns(['default' => 1, 'sm' => 2, 'xl' => 4]),
+                                ]),
                         ]),
 
                     Tabs\Tab::make("Government ID's")
+                        ->icon(Heroicon::BuildingLibrary)
                         ->schema([
-                            Section::make()
+                            Section::make('Statutory & Government Identification Numbers')
+                                ->description('Mandatory Philippine statutory numbers and government fund IDs.')
                                 ->schema([
-                                    TextInput::make('gsis')
-                                        ->label('GSIS BP #')
-                                        ->placeholder('e.g., 20012345678'),
-                                    TextInput::make('philhealth')
-                                        ->label('PhilHealth ID #')
-                                        ->placeholder('e.g., 01-234567890-1'),
-                                    TextInput::make('pagibig')
-                                        ->label('Pag-IBIG MID #')
-                                        ->placeholder('e.g., 1234-5678-9012'),
-                                    TextInput::make('tin')
-                                        ->label('TIN #')
-                                        ->placeholder('e.g., 000-000-000'),
-                                    TextInput::make('sss')
-                                        ->label('SSS #')
-                                        ->placeholder('e.g., 33-1234567-8'),
-                                ])
-                                ->columns(2),
+                                    Fieldset::make('Primary Statutory Agency Numbers')
+                                        ->schema([
+                                            TextInput::make('sss')
+                                                ->label('SSS Number')
+                                                ->placeholder('e.g., 33-1234567-8')
+                                                ->prefixIcon(Heroicon::CreditCard)
+                                                ->helperText('Social Security System'),
+
+                                            TextInput::make('philhealth')
+                                                ->label('PhilHealth ID Number')
+                                                ->placeholder('e.g., 01-234567890-1')
+                                                ->prefixIcon(Heroicon::Heart)
+                                                ->helperText('Philippine Health Insurance Corp.'),
+
+                                            TextInput::make('pagibig')
+                                                ->label('Pag-IBIG / HDMF MID')
+                                                ->placeholder('e.g., 1234-5678-9012')
+                                                ->prefixIcon(Heroicon::Home)
+                                                ->helperText('Home Development Mutual Fund'),
+
+                                            TextInput::make('tin')
+                                                ->label('TIN (Tax Identification No.)')
+                                                ->placeholder('e.g., 000-000-000')
+                                                ->prefixIcon(Heroicon::DocumentText)
+                                                ->helperText('Bureau of Internal Revenue'),
+                                        ])
+                                        ->columns(['default' => 1, 'sm' => 2, 'xl' => 4]),
+
+                                    Fieldset::make('Additional Government Agency')
+                                        ->schema([
+                                            TextInput::make('gsis')
+                                                ->label('GSIS BP Number (Optional)')
+                                                ->placeholder('e.g., 20012345678')
+                                                ->prefixIcon(Heroicon::BuildingLibrary)
+                                                ->helperText('Government Service Insurance System (if applicable)'),
+                                        ])
+                                        ->columns(1),
+                                ]),
                         ]),
 
                     Tabs\Tab::make('Education')
+                        ->icon(Heroicon::AcademicCap)
                         ->badge(fn (): ?string => $this->profileCompletionBadge('education'))
                         ->badgeColor('warning')
                         ->schema([
-                            Section::make()
+                            Section::make('Educational Attainment')
+                                ->description('Highest educational level attended and graduation year.')
                                 ->schema([
-                                    TextInput::make('school_name')->label('School Name'),
+                                    TextInput::make('school_name')
+                                        ->label('School / University / College Name')
+                                        ->placeholder('e.g., University of Southeastern Philippines')
+                                        ->prefixIcon(Heroicon::AcademicCap)
+                                        ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 2]),
+
                                     Select::make('school_level')
                                         ->label('Highest Level Attended')
                                         ->options([
@@ -261,39 +419,70 @@ class MyProfile extends Page implements HasForms
                                             'Vocational' => 'Vocational / Trade Course',
                                             'College' => 'College (Tertiary)',
                                             'Graduate Studies' => 'Graduate Studies',
-                                        ]),
-                                    DatePicker::make('year_grad')->label('Year Graduated'),
+                                        ])
+                                        ->prefixIcon(Heroicon::Bookmark)
+                                        ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 1]),
+
+                                    DatePicker::make('year_grad')
+                                        ->label('Year / Date Graduated')
+                                        ->prefixIcon(Heroicon::Calendar)
+                                        ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 1]),
                                 ])
-                                ->columns(2),
+                                ->columns(['default' => 1, 'sm' => 2, 'lg' => 4]),
                         ]),
 
                     Tabs\Tab::make('Deductions')
+                        ->icon(Heroicon::Calculator)
                         ->schema([
-                            Fieldset::make('Deductions')
-                                ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['Deductions']))
-                                ->columns(2),
-
-                            Fieldset::make('REMITTANCES')
-                                ->schema(fn (): array => $this->getDeductionFields(self::DEDUCTION_GROUPS['REMITTANCES']))
-                                ->columns(2),
-
-                            Fieldset::make('Other Deductions')
-                                ->schema(fn (): array => $this->getOtherDeductionFields())
-                                ->columns(2),
+                            View::make('filament.employee.pages.partials.deductions-tab')
+                                ->columnSpanFull(),
                         ]),
 
                     Tabs\Tab::make('My Salary')
+                        ->icon(Heroicon::Banknotes)
                         ->badge(fn (): ?string => $this->profileCompletionBadge('salary'))
                         ->badgeColor('warning')
                         ->schema([
-                            Section::make()
+                            View::make('filament.employee.pages.partials.salary-cards')
+                                ->columnSpanFull(),
+
+                            Section::make('Salary Structure & Rate Records')
+                                ->description('Official compensation package and payment channel recorded by HR.')
                                 ->schema([
-                                    TextInput::make('rate_type')->label('Rate Type')->disabled()->dehydrated(false),
-                                    TextInput::make('payment_type')->label('Payment Type')->disabled()->dehydrated(false),
-                                    TextInput::make('daily_rate')->label('Daily Rate')->prefix('PHP')->disabled()->dehydrated(false),
-                                    TextInput::make('allowance')->label('Monthly Allowance')->prefix('PHP')->disabled()->dehydrated(false),
+                                    TextInput::make('rate_type')
+                                        ->label('Rate Basis')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::Tag),
+
+                                    TextInput::make('daily_rate')
+                                        ->label('Daily Rate')
+                                        ->prefix('PHP')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::CurrencyDollar),
+
+                                    TextInput::make('monthly_rate')
+                                        ->label('Monthly Basic Rate')
+                                        ->prefix('PHP')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::CurrencyDollar),
+
+                                    TextInput::make('allowance')
+                                        ->label('Monthly Allowance')
+                                        ->prefix('PHP')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::Gift),
+
+                                    TextInput::make('payment_type')
+                                        ->label('Payment Channel')
+                                        ->disabled()
+                                        ->dehydrated(false)
+                                        ->prefixIcon(Heroicon::CreditCard),
                                 ])
-                                ->columns(2),
+                                ->columns(['default' => 1, 'sm' => 2, 'xl' => 3]),
                         ]),
                 ])
                 ->persistTabInQueryString()
@@ -330,70 +519,9 @@ class MyProfile extends Page implements HasForms
         $this->employee()->update($payload);
 
         Notification::make()
-            ->title('Profile updated')
+            ->title('Profile updated successfully')
             ->success()
             ->send();
-    }
-
-    protected function getDeductionFields(array $titles): array
-    {
-        $this->ensureDefaultDeductions();
-
-        return Deduction::query()
-            ->whereIn('title', $titles)
-            ->orderByRaw('FIELD(title, "'.implode('","', $titles).'")')
-            ->get()
-            ->map(fn (Deduction $deduction) => $this->makeDeductionInput($deduction))
-            ->all();
-    }
-
-    protected function getOtherDeductionFields(): array
-    {
-        $this->ensureDefaultDeductions();
-
-        $deductionIds = $this->employee()
-            ->employeeDeductions()
-            ->whereHas('deduction', fn ($query) => $query->whereNotIn('title', Deduction::defaultTitles()))
-            ->where('amount', '>', 0)
-            ->pluck('deduction_id')
-            ->all();
-
-        if (empty($deductionIds)) {
-            return [
-                Placeholder::make('no_other_deductions')
-                    ->hiddenLabel()
-                    ->content('No other deductions linked.')
-                    ->columnSpanFull(),
-            ];
-        }
-
-        return Deduction::query()
-            ->whereIn('id', $deductionIds)
-            ->whereNotIn('title', Deduction::defaultTitles())
-            ->orderBy('title')
-            ->get()
-            ->map(fn (Deduction $deduction) => $this->makeDeductionInput($deduction))
-            ->all();
-    }
-
-    protected function makeDeductionInput(Deduction $deduction): TextInput
-    {
-        return TextInput::make("deductions.{$deduction->id}")
-            ->label($deduction->title)
-            ->prefix('PHP')
-            ->disabled()
-            ->dehydrated(false)
-            ->default(0);
-    }
-
-    protected function ensureDefaultDeductions(): void
-    {
-        foreach (Deduction::defaultTitles() as $title) {
-            Deduction::query()->firstOrCreate(
-                ['title' => $title],
-                ['description' => $title],
-            );
-        }
     }
 
     protected function getDeductionState(Employee $employee): array
@@ -408,6 +536,16 @@ class MyProfile extends Page implements HasForms
             ->pluck('id')
             ->mapWithKeys(fn ($id) => [(string) $id => $saved[$id] ?? 0])
             ->toArray();
+    }
+
+    protected function ensureDefaultDeductions(): void
+    {
+        foreach (Deduction::defaultTitles() as $title) {
+            Deduction::query()->firstOrCreate(
+                ['title' => $title],
+                ['description' => $title],
+            );
+        }
     }
 
     protected function employee(): Employee

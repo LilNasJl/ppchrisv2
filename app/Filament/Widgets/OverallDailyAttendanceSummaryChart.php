@@ -5,13 +5,13 @@ namespace App\Filament\Widgets;
 use App\Filament\Widgets\Concerns\HasDashboardDtrFilters;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
-use Livewire\Attributes\Url;
 
 class OverallDailyAttendanceSummaryChart extends ChartWidget
 {
     use HasDashboardDtrFilters;
 
-    #[Url(as: 'attendanceFilters')]
+    protected string $filterQueryKey = 'attendanceFilters';
+
     public ?array $filters = [];
 
     protected ?string $description = 'Employee entries for the selected branch, payroll period, and date.';
@@ -39,7 +39,6 @@ class OverallDailyAttendanceSummaryChart extends ChartWidget
                 $query->whereNull('is_absent')->orWhere('is_absent', false);
             })
             ->whereNotNull('time_in')
-            ->whereNotNull('time_out')
             ->whereRaw("LOWER(TRIM(COALESCE(schedule_type, ''))) NOT IN ('absent', 'leave')")
             ->count();
 

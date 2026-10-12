@@ -48,6 +48,39 @@ class Loan extends Page implements HasTable
 
     protected static ?int $navigationSort = 4;
 
+    public function getSubheading(): ?string
+    {
+        return 'View your active company and statutory loans, repayment schedules, balances, and request history.';
+    }
+
+    public function getLoanStats(): array
+    {
+        $employee = $this->employee();
+
+        $loans = EmployeeLoan::query()
+            ->where('employee_id', $employee->id)
+            ->get();
+
+        $activeLoans = $loans->where('status', EmployeeLoan::STATUS_ACTIVE);
+        $totalBalance = $activeLoans->sum(fn (EmployeeLoan $loan) => $loan->balance_amount);
+        $totalBorrowing = $loans->sum(fn (EmployeeLoan $loan) => $loan->total_amount);
+        $totalPaid = $loans->sum(fn (EmployeeLoan $loan) => (float) $loan->paid_amount);
+
+        $pendingRequests = \App\Models\EmployeeLoanRequest::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', \App\Models\EmployeeLoanRequest::STATUS_PENDING)
+            ->count();
+
+        return [
+            'active_count' => $activeLoans->count(),
+            'total_balance' => $totalBalance,
+            'total_borrowing' => $totalBorrowing,
+            'total_paid' => $totalPaid,
+            'pending_requests' => $pendingRequests,
+            'total_loans' => $loans->count(),
+        ];
+    }
+
     public function getBreadcrumbs(): array
     {
         return [];
@@ -220,38 +253,50 @@ class Loan extends Page implements HasTable
                 TextColumn::make('loan_type')
                     ->label('Loan Type')
                     ->badge()
+                    ->color('info')
+                    ->icon('heroicon-m-banknotes')
+                    ->weight('bold')
                     ->searchable(),
 
                 TextColumn::make('loan_date')
                     ->label('Loan Date')
+                    ->icon('heroicon-m-calendar')
                     ->date('M d, Y')
                     ->sortable(),
 
                 TextColumn::make('total_amount')
                     ->label('Total Loan')
                     ->alignEnd()
+                    ->weight('semibold')
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->total_amount)
-                    ->formatStateUsing(fn (mixed $state): string => number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
 
                 TextColumn::make('paid_amount')
                     ->label('Paid')
                     ->alignEnd()
-                    ->formatStateUsing(fn (mixed $state): string => number_format((float) $state, 2)),
+                    ->color('success')
+                    ->weight('semibold')
+                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
 
                 TextColumn::make('balance_amount')
-                    ->label('Balance')
+                    ->label('Remaining Balance')
                     ->alignEnd()
+                    ->weight('bold')
+                    ->color(fn (EmployeeLoan $record): string => $record->balance_amount > 0 ? 'danger' : 'success')
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->balance_amount)
-                    ->formatStateUsing(fn (mixed $state): string => number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
 
                 TextColumn::make('payment_amount')
-                    ->label('Payment')
+                    ->label('Payment / Period')
                     ->alignEnd()
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->payment_amount)
-                    ->formatStateUsing(fn (mixed $state): string => number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
 
                 TextColumn::make('schedule')
                     ->label('Schedule')
+                    ->badge()
+                    ->color('gray')
+                    ->icon('heroicon-m-clock')
                     ->wrap(),
 
                 TextColumn::make('amortizationStartPayrollPeriod.title')
@@ -266,12 +311,19 @@ class Loan extends Page implements HasTable
                         EmployeeLoan::STATUS_PAID => 'info',
                         EmployeeLoan::STATUS_CANCELLED => 'danger',
                         default => 'gray',
+                    })
+                    ->icon(fn (string $state): string => match ($state) {
+                        EmployeeLoan::STATUS_ACTIVE => 'heroicon-m-check-circle',
+                        EmployeeLoan::STATUS_PAID => 'heroicon-m-shield-check',
+                        EmployeeLoan::STATUS_CANCELLED => 'heroicon-m-x-circle',
+                        default => 'heroicon-m-question-mark-circle',
                     }),
             ])
             ->recordActions([
                 Action::make('history')
-                    ->label('History')
+                    ->label('Ledger / History')
                     ->icon(Heroicon::Clock)
+                    ->color('primary')
                     ->modalHeading(fn (EmployeeLoan $record): string => 'Loan History - '.$record->loan_type)
                     ->modalWidth('7xl')
                     ->modalSubmitAction(false)
@@ -279,7 +331,10 @@ class Loan extends Page implements HasTable
                     ->modalContent(fn (EmployeeLoan $record) => view('filament.pages.partials.loan-ledger', [
                         'loan' => $record,
                     ])),
-            ]);
+            ])
+            ->emptyStateHeading('No active or historical loans found')
+            ->emptyStateDescription('You do not have any company or statutory loans recorded. Click "Request Loan" to file a new loan request.')
+            ->emptyStateIcon(Heroicon::Banknotes);
     }
 
     protected function openPayrollPeriodOptions(): array

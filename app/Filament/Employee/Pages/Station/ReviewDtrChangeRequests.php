@@ -39,7 +39,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected string $view = 'filament.employee.pages.station.table-page';
+    protected string $view = 'filament.employee.pages.station.review-dtr-change-requests';
 
     protected static ?string $slug = 'station/change-requests';
 
@@ -99,6 +99,38 @@ class ReviewDtrChangeRequests extends Page implements HasTable
         return 'Review attendance change requests from employees in your assigned stations.';
     }
 
+    public function getChangeRequestStats(): array
+    {
+        $employee = auth()->user()?->employee;
+        if (! $employee) {
+            return [
+                'pending' => 0,
+                'history_count' => 0,
+                'resolved_today' => 0,
+            ];
+        }
+
+        $pending = DtrChangeRequest::query()
+            ->pendingForApprover($employee)
+            ->count();
+
+        $historyCount = DtrChangeRequest::query()
+            ->forStationHistory(auth()->user())
+            ->where('status', '!=', DtrChangeRequest::STATUS_PENDING)
+            ->count();
+
+        $resolvedToday = DtrChangeRequest::query()
+            ->forStationHistory(auth()->user())
+            ->whereDate('reviewed_at', now()->toDateString())
+            ->count();
+
+        return [
+            'pending' => $pending,
+            'history_count' => $historyCount,
+            'resolved_today' => $resolvedToday,
+        ];
+    }
+
     public function table(Table $table): Table
     {
         $employee = auth()->user()?->employee;
@@ -116,17 +148,20 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                 TextColumn::make('employee_name_snapshot')
                     ->label('Employee')
                     ->description(fn (DtrChangeRequest $record): string => ($record->employee_company_id_snapshot ? "ID: {$record->employee_company_id_snapshot}" : '') . ($record->branch_name_snapshot ? " • {$record->branch_name_snapshot}" : ''))
+                    ->weight('bold')
                     ->searchable(['employee_name_snapshot', 'employee_company_id_snapshot', 'branch_name_snapshot'])
                     ->sortable(),
 
                 TextColumn::make('branch_name_snapshot')
                     ->label('Station / Scope')
+                    ->icon('heroicon-m-building-storefront')
                     ->searchable()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 TextColumn::make('dtr_date')
                     ->label('D.T.R Date')
+                    ->icon('heroicon-m-calendar-days')
                     ->getStateUsing(function (DtrChangeRequest $record): ?string {
                         if ($record->request_type === DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES) {
                             $count = count($record->proposed_values['entries'] ?? []);
@@ -143,6 +178,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                 TextColumn::make('request_type_label')
                     ->label('Request Type')
                     ->badge()
+                    ->icon('heroicon-m-tag')
                     ->color('info'),
 
                 TextColumn::make('display_status')
@@ -154,10 +190,18 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                         DtrChangeRequest::STATUS_CANCELLED => 'gray',
                         default => 'warning',
                     })
+                    ->icon(fn (DtrChangeRequest $record): string => match ($record->status) {
+                        DtrChangeRequest::STATUS_APPROVED => 'heroicon-m-check-circle',
+                        DtrChangeRequest::STATUS_REJECTED => 'heroicon-m-x-circle',
+                        DtrChangeRequest::STATUS_CANCELLED => 'heroicon-m-no-symbol',
+                        default => 'heroicon-m-clock',
+                    })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction)),
 
                 TextColumn::make('current_level')
                     ->label('Approval Level')
+                    ->badge()
+                    ->color('primary')
                     ->formatStateUsing(fn (DtrChangeRequest $record): string => $record->status === DtrChangeRequest::STATUS_PENDING
                         ? "L{$record->current_level}/{$record->total_levels}: ".($record->current_step_label ?? 'Review')
                         : ($record->status === DtrChangeRequest::STATUS_APPROVED ? 'Completed' : 'Finalized')),

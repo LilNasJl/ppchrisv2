@@ -71,6 +71,31 @@ class StationOverview extends Page
         )->count();
     }
 
+    public function getStationOverviewStats(): array
+    {
+        $user = auth()->user();
+        $employee = $user?->employee;
+
+        $branchesCount = $this->branchCount();
+        $employeesCount = $this->employeeCount();
+
+        $pendingChangeRequests = \App\Models\DtrChangeRequest::query()
+            ->pendingForApprover($employee)
+            ->count();
+
+        $pendingLeaves = \App\Models\Leave::query()
+            ->whereHas('employee', fn ($empQ) => StationManagementAccess::scopeManagedEmployeesQuery($empQ, $user))
+            ->whereHas('approvalSteps', fn ($q) => $q->where('approver_employee_id', $employee?->id)->whereNotNull('activated_at')->where('status', 'Pending'))
+            ->count();
+
+        return [
+            'branches' => $branchesCount,
+            'employees' => $employeesCount,
+            'pending_cr' => $pendingChangeRequests,
+            'pending_leaves' => $pendingLeaves,
+        ];
+    }
+
     #[Override]
     protected function getFooterWidgets(): array
     {

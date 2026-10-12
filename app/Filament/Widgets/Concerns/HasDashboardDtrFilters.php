@@ -18,12 +18,12 @@ trait HasDashboardDtrFilters
 
     public function mountHasFiltersSchema(): void
     {
-        $filters = $this->filters ?? [];
-
         $this->getFiltersSchema()->fill();
 
-        if ($filters !== []) {
-            $this->filters = array_replace($this->filters ?? [], $filters);
+        $queryKey = $this->getFilterQueryKey();
+        $queryFilters = request()->query($queryKey);
+        if (is_array($queryFilters) && $queryFilters !== []) {
+            $this->filters = array_replace($this->filters ?? [], $queryFilters);
         }
 
         if ($this->hasDeferredFilters()) {
@@ -33,6 +33,11 @@ trait HasDashboardDtrFilters
         // ChartWidget mounts before this trait and may cache unfiltered data.
         $this->cachedData = null;
         $this->dataChecksum = $this->generateDataChecksum();
+    }
+
+    protected function getFilterQueryKey(): string
+    {
+        return property_exists($this, 'filterQueryKey') ? $this->filterQueryKey : 'filters';
     }
 
     public function filtersSchema(Schema $schema): Schema
@@ -59,12 +64,16 @@ trait HasDashboardDtrFilters
         if ($this->hasAttendanceDateFilter()) {
             $components[] = DatePicker::make('date')
                 ->label('Date')
-                ->default(fn (): string => now()->toDateString())
-                ->native(false)
-                ->required();
+                ->default(fn (): string => $this->defaultAttendanceDate())
+                ->native(false);
         }
 
         return $schema->components($components);
+    }
+
+    protected function defaultAttendanceDate(): string
+    {
+        return now()->toDateString();
     }
 
     protected function selectedBranchLabel(): string
@@ -90,12 +99,42 @@ trait HasDashboardDtrFilters
         $query = Dtr::query()
             ->finalizedAttendance()
             ->whereRaw("LOWER(TRIM(COALESCE(schedule_type, ''))) NOT LIKE ?", ['%for approval%'])
-            ->when(filled($filters['branch_id'] ?? null), fn (Builder $query): Builder => $query->where('branch_id', $filters['branch_id']))
-            ->when(filled($filters['payroll_period_id'] ?? null), fn (Builder $query): Builder => $query->where('payroll_period_id', $filters['payroll_period_id']));
+            ->when(filled($filters['branch_id'] ?? null), fn (Builder $query): Builder => $query->where('branch_id', $filters['branch_id']));
 
         if ($applySelectedDate) {
             $date = Carbon::make($filters['date'] ?? null)?->toDateString() ?? now()->toDateString();
-            $query->whereDate('date_in', $date);
+            $periodId = $filters['payroll_period_id'] ?? null;
+
+            if ($periodId) {
+                $period = PayrollPeriod::find($periodId);
+                if ($period) {
+                    $periodStart = Carbon::parse($period->date_start)->toDateString();
+                    $periodEnd = Carbon::parse($period->date_end)->toDateString();
+
+                    if ($date >= $periodStart && $date <= $periodEnd) {
+                        $query->where('payroll_period_id', $periodId)
+                            ->whereDate('date_in', $date);
+                    } else {
+                        $latestDateInPeriod = Dtr::query()
+                            ->where('payroll_period_id', $periodId)
+                            ->whereNotNull('date_in')
+                            ->max('date_in');
+
+                        if ($latestDateInPeriod) {
+                            $query->where('payroll_period_id', $periodId)
+                                ->whereDate('date_in', Carbon::parse($latestDateInPeriod)->toDateString());
+                        } else {
+                            $query->whereDate('date_in', $date);
+                        }
+                    }
+                } else {
+                    $query->whereDate('date_in', $date);
+                }
+            } else {
+                $query->whereDate('date_in', $date);
+            }
+        } elseif (filled($filters['payroll_period_id'] ?? null)) {
+            $query->where('payroll_period_id', $filters['payroll_period_id']);
         }
 
         return $query;

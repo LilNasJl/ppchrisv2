@@ -668,7 +668,7 @@
                     Send Message
                 </button>
             </header>
-            <table aria-label="Shout Out Hall sample posts">
+            <table aria-label="Shout Out Hall Sample posts">
                 <tbody>
                     @foreach (array_slice($shoutOutSamples, 0, 5) as $shoutOut)
                         <tr>

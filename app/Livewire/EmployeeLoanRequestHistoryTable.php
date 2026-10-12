@@ -51,21 +51,30 @@ class EmployeeLoanRequestHistoryTable extends Component implements HasActions, H
 
                 TextColumn::make('request_date')
                     ->label('Date Requested')
+                    ->icon('heroicon-m-calendar')
                     ->date('M d, Y')
                     ->sortable(),
 
                 TextColumn::make('loan_type')
                     ->label('Loan Type')
+                    ->badge()
+                    ->color('info')
+                    ->icon('heroicon-m-banknotes')
+                    ->weight('bold')
                     ->searchable()
                     ->wrap(),
 
                 TextColumn::make('loan_amount')
                     ->label('Requested Amount')
                     ->alignEnd()
-                    ->formatStateUsing(fn (mixed $state): string => number_format((float) $state, 2)),
+                    ->weight('bold')
+                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
 
                 TextColumn::make('loan_terms_months')
                     ->label('Terms')
+                    ->badge()
+                    ->color('gray')
+                    ->icon('heroicon-m-clock')
                     ->getStateUsing(fn (EmployeeLoanRequest $record): string => $record->loan_terms_months.' '.$record->terms_label)
                     ->alignCenter(),
 
@@ -81,6 +90,12 @@ class EmployeeLoanRequestHistoryTable extends Component implements HasActions, H
                         EmployeeLoanRequest::STATUS_CANCELLED => 'gray',
                         default => 'warning',
                     })
+                    ->icon(fn (string $state): string => match ($state) {
+                        EmployeeLoanRequest::STATUS_APPROVED => 'heroicon-m-check-circle',
+                        EmployeeLoanRequest::STATUS_REJECTED => 'heroicon-m-x-circle',
+                        EmployeeLoanRequest::STATUS_CANCELLED => 'heroicon-m-no-symbol',
+                        default => 'heroicon-m-clock',
+                    })
                     ->sortable(),
 
                 TextColumn::make('reviewed_at')
@@ -94,68 +109,67 @@ class EmployeeLoanRequestHistoryTable extends Component implements HasActions, H
                     ->options(EmployeeLoanRequest::statusOptions()),
             ])
             ->recordActions([
-                ActionGroup::make([
-                    Action::make('view')
-                        ->label('View')
-                        ->icon(Heroicon::Eye)
-                        ->modalHeading(fn (EmployeeLoanRequest $record): string => 'Loan Request - '.$record->loan_type)
-                        ->modalWidth('4xl')
-                        ->modalSubmitAction(false)
-                        ->modalCancelActionLabel('Close')
-                        ->modalContent(fn (EmployeeLoanRequest $record) => view('filament.pages.partials.loan-request-details', [
-                            'request' => $record->load([
-                                'preferredStartPayrollPeriod',
-                                'approvedLoan.amortizationStartPayrollPeriod',
-                                'reviewedBy',
-                            ]),
-                        ])),
+                Action::make('view')
+                    ->label('View')
+                    ->icon(Heroicon::Eye)
+                    ->color('primary')
+                    ->modalHeading(fn (EmployeeLoanRequest $record): string => 'Loan Request - '.$record->loan_type)
+                    ->modalWidth('4xl')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->modalContent(fn (EmployeeLoanRequest $record) => view('filament.pages.partials.loan-request-details', [
+                        'request' => $record->load([
+                            'preferredStartPayrollPeriod',
+                            'approvedLoan.amortizationStartPayrollPeriod',
+                            'reviewedBy',
+                        ]),
+                    ])),
 
-                    Action::make('cancel')
-                        ->label('Cancel Request')
-                        ->icon(Heroicon::XMark)
-                        ->color('danger')
-                        ->visible(fn (EmployeeLoanRequest $record): bool => $record->status === EmployeeLoanRequest::STATUS_PENDING)
-                        ->requiresConfirmation()
-                        ->modalHeading('Cancel loan request?')
-                        ->modalDescription('The request will remain in your history as cancelled.')
-                        ->action(function (EmployeeLoanRequest $record): void {
-                            app(EmployeeLoanRequestService::class)->cancel($record, $this->employee());
+                Action::make('cancel')
+                    ->label('Cancel')
+                    ->icon(Heroicon::XCircle)
+                    ->color('danger')
+                    ->visible(fn (EmployeeLoanRequest $record): bool => $record->status === EmployeeLoanRequest::STATUS_PENDING)
+                    ->requiresConfirmation()
+                    ->modalHeading('Cancel loan request?')
+                    ->modalDescription('The request will remain in your history as cancelled.')
+                    ->action(function (EmployeeLoanRequest $record): void {
+                        app(EmployeeLoanRequestService::class)->cancel($record, $this->employee());
 
-                            $this->resetTable();
+                        $this->resetTable();
 
-                            Notification::make()
-                                ->title('Loan request cancelled')
-                                ->success()
-                                ->send();
-                        }),
+                        Notification::make()
+                            ->title('Loan request cancelled')
+                            ->success()
+                            ->send();
+                    }),
 
-                    Action::make('delete')
-                        ->label('Delete Request')
-                        ->icon(Heroicon::Trash)
-                        ->color('danger')
-                        ->visible(fn (EmployeeLoanRequest $record): bool => in_array($record->status, [
-                            EmployeeLoanRequest::STATUS_PENDING,
-                            EmployeeLoanRequest::STATUS_REJECTED,
-                        ], true))
-                        ->requiresConfirmation()
-                        ->modalHeading('Delete loan request?')
-                        ->modalDescription('This permanently removes this pending or rejected request from your history.')
-                        ->modalSubmitActionLabel('Delete Request')
-                        ->action(function (EmployeeLoanRequest $record): void {
-                            app(EmployeeLoanRequestService::class)->delete($record, $this->employee());
+                Action::make('delete')
+                    ->label('Delete')
+                    ->icon(Heroicon::Trash)
+                    ->color('gray')
+                    ->visible(fn (EmployeeLoanRequest $record): bool => in_array($record->status, [
+                        EmployeeLoanRequest::STATUS_PENDING,
+                        EmployeeLoanRequest::STATUS_REJECTED,
+                    ], true))
+                    ->requiresConfirmation()
+                    ->modalHeading('Delete loan request?')
+                    ->modalDescription('This permanently removes this pending or rejected request from your history.')
+                    ->modalSubmitActionLabel('Delete Request')
+                    ->action(function (EmployeeLoanRequest $record): void {
+                        app(EmployeeLoanRequestService::class)->delete($record, $this->employee());
 
-                            $this->resetTable();
+                        $this->resetTable();
 
-                            Notification::make()
-                                ->title('Loan request deleted')
-                                ->success()
-                                ->send();
-                        }),
-                ])
-                    ->icon(Heroicon::EllipsisHorizontal)
-                    ->tooltip('Actions'),
+                        Notification::make()
+                            ->title('Loan request deleted')
+                            ->success()
+                            ->send();
+                    }),
             ])
-            ->emptyStateHeading('No loan requests yet');
+            ->emptyStateHeading('No loan requests yet')
+            ->emptyStateDescription('You have not filed any loan requests yet.')
+            ->emptyStateIcon(Heroicon::Clock);
     }
 
     #[On('loan-request-created')]

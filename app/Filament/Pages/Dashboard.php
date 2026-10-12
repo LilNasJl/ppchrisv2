@@ -44,6 +44,13 @@ class Dashboard extends Page
     #[Url(as: 'view', except: 'primary')]
     public string $viewMode = 'primary';
 
+    public function mount(): void
+    {
+        if (request()->hasAny(['attendanceFilters', 'overtimeFilters'])) {
+            $this->redirect(static::getUrl($this->viewMode === 'analytics' ? ['view' => 'analytics'] : []), navigate: false);
+        }
+    }
+
     #[Override]
     public function getHeading(): ?string
     {
