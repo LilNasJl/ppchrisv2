@@ -1,4 +1,12 @@
 <x-filament-panels::page>
+    <header style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; padding:1.25rem 1.5rem; border:1px solid #3b82f6; border-radius:8px; background:linear-gradient(110deg,#1257b8,#173c70 68%,#102a50); color:white;">
+        <div>
+            <p style="margin:0; color:#d9f722; font-size:12px; font-weight:800;">PAYROLL RULES</p>
+            <h2 style="margin:4px 0; font-size:26px; font-weight:800;">Payroll Settings</h2>
+            <p style="margin:0; font-size:14px;">{{ $this->period_display }} &middot; {{ $this->period?->is_locked ? 'Locked - read only' : 'Changes apply to this open period only' }}</p>
+        </div>
+        <x-filament::button tag="a" :href="\App\Filament\Pages\Payroll::getUrl(['periodId' => $this->period?->publicKey()])" icon="heroicon-o-arrow-left">Return</x-filament::button>
+    </header>
     <style>
         .payroll-formula-grid {
             display: grid;
@@ -58,13 +66,11 @@
     </style>
 
     <div class="payroll-formula-grid">
-        <form wire:submit.prevent="save" style="display: grid; gap: 16px;">
+        <form wire:submit.prevent="mountAction('saveSettings')" style="display: grid; gap: 16px;">
             {{ $this->form }}
 
             <div>
-                <x-filament::button type="submit" icon="heroicon-m-check" :disabled="(bool) ($this->period?->is_locked)">
-                    Save Payroll Calculation
-                </x-filament::button>
+                {{ $this->saveSettingsAction }}
             </div>
         </form>
 

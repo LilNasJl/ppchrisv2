@@ -61,7 +61,7 @@ class PayrollCalculator
 
     public function rows(PayrollPeriod $period, ?int $branchId = null): Collection
     {
-        if ((bool) $period->is_locked && $this->hasSnapshots($period, $branchId)) {
+        if ((bool) $period->is_locked) {
             return $this->snapshotRows($period, $branchId);
         }
 
@@ -330,12 +330,10 @@ class PayrollCalculator
         $halfDayValue = $settings->value('half_day_work_day_value');
         $overtimeMultiplier = $settings->value('overtime_rate_multiplier');
         $ratePerDay = $this->ratePerDay($employee, $dtrs, $settings);
-        $hasStoredDailyRate = $this->storedDailyRate($dtrs) > 0;
-        $monthlyRate = $isDaily ? null : $this->money($hasStoredDailyRate
-            ? $ratePerDay * $workDaysPerMonth
-            : ($employee->monthly_rate ?: ($ratePerDay * $workDaysPerMonth)));
+        $monthlyRate = $isDaily ? null : $this->money(
+            $employee->monthly_rate ?: ($ratePerDay * $workDaysPerMonth));
         $halfMonthPay = $isDaily ? null : $this->money(($monthlyRate ?? 0) / 2);
-        $ratePerHour = $this->money($ratePerDay / $workHoursPerDay);
+        $ratePerHour = $ratePerDay / $workHoursPerDay;
 
         $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay);
         $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue);
@@ -354,17 +352,15 @@ class PayrollCalculator
             ? max(0, $dtrWorkDays)
             : max(0, $halfMonthDays - $absenceDayValue);
 
-        $basePay = $isDaily
-            ? $this->money($ratePerDay * $daysWorked)
-            : $this->money($ratePerDay * $halfMonthDays);
+        $basePay = $this->basePay($isDaily, $ratePerDay, $daysWorked, $monthlyRate, $workDaysPerMonth, $halfMonthDays);
 
         $deductibleDtrs = $this->deductibleDtrs($dtrs);
         $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
         $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
-        $overtimeAmount = $this->money($overtimeHours * $ratePerHour * $overtimeMultiplier);
-        $shift3Premium = app(Shift3PremiumService::class)->total($dtrs, $ratePerDay, $workHoursPerDay);
+        $overtimeAmount = $this->minutePay($overtimeMinutes, $ratePerHour, $overtimeMultiplier);
+        $shift3Premium = app(Shift3PremiumService::class)->total($dtrs, $ratePerDay, $workHoursPerDay, ! $isDaily);
         $regularHolidayAmount = $this->money(
             $this->holidayAmount($employee, $dtrs, $ratePerDay, 'regular', $settings)
             + $this->unworkedRegularHolidayAmount($employee, $period, $dtrs, $ratePerDay, $settings)
@@ -375,8 +371,8 @@ class PayrollCalculator
         $salaryAdjustment = $this->money($payrollAdjustment?->salary_adjustment ?? 0);
         $shortages = $this->money($payrollAdjustment?->shortages ?? 0);
 
-        $undertimeAmount = $this->money(($undertimeMinutes / 60) * $ratePerHour);
-        $lateAmount = $this->money(($lateMinutes / 60) * $ratePerHour);
+        $undertimeAmount = $this->minutePay($undertimeMinutes, $ratePerHour);
+        $lateAmount = $this->minutePay($lateMinutes, $ratePerHour);
         $halfDayAmount = $isDaily ? 0.0 : $this->money(($halfDayAbsenceMinutes / 60) * $ratePerHour);
         $absentAmount = $isDaily ? 0.0 : $this->money(($wholeAbsenceMinutes / 60) * $ratePerHour);
         $deductions = $this->deductions($employee);
@@ -644,6 +640,10 @@ class PayrollCalculator
 
     protected function ratePerDay(Employee $employee, ?Collection $dtrs = null, ?PayrollCalculationSetting $settings = null): float
     {
+        // Monthly-derived daily rates are stored at two decimals; do not use them as the salary source.
+        if ($this->rateType($employee) === 'Monthly' && (float) $employee->monthly_rate > 0) {
+            return (float) $employee->monthly_rate / ($settings?->divisor('regular_work_days_per_month') ?? self::REGULAR_WORK_DAYS_PER_MONTH);
+        }
         $storedDailyRate = $this->storedDailyRate($dtrs);
 
         if ($storedDailyRate > 0) {
@@ -798,7 +798,8 @@ class PayrollCalculator
                 })
                 ->sum(function (Dtr $dtr) use ($ratePerDay, $settings, $type): float {
                     $holidayRate = $this->holidayRate($dtr, $settings, $type);
-                    $dailyRate = (float) ($dtr->daily_rate ?: $ratePerDay);
+                    $dailyRate = $this->rateType($employee) === 'Monthly' && (float) $employee->monthly_rate > 0
+                        ? $ratePerDay : (float) ($dtr->daily_rate ?: $ratePerDay);
                     $ratePerHour = $dailyRate / $settings->divisor('work_hours_per_day');
                     $creditedWorkMinutes = (float) ($dtr->credited_work_hrs ?? 0);
                     $creditedOvertimeMinutes = $this->holidayOvertimeMinutes($dtr, $creditedWorkMinutes);
@@ -985,6 +986,16 @@ class PayrollCalculator
     protected function money(float|int|string|null $value): float
     {
         return round((float) ($value ?? 0), 2);
+    }
+
+    protected function basePay(bool $daily, float $dailyRate, float $daysWorked, ?float $monthlyRate, float $monthlyDays, float $cutoffDays): float
+    {
+        return $this->money($daily ? $dailyRate * $daysWorked : ($monthlyRate / $monthlyDays) * $cutoffDays);
+    }
+
+    protected function minutePay(float $minutes, float $hourlyRate, float $multiplier = 1): float
+    {
+        return $this->money(($minutes / 60) * $hourlyRate * $multiplier);
     }
 
     protected function number(float|int|string|null $value): float

@@ -20,13 +20,13 @@ class Shift3PremiumService
             && $this->regularWorkMinutes($record) > 0;
     }
 
-    public function amountForRecord(Dtr $record, float $fallbackDailyRate, float $workHoursPerDay): float
+    public function amountForRecord(Dtr $record, float $fallbackDailyRate, float $workHoursPerDay, bool $useFallbackRate = false): float
     {
         if (! $this->qualifies($record) || $workHoursPerDay <= 0) {
             return 0.0;
         }
 
-        $dailyRate = (float) ($record->daily_rate ?: $fallbackDailyRate);
+        $dailyRate = $useFallbackRate ? $fallbackDailyRate : (float) ($record->daily_rate ?: $fallbackDailyRate);
 
         if ($dailyRate <= 0) {
             return 0.0;
@@ -44,13 +44,14 @@ class Shift3PremiumService
     /**
      * @param  Collection<int, Dtr>  $records
      */
-    public function total(Collection $records, float $fallbackDailyRate, float $workHoursPerDay): float
+    public function total(Collection $records, float $fallbackDailyRate, float $workHoursPerDay, bool $useFallbackRate = false): float
     {
         return $this->money(
             $records->sum(fn (Dtr $record): float => $this->amountForRecord(
                 $record,
                 $fallbackDailyRate,
                 $workHoursPerDay,
+                $useFallbackRate,
             ))
         );
     }

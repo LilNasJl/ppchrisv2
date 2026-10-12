@@ -450,6 +450,11 @@
                     </x-slot>
 
                     <x-filament::dropdown.list>
+                        @if (\App\Filament\Pages\PayrollCalculation::canAccess() && $this->payrollCalculationUrl())
+                            <x-filament::dropdown.list.item :href="$this->payrollCalculationUrl()" tag="a" icon="heroicon-o-calculator">
+                                Calculation Settings
+                            </x-filament::dropdown.list.item>
+                        @endif
                         <x-filament::dropdown.list.item
                             :href="$this->managePayrollPeriodsUrl()"
                             tag="a"

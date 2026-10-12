@@ -6,6 +6,10 @@ use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
 use App\Services\DtrDailyAggregationService;
 use App\Services\PayrollCalculator;
+use App\Services\AccountLogService;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -35,8 +39,9 @@ class PayrollCalculation extends Page implements HasForms
 
     protected static ?int $navigationSort = 5;
 
-    protected static ?string $title = 'Payroll Calculation';
+    protected static ?string $title = 'Payroll Settings';
 
+    #[Locked]
     public ?int $periodId = null;
 
     public ?PayrollPeriod $period = null;
@@ -103,6 +108,7 @@ class PayrollCalculation extends Page implements HasForms
                     ->numeric()
                     ->required()
                     ->minValue(1)
+                    ->maxValue(31)
                     ->helperText('Used for monthly employee daily-rate conversion.'),
 
                 TextInput::make('regular_half_month_days')
@@ -110,6 +116,7 @@ class PayrollCalculation extends Page implements HasForms
                     ->numeric()
                     ->required()
                     ->minValue(0)
+                    ->maxValue(31)
                     ->helperText('Base payable days for regular monthly employees.'),
 
                 TextInput::make('work_hours_per_day')
@@ -117,11 +124,13 @@ class PayrollCalculation extends Page implements HasForms
                     ->numeric()
                     ->required()
                     ->minValue(1)
+                    ->maxValue(24)
                     ->helperText('Used to compute rate per hour.'),
 
                 TextInput::make('late_grace_minutes')
                     ->label('Late Grace (Minutes)')
                     ->numeric()
+                    ->integer()
                     ->required()
                     ->minValue(0)
                     ->maxValue(60)
@@ -132,6 +141,7 @@ class PayrollCalculation extends Page implements HasForms
                     ->numeric()
                     ->required()
                     ->minValue(0)
+                    ->maxValue(1)
                     ->helperText('Example: 0.50 means half day deducts half of one day.'),
 
                 TextInput::make('overtime_rate_multiplier')
@@ -139,10 +149,13 @@ class PayrollCalculation extends Page implements HasForms
                     ->numeric()
                     ->required()
                     ->minValue(0)
+                    ->maxValue(5)
                     ->helperText('Example: 1.00 means credited overtime is paid at normal hourly rate.'),
 
                 TextInput::make('regular_holiday_rate')
                     ->label('Default Regular Holiday Rate (%)')
+                    ->disabled()
+                    ->dehydrated(false)
                     ->numeric()
                     ->required()
                     ->minValue(0)
@@ -150,6 +163,8 @@ class PayrollCalculation extends Page implements HasForms
 
                 TextInput::make('special_holiday_rate')
                     ->label('Default Special Holiday Rate (%)')
+                    ->disabled()
+                    ->dehydrated(false)
                     ->numeric()
                     ->required()
                     ->minValue(0)
@@ -157,6 +172,8 @@ class PayrollCalculation extends Page implements HasForms
 
                 TextInput::make('holiday_overtime_premium_rate')
                     ->label('Holiday Overtime Premium (%)')
+                    ->disabled()
+                    ->dehydrated(false)
                     ->numeric()
                     ->required()
                     ->minValue(0)
@@ -164,6 +181,8 @@ class PayrollCalculation extends Page implements HasForms
 
                 Toggle::make('unworked_regular_holiday_pay_enabled')
                     ->label('Pay Unworked Regular Holidays for Daily Employees')
+                    ->disabled()
+                    ->dehydrated(false)
                     ->helperText('Monthly employees are already covered by fixed half-month base pay.')
                     ->columnSpanFull(),
             ])
@@ -174,6 +193,8 @@ class PayrollCalculation extends Page implements HasForms
 
     public function save(): void
     {
+        abort_unless(static::canAccess(), 403);
+        $this->period = PayrollPeriod::query()->find($this->periodId);
         if (! $this->period) {
             Notification::make()
                 ->title('No payroll period selected')
@@ -193,19 +214,30 @@ class PayrollCalculation extends Page implements HasForms
             return;
         }
 
-        $state = collect($this->form->getState())->except('period_display');
+        $state = collect($this->form->getState())->only([
+            'regular_work_days_per_month', 'regular_half_month_days', 'work_hours_per_day',
+            'late_grace_minutes', 'half_day_work_day_value', 'overtime_rate_multiplier',
+        ]);
         $data = $state
-            ->except('unworked_regular_holiday_pay_enabled')
             ->map(fn ($value): float => round((float) $value, 2))
             ->all();
-        $data['unworked_regular_holiday_pay_enabled'] = (bool) $state->get('unworked_regular_holiday_pay_enabled');
-
-        PayrollCalculationSetting::query()->updateOrCreate(
-            ['payroll_period_id' => $this->period->id],
-            $data
-        );
-
-        app(DtrDailyAggregationService::class)->recalculatePeriod($this->period->id);
+        if ($data['regular_half_month_days'] > $data['regular_work_days_per_month']) {
+            throw ValidationException::withMessages(['regular_half_month_days' => 'Cutoff days cannot exceed monthly work days.']);
+        }
+        DB::transaction(function () use ($data): void {
+            $period = PayrollPeriod::query()->whereKey($this->periodId)->lockForUpdate()->firstOrFail();
+            if ($period->is_locked) {
+                throw ValidationException::withMessages(['period_display' => 'This payroll period has been locked.']);
+            }
+            $setting = PayrollCalculationSetting::forPeriod($period);
+            $before = $setting->only(array_keys($data));
+            $setting->fill($data)->save();
+            app(DtrDailyAggregationService::class)->recalculatePeriod($period->id);
+            app(AccountLogService::class)->record('payroll_settings_updated', auth()->user(), auth()->user(), 'hr');
+            \Illuminate\Support\Facades\Log::info('Payroll settings changed', [
+                'period_id' => $period->id, 'actor_id' => auth()->id(), 'before' => $before, 'after' => $data,
+            ]);
+        });
 
         Notification::make()
             ->title('Payroll calculation updated')
@@ -235,11 +267,13 @@ class PayrollCalculation extends Page implements HasForms
             ['name' => 'Late grace', 'formula' => "Daily Regular attendance arriving within {$lateGrace} minute(s) of schedule start has no late deduction."],
             ['name' => 'Monthly employee days worked', 'formula' => "{$halfMonthDays} - Absence Days - (Approved Half-Day Count x {$halfDay})."],
             ['name' => 'Daily employee days worked', 'formula' => 'Count payable D.T.R entries, excluding absences and overtime-only rows, then deduct approved half-days.'],
-            ['name' => 'Base pay', 'formula' => "Monthly employee: Rate Per Day x {$halfMonthDays}. Daily employee: Rate Per Day x Days Worked."],
+            ['name' => 'Base pay', 'formula' => "Monthly salary x {$halfMonthDays} / {$daysPerMonth}; daily employees: Daily Rate x Days Worked. Round completed monetary lines only."],
+            ['name' => 'Saturday (read-only)', 'formula' => 'Existing three-hour Saturday schedule counts as 0.50 attendance day.'],
+            ['name' => 'Shift 3 (read-only)', 'formula' => '10% of eligible imported Shift 3 regular worked pay, excluding overtime.'],
             ['name' => 'Overtime amount', 'formula' => "Credited Overtime Minutes / 60 x Rate Per Hour x {$overtimeMultiplier}."],
             ['name' => 'Holiday premium', 'formula' => "Regular credited holiday hours use the holiday premium multiplier. Credited overtime minutes on a holiday always use {$holidayOvertimePremium}%."],
             ['name' => 'Unworked regular holiday pay', 'formula' => "Daily employees with no D.T.R row on a regular holiday receive one daily rate when this setting is {$unworkedHolidayPolicy}. Monthly employees are already covered by base pay."],
-            ['name' => 'Gross pay', 'formula' => 'Base Pay + Salary Adjustment + Allowance + Overtime Amount + Regular Holiday + Special Holiday.'],
+            ['name' => 'Gross pay', 'formula' => 'Base Pay + Salary Adjustment + Allowance + Overtime Amount + Shift 3 Premium + Regular Holiday + Special Holiday.'],
             ['name' => 'Deductions', 'formula' => 'Undertime Amount + Half-Day Amount + Absent Amount + Late Amount + Company Deductions + Remittances + Other Deductions.'],
             ['name' => 'Net pay', 'formula' => 'Gross Pay - Total Deductions.'],
             ['name' => 'Payroll summary', 'formula' => 'Grouped by branch: sum Gross Pay, Total Deductions, and Net Pay from the same period employee payroll rows.'],
@@ -249,13 +283,26 @@ class PayrollCalculation extends Page implements HasForms
     #[Override]
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(fn (): string => filled($this->periodId)
-                    ? Payroll::getUrl(['periodId' => $this->period?->publicKey()])
-                    : Payroll::getUrl()),
-        ];
+        return [];
+    }
+
+    public function saveSettingsAction(): Action
+    {
+        return Action::make('saveSettings')->label('Save Changes')->icon(Heroicon::Check)
+            ->requiresConfirmation()
+            ->modalDescription('Apply these rules to the selected open period and recalculate its DTR totals. Locked periods and other periods remain unchanged.')
+            ->visible(fn (): bool => static::canAccess())
+            ->disabled(fn (): bool => ! $this->period || $this->period->is_locked)
+            ->action(fn () => $this->save());
+    }
+
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [];
     }
 }
