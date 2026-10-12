@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
+use App\Services\AutomaticAbsenceService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrSynchronizationService;
 use Carbon\Carbon;
@@ -45,6 +46,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                 'invalid_or_failed_records' => 0,
             ],
             'errors' => [],
+            'notices' => [],
         ];
 
         $validatedRows = [];
@@ -87,6 +89,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
         if ($validatedRows !== []) {
             $result['batch_id'] = $validatedRows[0]['data']['batch_id'];
+            usort($validatedRows, fn (array $a, array $b): int => (int) $this->isAbsenceRow($a['data']) <=> (int) $this->isAbsenceRow($b['data']));
         }
 
         return $this->withImportLock($validatedRows, $fallbackBatchId, function () use ($rows, $validatedRows, $importName, &$result): array {
@@ -166,6 +169,9 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                         if (! empty($saved['skipped'])) {
                             $result['skipped']++;
                             $result['already_existing']++;
+                            if (! empty($saved['reason'])) {
+                                $result['notices'][] = ['row' => $validatedRow['row'], 'message' => $saved['reason']];
+                            }
 
                             continue;
                         }
@@ -181,7 +187,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                 });
 
                 $result['message'] = $result['skipped'] > 0
-                    ? "D.T.R import completed and synchronized with HR. {$result['successful']} imported and {$result['skipped']} duplicate/existing row(s) skipped."
+                    ? "D.T.R import completed and synchronized with HR. {$result['successful']} imported and {$result['skipped']} existing or excluded row(s) skipped."
                     : 'D.T.R import completed and synchronized with HR.';
             } catch (\Throwable $exception) {
                 report($exception);
@@ -238,6 +244,9 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
     protected function hasExistingOrConflictingDatabaseRecord(array $data, array $metadata): bool
     {
+        if ($this->isAbsenceRow($data)) {
+            return false;
+        }
         $existing = $this->findExistingRecord($data, $metadata);
 
         if ($existing) {
@@ -256,6 +265,10 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
     protected function saveValidatedRow(array $data, string $importName): array
     {
+        $this->lockImportPeriod($data);
+        if ($this->isAbsenceRow($data) && ($reason = app(AutomaticAbsenceService::class)->exclusionReason($data, $this->getEmployee($data)))) {
+            return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+        }
         $metadata = $this->getImportMetadata($data, $importName);
         $existing = $this->findExistingRecord($data, $metadata);
 
@@ -292,6 +305,8 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             'needs_review' => false,
             'review_reason' => null,
         ])->save();
+
+        app(AutomaticAbsenceService::class)->supersede($record);
 
         return [
             'id' => $record->id,
@@ -368,6 +383,9 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             ->where('payroll_period_id', $data['payroll_period_id'])
             ->where('branch_id', $this->getImportedBranchId($data))
             ->whereNull('on_field_dtr_submission_id');
+        if (! $this->isAbsenceRow($data)) {
+            $query->where(fn (Builder $q) => $q->whereNull('entry_source')->orWhere('entry_source', '!=', AutomaticAbsenceService::SOURCE));
+        }
         $this->applyEmployeeIdentity($query, $data);
 
         if (filled($data['source_session_id'] ?? null)) {

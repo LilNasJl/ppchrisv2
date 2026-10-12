@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Services\AutomaticAbsenceService;
 use App\Services\DtrCalculator;
 use App\Services\DtrDailyAggregationService;
 use App\Services\DtrDayPartService;
@@ -47,6 +48,7 @@ class DtrImportService
                 'invalid_or_failed_records' => 0,
             ],
             'errors' => [],
+            'notices' => [],
         ];
 
         $validatedRows = [];
@@ -91,6 +93,7 @@ class DtrImportService
 
         if ($validatedRows !== []) {
             $result['batch_id'] = $validatedRows[0]['data']['batch_id'];
+            usort($validatedRows, fn (array $a, array $b): int => (int) $this->isAbsenceRow($a['data']) <=> (int) $this->isAbsenceRow($b['data']));
         }
 
         return $this->withImportLock($validatedRows, $fallbackBatchId, function () use ($rows, $validatedRows, $importName, &$result): array {
@@ -179,6 +182,9 @@ class DtrImportService
                             if (! empty($saved['skipped'])) {
                                 $result['skipped']++;
                                 $result['already_existing']++;
+                                if (! empty($saved['reason'])) {
+                                    $result['notices'][] = ['row' => $validatedRow['row'], 'message' => $saved['reason']];
+                                }
 
                                 continue;
                             }
@@ -200,7 +206,7 @@ class DtrImportService
                 });
 
                 $result['message'] = $result['skipped'] > 0
-                    ? "D.T.R import completed. {$result['successful']} imported and {$result['skipped']} duplicate/existing row(s) skipped."
+                    ? "D.T.R import completed. {$result['successful']} imported and {$result['skipped']} existing or excluded row(s) skipped."
                     : 'D.T.R import completed successfully.';
             } catch (\Throwable $exception) {
                 report($exception);
@@ -252,6 +258,7 @@ class DtrImportService
      */
     protected function validateRow(array $row, string $fallbackBatchId): array
     {
+        $isAbsence = $this->isAbsenceRow($row);
         $isIncompletePunch = $this->isIncompletePunchRow($row);
         $requiredColumnErrors = $this->getRequiredColumnErrors($row);
         $data = $this->normalizeRow($row, $fallbackBatchId);
@@ -278,9 +285,9 @@ class DtrImportService
             'branch_id' => ['required', 'integer', 'exists:branches,id'],
             'fingerprint_id' => ['required', 'integer'],
             'date_in' => ['required', 'date'],
-            'time_in' => ['required', 'date_format:H:i:s'],
-            'date_out' => [$isForgotToPunch ? 'nullable' : 'required', 'date'],
-            'time_out' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
+            'time_in' => [$isAbsence ? 'nullable' : 'required', 'date_format:H:i:s'],
+            'date_out' => [$isForgotToPunch || $isAbsence ? 'nullable' : 'required', 'date'],
+            'time_out' => [$isForgotToPunch || $isAbsence ? 'nullable' : 'required', 'date_format:H:i:s'],
             'schedule_type' => ['required', 'string', 'max:191'],
             'schedule_start' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
             'schedule_end' => [$isForgotToPunch ? 'nullable' : 'required', 'date_format:H:i:s'],
@@ -305,6 +312,18 @@ class DtrImportService
 
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->errors()->toArray());
+        }
+
+        if ($isAbsence) {
+            if (! $data['absence_candidate'] || $data['entry_source'] !== AutomaticAbsenceService::SOURCE
+                || ! app(DtrDayPartService::class)->isRegularScheduleType($data['regular_schedule'])
+                || ! in_array($data['day_part'], ['morning', 'afternoon', 'whole_day'], true)
+                || filled($data['time_in']) || filled($data['time_out'])
+                || (filled($data['date_out']) && $data['date_out'] !== $data['date_in'])
+                || blank($data['absence_split']) || ! ($data['schedule_start'] < $data['absence_split'] && $data['absence_split'] < $data['schedule_end'])) {
+                throw ValidationException::withMessages(['absence' => 'Absent rows require the explicit regular-schedule candidate marker, valid day-part and day split, and empty punch times.']);
+            }
+            $data['date_out'] = $data['date_in'];
         }
 
         $payrollPeriod = PayrollPeriod::query()->find($data['payroll_period_id']);
@@ -350,6 +369,10 @@ class DtrImportService
      */
     protected function saveValidatedRow(array $data, string $importName): array
     {
+        $this->lockImportPeriod($data);
+        if ($this->isAbsenceRow($data) && ($reason = app(AutomaticAbsenceService::class)->exclusionReason($data, $this->getAbsenceEmployee($data)))) {
+            return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+        }
         $metadata = $this->getImportMetadata($data, $importName);
 
         if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
@@ -376,6 +399,8 @@ class DtrImportService
             'schedule_end' => $data['schedule_end'],
             ...$metadata,
         ])->save();
+
+        app(AutomaticAbsenceService::class)->supersede($record);
 
         return [
             'id' => $record->id,
@@ -406,7 +431,13 @@ class DtrImportService
             'Schedule Type' => ['schedule_type', 'schedule type', 'sched', 'schedule'],
         ];
 
-        if (! $isIncompletePunch && $scheduleType !== 'Forgot to Punch') {
+        if ($this->isAbsenceRow($row)) {
+            unset($requiredColumns['Time In']);
+            $requiredColumns += ['Schedule Start' => ['schedule_start', 'schedule start', 'sched_start'],
+                'Schedule End' => ['schedule_end', 'schedule end', 'sched_end']];
+        }
+
+        if (! $this->isAbsenceRow($row) && ! $isIncompletePunch && $scheduleType !== 'Forgot to Punch') {
             $requiredColumns += [
                 'Date Out' => ['date_out', 'date out'],
                 'Time Out' => ['time_out', 'time out'],
@@ -434,10 +465,35 @@ class DtrImportService
      */
     protected function isIncompletePunchRow(array $row): bool
     {
+        if ($this->isAbsenceRow($row)) {
+            return false;
+        }
         $dateOut = $this->cleanSpreadsheetValue($this->pick($row, ['date_out', 'date out']));
         $timeOut = $this->cleanSpreadsheetValue($this->pick($row, ['time_out', 'time out']));
 
         return blank($dateOut) || blank($timeOut);
+    }
+
+    protected function isAbsenceRow(array $row): bool
+    {
+        return strcasecmp(trim((string) $this->pick($row, ['schedule_type', 'schedule type', 'sched', 'schedule'])), 'Absent') === 0;
+    }
+
+    protected function lockImportPeriod(array $data): void
+    {
+        $period = PayrollPeriod::query()->lockForUpdate()->find($data['payroll_period_id']);
+        if (! $period || $period->is_locked) {
+            throw new \DomainException('The payroll period is locked or unavailable.');
+        }
+    }
+
+    protected function getAbsenceEmployee(array $data): ?Employee
+    {
+        $identity = ltrim((string) $data['fingerprint_id'], '0') ?: '0';
+        $matches = Employee::query()->activeEmployment()->where('branch_id', $data['branch_id'])->get()
+            ->filter(fn (Employee $e): bool => (ltrim((string) ($e->fingerprint_id ?: $e->uid), '0') ?: '0') === $identity);
+
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 
     /**
@@ -459,6 +515,10 @@ class DtrImportService
             'schedule_start' => $this->parseTime($this->pick($row, ['schedule_start', 'schedule start', 'sched_start'])),
             'schedule_end' => $this->parseTime($this->pick($row, ['schedule_end', 'schedule end', 'sched_end'])),
             'day_part' => $this->normalizeNullableString($this->pick($row, ['day_part', 'day part'])),
+            'entry_source' => $this->normalizeNullableString($this->pick($row, ['entry_source', 'entry source'])),
+            'absence_candidate' => filter_var($this->pick($row, ['absence_candidate', 'absence candidate']), FILTER_VALIDATE_BOOLEAN),
+            'regular_schedule' => $this->normalizeNullableString($this->pick($row, ['regular_schedule', 'regular schedule'])),
+            'absence_split' => $this->parseTime($this->pick($row, ['absence_split', 'absence split'])),
             'source_session_id' => $this->normalizeNullableString($this->pick($row, ['source_session_id', 'source session id', 'session_id', 'session id'])),
             'source_filename' => $this->normalizeNullableString($this->pick($row, ['source_filename', 'source filename', 'filename'])),
             'source_file_hash' => strtolower((string) ($this->normalizeNullableString($this->pick($row, ['source_file_hash', 'source file hash', 'file_hash', 'file hash'])) ?? '')) ?: null,
@@ -498,7 +558,7 @@ class DtrImportService
      */
     protected function buildSourceRowHash(array $data): string
     {
-        return hash('sha256', implode('|', [
+        $fields = [
             (string) ($data['payroll_period_id'] ?? ''),
             (string) $this->getImportedBranchId($data),
             (string) ($data['fingerprint_id'] ?? ''),
@@ -509,7 +569,13 @@ class DtrImportService
             $this->resolveScheduleType($data),
             (string) ($data['schedule_start'] ?? ''),
             (string) ($data['schedule_end'] ?? ''),
-        ]));
+        ];
+        if ($this->isAbsenceRow($data)) {
+            $fields[] = $data['day_part'];
+            $fields[] = AutomaticAbsenceService::SOURCE;
+        }
+
+        return hash('sha256', implode('|', $fields));
     }
 
     /**
@@ -550,6 +616,9 @@ class DtrImportService
      */
     protected function getEmployee(array $data): ?Employee
     {
+        if ($this->isAbsenceRow($data)) {
+            return $this->getAbsenceEmployee($data);
+        }
         $fingerprintId = $data['fingerprint_id'] ?? null;
 
         if (blank($fingerprintId)) {
@@ -606,6 +675,10 @@ class DtrImportService
      */
     protected function getImportedCalculationData(array $data): array
     {
+        if ($this->isAbsenceRow($data)) {
+            return app(AutomaticAbsenceService::class)->calculation($data);
+        }
+
         return app(DtrOvertimeTransferService::class)->applyImportedPayload(
             $data,
             $this->calculateImportedDtrData($data),
@@ -760,6 +833,10 @@ class DtrImportService
      */
     protected function hasExistingOrConflictingDatabaseRecord(array $data, array $metadata): bool
     {
+        if ($this->isAbsenceRow($data)) {
+            return false; // eligibility is checked after actual punches are saved
+        }
+
         return $this->hasDatabaseConflict(
             $data,
             $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
@@ -836,6 +913,10 @@ class DtrImportService
      */
     protected function recordsConflictWithRow(Collection $records, array $data, ?string $dayPart): bool
     {
+        if ($this->isAbsenceRow($data)) {
+            return false;
+        }
+        $records = $records->reject(fn (Dtr $record): bool => $record->entry_source === AutomaticAbsenceService::SOURCE);
         if ($records->isEmpty()) {
             return false;
         }
@@ -1072,6 +1153,9 @@ class DtrImportService
     protected function normalizeScheduleType(?string $scheduleType): string
     {
         $value = str($scheduleType ?? 'Regular')->lower();
+        if ($value->trim()->toString() === 'absent') {
+            return 'Absent';
+        }
 
         if ($value->contains('forgot')) {
             return 'Forgot to Punch';

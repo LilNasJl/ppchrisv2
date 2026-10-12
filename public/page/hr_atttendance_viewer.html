@@ -476,10 +476,12 @@ function renderStats(t){
   const d=S[t].raw;let h='';
   if(t==='dtr'){
     const cmp=d.filter(r=>r.time_out&&r.time_out!=='').length;
+    const absent=d.filter(isAbsence).length;
     const uids=new Set(d.map(r=>r.uid)).size;
     h=`<div class="stat"><div class="stat-n">${d.length}</div><div class="stat-l">Total</div></div>
        <div class="stat"><div class="stat-n g">${cmp}</div><div class="stat-l">Complete</div></div>
-       <div class="stat"><div class="stat-n o">${d.length-cmp}</div><div class="stat-l">Open</div></div>
+       <div class="stat"><div class="stat-n o">${d.length-cmp-absent}</div><div class="stat-l">Open</div></div>
+       <div class="stat"><div class="stat-n o">${absent}</div><div class="stat-l">Absence candidates</div></div>
        <div class="stat"><div class="stat-n b">${uids}</div><div class="stat-l">Employees</div></div>`;
   }else{
     const adm=d.filter(r=>r.type==='ADMIN').length;
@@ -543,9 +545,11 @@ function tmin(value){
   return m?(parseInt(m[1],10)*60+parseInt(m[2],10)):null;
 }
 function isRegular(sc){return /^regular(?:\s+(?:sched(?:ule)?\s*)?[12])?$/i.test(String(sc||'').trim());}
+function isAbsence(r){return String(r.sched||'').toLowerCase()==='absent'&&r.entry_source==='auto_absence'&&[true,1,'true','1'].includes(r.absence_candidate);}
 function dpart(r){
   const supplied=String(r.day_part||'').toLowerCase().replace(/[ -]+/g,'_');
   const valid=['morning','afternoon','whole_day','unclassified','provisional'];
+  if(isAbsence(r))return ['morning','afternoon','whole_day'].includes(supplied)?supplied:'unclassified';
   if(!r.date_out||!r.time_out)return'provisional';
   if(!isRegular(r.sched)||r.date_in!==r.date_out)return valid.includes(supplied)?supplied:'whole_day';
   const ai=tmin(r.time_in),ao=tmin(r.time_out),ss=tmin(r.sched_start),se=tmin(r.sched_end);
@@ -557,7 +561,7 @@ function dpart(r){
   return hasMorning&&hasAfternoon?'whole_day':hasMorning?'morning':hasAfternoon?'afternoon':'unclassified';
 }
 function dpartLabel(part){return({morning:'Morning',afternoon:'Afternoon',whole_day:'Whole Day',unclassified:'Review Required',provisional:'Pending Timeout'})[part]||'Whole Day';}
-function dayCount(r){const p=dpart(r);return p==='morning'||p==='afternoon'?0.5:['unclassified','provisional'].includes(p)?0:1;}
+function dayCount(r){if(isAbsence(r))return 0;const p=dpart(r);return p==='morning'||p==='afternoon'?0.5:['unclassified','provisional'].includes(p)?0:1;}
 function formatMinutes(value){return`${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}:00`;}
 function normalizeRegularMetrics(r,part=dpart(r)){
   if(!isRegular(r.sched)||!r.date_out||!r.time_out||r.date_in!==r.date_out)return{};
@@ -607,7 +611,7 @@ function rowDtr(r,n){
     <td>${x(r.date_in||'—')}</td>
     <td>${x(r.time_in||'—')}</td>
     <td>${ho?x(r.date_out||'—'):'<span class="mc">—</span>'}</td>
-    <td>${ho?x(r.time_out||'—'):'<span class="mc">open</span>'}</td>
+    <td>${ho?x(r.time_out||'—'):isAbsence(r)?'<span class="tag ta">Absent · HR validation</span>':'<span class="mc">open</span>'}</td>
     <td>${stag(r.sched)}</td>
     <td>${x(dpartLabel(part))}</td>
     <td>${Number(count).toFixed(1)}</td>
@@ -746,6 +750,10 @@ function buildImportRows(){
       time_out:hasTimeout?(r.time_out||''):'',
       schedule_type:r.sched||'',
       day_part:dpart(r),
+      entry_source:r.entry_source||'',
+      absence_candidate:isAbsence(r),
+      regular_schedule:r.regular_schedule||'',
+      absence_split:r.absence_split||'',
       schedule_start:forgot?'':(r.sched_start||''),
       schedule_end:forgot?'':(r.sched_end||''),
       source_session_id:r.session_id||'',
@@ -827,7 +835,7 @@ function importDtr(){
       if(ok){
         S.dtr.imported=true;
         updateImportButton();
-        showResult(true,'D.T.R Import Complete',result.message||'The D.T.R records were imported successfully.',successful,skipped,failed,[]);
+        showResult(true,'D.T.R Import Complete',result.message||'The D.T.R records were imported successfully.',successful,skipped,failed,result.notices||[]);
       }else{
         updateImportButton();
         showResult(false,'D.T.R Import Not Saved',result.message||'No D.T.R records were saved. Review the listed rows and try again.',successful,skipped,failed||rows.length,validationErrors);
@@ -862,7 +870,7 @@ function getExportData(t,batchId){
 
   let headers,rows;
   if(t==='dtr'){
-    headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End','Branch ID'];
+    headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End','Branch ID','Entry Source','Absence Candidate','Regular Schedule','Absence Split','Source Session ID'];
     rows=data.map((r,i)=>{
       const forgotToPunch=String(r.sched||'').toLowerCase().includes('forgot');
       const hasTimeOut=!forgotToPunch&&String(r.time_out||'').trim()!=='';
@@ -877,7 +885,7 @@ function getExportData(t,batchId){
         dayCount(r).toFixed(1),
         forgotToPunch?'':(r.sched_start||''),
         forgotToPunch?'':(r.sched_end||''),
-        branchId
+        branchId,r.entry_source||'',isAbsence(r)?'true':'false',r.regular_schedule||'',r.absence_split||'',r.session_id||''
       ];
     });
   }else{

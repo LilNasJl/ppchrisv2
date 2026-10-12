@@ -8,7 +8,6 @@ use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class DtrSynchronizationService
@@ -113,6 +112,7 @@ class DtrSynchronizationService
         }
 
         if ($official) {
+            app(AutomaticAbsenceService::class)->supersede($official);
             $visibleLinkPayload = $this->filterColumns('employee_visible_dtrs', [
                 'dtr_source' => $visible->dtr_source ?: $source,
                 'dtr_source_id' => $official->id,
@@ -344,6 +344,7 @@ class DtrSynchronizationService
             $visible->forceFill($payload)->saveQuietly();
         }
 
+        app(AutomaticAbsenceService::class)->supersede($official);
         $this->recordAudit(
             action: $beforeData === [] ? 'visible_dtr_synced_create' : 'visible_dtr_synced_update',
             record: $visible,
@@ -614,6 +615,11 @@ class DtrSynchronizationService
 
         $baseQuery = Dtr::withTrashed()
             ->where('payroll_period_id', $visible->payroll_period_id);
+        if ($visible->entry_source === AutomaticAbsenceService::SOURCE) {
+            $baseQuery->where('entry_source', AutomaticAbsenceService::SOURCE)->where('day_part', $visible->day_part);
+        } else {
+            $baseQuery->where(fn ($q) => $q->whereNull('entry_source')->orWhere('entry_source', '!=', AutomaticAbsenceService::SOURCE));
+        }
 
         if (in_array('branch_id', $dtrColumns, true) && filled($visible->branch_id)) {
             $baseQuery->where('branch_id', $visible->branch_id);
@@ -667,6 +673,10 @@ class DtrSynchronizationService
             }
         }
 
+        // A new imported session is not an edit of an arbitrary same-day row.
+        if ($visible->is_imported && filled($visible->source_row_hash)) {
+            return null;
+        }
         $candidates = $dateQuery->get();
         if ($candidates->count() === 1) {
             return $candidates->first();
@@ -782,6 +792,11 @@ class DtrSynchronizationService
             return null;
         }
 
+        if ($official->entry_source === AutomaticAbsenceService::SOURCE) {
+            $baseQuery->where('entry_source', AutomaticAbsenceService::SOURCE)->where('day_part', $official->day_part);
+        } else {
+            $baseQuery->where(fn ($q) => $q->whereNull('entry_source')->orWhere('entry_source', '!=', AutomaticAbsenceService::SOURCE));
+        }
         $dateQuery = (clone $baseQuery)->whereDate('date_in', $this->normalizeDate($official->date_in));
 
         if (in_array('time_in', $visibleColumns, true)) {
@@ -798,6 +813,9 @@ class DtrSynchronizationService
             }
         }
 
+        if ($official->is_imported && filled($official->source_row_hash)) {
+            return null;
+        }
         $candidates = $dateQuery->get();
         if ($candidates->count() === 1) {
             return $candidates->first();

@@ -7,6 +7,7 @@ use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\PayrollPeriod;
+use App\Models\User;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,7 @@ class LeaveDtrService
 {
     public function approveLeaveWithPaidDtr(Leave $leave, PayrollPeriod $payrollPeriod, ?string $comment = null, ?int $reviewedBy = null): void
     {
-        abort_unless(LeaveApprovalAccess::review(\App\Models\User::find($reviewedBy)), 403);
+        abort_unless(LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
         DB::transaction(function () use ($leave, $payrollPeriod, $comment, $reviewedBy): void {
             $leave = Leave::query()
                 ->with(['employee.branch', 'employee.designation'])
@@ -99,7 +100,7 @@ class LeaveDtrService
                     ->where('branch_id', $employee->branch_id)
                     ->where('fingerprint_id', $this->fingerprintId($employee))
                     ->whereDate('date_in', $date)
-                    ->get();
+                    ->get()->reject(fn (Dtr $record): bool => $record->entry_source === AutomaticAbsenceService::SOURCE);
 
                 return app(DtrDayPartService::class)->conflictsWith($records, $dayPart);
             })
@@ -169,6 +170,7 @@ class LeaveDtrService
                 'is_locked' => false,
             ]);
 
+            app(AutomaticAbsenceService::class)->supersede($dtr);
             app(DtrSynchronizationService::class)->syncOfficialToVisible(
                 $dtr,
                 'approved_leave',
