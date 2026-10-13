@@ -46,6 +46,14 @@ class PayrollHalfDayInferenceTest extends TestCase
         $this->assertSame(0.0, $minutes);
     }
 
+    public function test_full_attendance_prevents_a_partial_duplicate_from_causing_half_day_deduction(): void
+    {
+        $this->assertSame(0.0, $this->inferredMinutes(collect([
+            $this->regularRecord('08:00:00', '18:00:00'),
+            $this->regularRecord('08:00:00', '12:30:00'),
+        ])));
+    }
+
     private function inferredMinutes($records): float
     {
         $method = new ReflectionMethod(PayrollCalculator::class, 'inferredRegularHalfDayAbsenceMinutes');

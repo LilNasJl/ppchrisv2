@@ -441,7 +441,8 @@ async function proc(buf,t,fn){
   }
   setProgress(86,'Preparing the complete preview');
   const stamp=Date.now();
-  S[t].raw=rec.map((row,index)=>{
+  const currentRows=t==='dtr'?currentAbsenceRows(rec):rec;
+  S[t].raw=currentRows.map((row,index)=>{
     const normalized={...row,_rowId:`${t}-${stamp}-${index}`};
     if(t==='dtr'){
       normalized._dayPart=dpart(normalized);
@@ -465,7 +466,7 @@ async function proc(buf,t,fn){
   document.getElementById(t+'-exp-arr').disabled=false;
   document.getElementById(t+'-exp-label').classList.remove('disabled');
   if(t==='dtr'){
-    document.getElementById('dtr-source-note').textContent=`${fn} - ${rec.length} decoded record${rec.length===1?'':'s'}. The complete set will be imported regardless of table filters.`;
+    document.getElementById('dtr-source-note').textContent=`${fn} - ${S[t].raw.length} current records; ${rec.length-S[t].raw.length} obsolete absence candidates omitted. All preview records will be imported regardless of table filters.`;
     updateImportButton();
   }
   setProgress(100,'Preview ready');
@@ -545,6 +546,20 @@ function tmin(value){
   return m?(parseInt(m[1],10)*60+parseInt(m[2],10)):null;
 }
 function isRegular(sc){return /^regular(?:\s+(?:sched(?:ule)?\s*)?[12])?$/i.test(String(sc||'').trim());}
+
+// Old exports may contain synthetic missing-half rows. Keep actual sessions and
+// whole-day candidates only; never invent or merge time punches in the reader.
+function currentAbsenceRows(rows){
+  const key=r=>JSON.stringify([r.branch_id??r.branch??'',String(r.uid??''),r.date_in??'']);
+  const actualDates=new Set(rows.filter(r=>!isAbsence(r)&&r.uid!=null&&(r.time_in||r.time_out)).map(key));
+  return rows.filter(r=>{
+    if(!isAbsence(r))return true;
+    const part=String(r.day_part||'').toLowerCase().replace(/[ -]+/g,'_');
+    if(part==='morning'||part==='afternoon')return false;
+    return !(r.uid!=null&&actualDates.has(key(r)));
+  });
+}
+
 function isAbsence(r){return String(r.sched||'').toLowerCase()==='absent'&&r.entry_source==='auto_absence'&&[true,1,'true','1'].includes(r.absence_candidate);}
 function dpart(r){
   const supplied=String(r.day_part||'').toLowerCase().replace(/[ -]+/g,'_');

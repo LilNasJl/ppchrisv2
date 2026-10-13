@@ -318,6 +318,7 @@
                             <div class="employee-payroll-metric"><dt>Undertime Amount</dt><dd>{{ $money($payrollRow['undertime_amount'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Half Day</dt><dd>{{ $money($payrollRow['halfday'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Absent</dt><dd>{{ $money($payrollRow['absent'] ?? null) }}</dd></div>
+                            <div class="employee-payroll-metric"><dt>Unpaid Leave</dt><dd>{{ $money($payrollRow['unpaid_leave'] ?? 0) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Late</dt><dd>{{ $money($payrollRow['late'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Shortages</dt><dd>{{ $money($payrollRow['shortages'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric"><dt>Uniform</dt><dd>{{ $money($payrollRow['uniform'] ?? null) }}</dd></div>

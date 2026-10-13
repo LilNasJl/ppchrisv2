@@ -5,12 +5,12 @@ namespace App\Filament\Employee\Pages;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Services\DtrDayPartService;
+use App\Services\LeaveApprovalService;
 use App\Services\LeaveScheduleOptionService;
 use BackedEnum;
 use Carbon\Carbon;
 use Closure;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -26,6 +26,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -33,6 +34,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 class LeaveRequests extends Page implements HasForms, HasTable
 {
@@ -113,6 +115,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
                     ->sortable(),
 
                 TextColumn::make('leave_type')
+                    ->description(fn (Leave $record): string => $record->isPaid() ? 'Paid leave' : 'Unpaid leave')
                     ->label('Leave Type')
                     ->badge()
                     ->color(fn (string $state): string => match (true) {
@@ -141,7 +144,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
                 TextColumn::make('requested_days')
                     ->label('Duration')
-                    ->state(fn (Leave $record) => $record->getRequestedLeaveDays() . ' ' . \Illuminate\Support\Str::plural('day', $record->getRequestedLeaveDays()))
+                    ->state(fn (Leave $record) => $record->getRequestedLeaveDays().' '.Str::plural('day', $record->getRequestedLeaveDays()))
                     ->badge()
                     ->color('primary')
                     ->icon('heroicon-m-clock')
@@ -262,7 +265,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
     protected function cancelLeave(Leave $leave): void
     {
         try {
-            app(\App\Services\LeaveApprovalService::class)->cancel($leave, auth()->user());
+            app(LeaveApprovalService::class)->cancel($leave, auth()->user());
         } catch (\RuntimeException $exception) {
             Notification::make()
                 ->title('Unable to cancel leave')
@@ -282,7 +285,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
     protected function leaveRequestSchema(): array
     {
         return [
-            \Filament\Schemas\Components\View::make('filament.leave.workflow-preview')
+            View::make('filament.leave.workflow-preview')
                 ->viewData(fn (): array => ['employee' => $this->employee()]),
             Section::make()
                 ->schema([
@@ -294,6 +297,13 @@ class LeaveRequests extends Page implements HasForms, HasTable
                         ->disabled(fn (Get $get): bool => (bool) $get('is_half_day'))
                         ->dehydrated(true)
                         ->required(),
+
+                    Select::make('pay_treatment')
+                        ->label('Requested Pay Treatment')
+                        ->options(Leave::payTreatmentOptions())
+                        ->default(Leave::PAID)
+                        ->required()
+                        ->helperText('HR confirms the final pay treatment during approval.'),
 
                     Toggle::make('is_half_day')
                         ->label('Half Day')
@@ -409,7 +419,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
         }
 
         try {
-            app(\App\Services\LeaveApprovalService::class)->submit($this->employee(), $data, auth()->user());
+            app(LeaveApprovalService::class)->submit($this->employee(), $data, auth()->user());
         } catch (\RuntimeException $exception) {
             Notification::make()
                 ->title('Unable to send leave request')
@@ -443,6 +453,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
     {
         return [
             'leave_type' => null,
+            'pay_treatment' => Leave::PAID,
             'leave_from' => now()->toDateString(),
             'leave_to' => now()->toDateString(),
             'is_half_day' => false,

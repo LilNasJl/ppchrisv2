@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\PermissionRegistrar;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class StationManagementApprovalWorkflowAccessTest extends TestCase
@@ -414,6 +415,7 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('employee_id');
             $table->string('leave_type');
+            $table->string('pay_treatment', 16)->default('paid');
             $table->date('leave_from');
             $table->date('leave_to');
             $table->string('reason');
@@ -1058,7 +1060,7 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         try {
             $leaveService->decide($leave, $step1->id, $macoSicUser, true, 'Unauthorized');
             $this->fail('Maco SIC should not be able to approve Tagum leave');
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             $this->assertSame(403, $e->getStatusCode());
         }
 

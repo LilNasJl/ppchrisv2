@@ -5,8 +5,10 @@ namespace App\Filament\Resources\Leaves\Pages;
 use App\Filament\Resources\Leaves\LeaveResource;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Services\LeaveApprovalService;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\Width;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -21,9 +23,9 @@ class CreateLeave extends CreateRecord
         return Width::Full;
     }
 
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
-        return app(\App\Services\LeaveApprovalService::class)->submit(
+        return app(LeaveApprovalService::class)->submit(
             Employee::findOrFail($data['employee_id']), $data, auth()->user(),
         );
     }
@@ -49,6 +51,7 @@ class CreateLeave extends CreateRecord
                 $data['leave_from'],
                 $data['leave_to'],
                 (bool) ($data['is_half_day'] ?? false),
+                $data['pay_treatment'] ?? Leave::PAID,
             );
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([

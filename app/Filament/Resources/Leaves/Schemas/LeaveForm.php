@@ -69,6 +69,13 @@ class LeaveForm
                                 ->dehydrated(true)
                                 ->required(),
 
+                            Select::make('pay_treatment')
+                                ->label('Requested Pay Treatment')
+                                ->options(Leave::payTreatmentOptions())
+                                ->default(Leave::PAID)
+                                ->required()
+                                ->helperText('HR confirms the final pay treatment during approval.'),
+
                             DatePicker::make('leave_from')
                                 ->label('Leave From')
                                 ->required()

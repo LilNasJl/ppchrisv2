@@ -266,8 +266,11 @@ class EmployeeVisibleDtrImportService extends DtrImportService
     protected function saveValidatedRow(array $data, string $importName): array
     {
         $this->lockImportPeriod($data);
-        if ($this->isAbsenceRow($data) && ($reason = app(AutomaticAbsenceService::class)->exclusionReason($data, $this->getEmployee($data)))) {
-            return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+        if ($this->isAbsenceRow($data)) {
+            [$data, $reason] = app(AutomaticAbsenceService::class)->assessCandidate($data, $this->getEmployee($data));
+            if ($reason) {
+                return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+            }
         }
         $metadata = $this->getImportMetadata($data, $importName);
         $existing = $this->findExistingRecord($data, $metadata);

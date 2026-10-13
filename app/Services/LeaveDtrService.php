@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\Leave;
 use App\Models\PayrollPeriod;
 use App\Models\User;
@@ -16,6 +17,11 @@ use RuntimeException;
 class LeaveDtrService
 {
     public function approveLeaveWithPaidDtr(Leave $leave, PayrollPeriod $payrollPeriod, ?string $comment = null, ?int $reviewedBy = null): void
+    {
+        $this->approveLeaveWithDtr($leave, $payrollPeriod, $comment, $reviewedBy);
+    }
+
+    public function approveLeaveWithDtr(Leave $leave, PayrollPeriod $payrollPeriod, ?string $comment = null, ?int $reviewedBy = null): void
     {
         abort_unless(LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
         DB::transaction(function () use ($leave, $payrollPeriod, $comment, $reviewedBy): void {
@@ -57,6 +63,10 @@ class LeaveDtrService
         $periodStart = Carbon::parse($payrollPeriod->date_start)->startOfDay();
         $periodEnd = Carbon::parse($payrollPeriod->date_end)->startOfDay();
 
+        if ($leaveTo->lt($leaveFrom)) {
+            throw new RuntimeException('Leave date range is invalid.');
+        }
+
         if ($leave->is_half_day && ! $leaveFrom->isSameDay($leaveTo)) {
             throw new RuntimeException('Half-day leave must use the same start and end date.');
         }
@@ -93,14 +103,21 @@ class LeaveDtrService
             ->all();
 
         $dayPart = $this->leaveDayPart($leave);
+        // Fetch the date range once instead of issuing one query for every leave day.
+        $recordsByDate = collect();
+        foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
+            $recordsByDate = $recordsByDate->concat($model::query()
+                ->where('payroll_period_id', $payrollPeriod->id)
+                ->where('branch_id', $employee->branch_id)
+                ->where('fingerprint_id', $this->fingerprintId($employee))
+                ->whereBetween('date_in', [$dates[0], end($dates)])
+                ->lockForUpdate()->get());
+        }
+        $recordsByDate = $recordsByDate->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString());
         $conflictingDates = collect($dates)
-            ->filter(function (string $date) use ($employee, $payrollPeriod, $dayPart): bool {
-                $records = Dtr::query()
-                    ->where('payroll_period_id', $payrollPeriod->id)
-                    ->where('branch_id', $employee->branch_id)
-                    ->where('fingerprint_id', $this->fingerprintId($employee))
-                    ->whereDate('date_in', $date)
-                    ->get()->reject(fn (Dtr $record): bool => $record->entry_source === AutomaticAbsenceService::SOURCE);
+            ->filter(function (string $date) use ($recordsByDate, $dayPart): bool {
+                $records = ($recordsByDate->get($date) ?? collect())
+                    ->reject(fn (Dtr $record): bool => (bool) $record->is_absent);
 
                 return app(DtrDayPartService::class)->conflictsWith($records, $dayPart);
             })
@@ -126,6 +143,8 @@ class LeaveDtrService
                     'deduct_noon_break' => false,
                 ]
                 : ($dayPart !== DtrDayPartService::WHOLE_DAY
+                    && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($employee)
+                    && ($schedule['type'] ?? 'regular') !== 'regular'
                     ? $this->standardHalfDayLeaveSchedule()
                     : $schedule);
 
@@ -153,8 +172,8 @@ class LeaveDtrService
                 'overtime' => 0,
                 'early_clock_in' => 0,
                 'credited_overtime' => 0,
-                'work_hrs' => $creditedMinutes,
-                'credited_work_hrs' => $creditedMinutes,
+                'work_hrs' => $leave->isPaid() ? $creditedMinutes : 0,
+                'credited_work_hrs' => $leave->isPaid() ? $creditedMinutes : 0,
                 'overtime_status' => 'n/a',
                 'early_clock_in_approved' => false,
                 'overtime_approved' => false,
@@ -163,13 +182,14 @@ class LeaveDtrService
                 'holiday_type' => null,
                 'holiday_rate' => null,
                 'daily_rate' => filled($employee->daily_rate) ? (float) $employee->daily_rate : null,
-                'comment' => 'Approved leave: '.$leave->leave_type,
+                'comment' => 'Approved '.($leave->isPaid() ? 'paid' : 'unpaid').' leave: '.$leave->leave_type,
                 'is_absent' => false,
                 'absence_minutes' => 0,
                 'is_imported' => false,
                 'is_locked' => false,
             ]);
 
+            $dtr->setRelation('leave', $leave);
             app(AutomaticAbsenceService::class)->supersede($dtr);
             app(DtrSynchronizationService::class)->syncOfficialToVisible(
                 $dtr,

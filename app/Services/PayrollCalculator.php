@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
+use App\Models\Holiday;
 use App\Models\HolidayEmployeeExclusion;
 use App\Models\PayrollCalculationSetting;
 use App\Models\PayrollPeriod;
@@ -142,7 +143,7 @@ class PayrollCalculator
 
         $dtrsByBranchAndFp = ($branchIds->isNotEmpty() && $fingerprintIds->isNotEmpty())
             ? Dtr::query()
-                ->with(['holiday.type'])
+                ->with(['holiday.type', 'leave'])
                 ->where('payroll_period_id', $period->id)
                 ->whereIn('branch_id', $branchIds->all())
                 ->whereIn('fingerprint_id', $fingerprintIds->all())
@@ -308,6 +309,9 @@ class PayrollCalculator
     {
         return [
             'shift3_premium' => 0.0,
+            'paid_leave_days' => 0.0,
+            'unpaid_leave_days' => 0.0,
+            'unpaid_leave' => 0.0,
             ...(array) $snapshot->data,
         ];
     }
@@ -334,6 +338,7 @@ class PayrollCalculator
             $employee->monthly_rate ?: ($ratePerDay * $workDaysPerMonth));
         $halfMonthPay = $isDaily ? null : $this->money(($monthlyRate ?? 0) / 2);
         $ratePerHour = $ratePerDay / $workHoursPerDay;
+        $leaveTotals = app(LeavePayService::class)->totals($dtrs, $workHoursPerDay, $halfDayValue);
 
         $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay);
         $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue);
@@ -346,8 +351,8 @@ class PayrollCalculator
             );
         }
 
-        $absenceDayValue = ($wholeAbsenceMinutes + $halfDayAbsenceMinutes) / ($workHoursPerDay * 60);
-        $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) : $this->workedDtrDays($dtrs);
+        $absenceDayValue = ($wholeAbsenceMinutes + $halfDayAbsenceMinutes + $leaveTotals['unpaid_minutes']) / ($workHoursPerDay * 60);
+        $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) + $leaveTotals['paid_days'] : $this->workedDtrDays($dtrs);
         $daysWorked = $isDaily
             ? max(0, $dtrWorkDays)
             : max(0, $halfMonthDays - $absenceDayValue);
@@ -375,6 +380,7 @@ class PayrollCalculator
         $lateAmount = $this->minutePay($lateMinutes, $ratePerHour);
         $halfDayAmount = $isDaily ? 0.0 : $this->money(($halfDayAbsenceMinutes / 60) * $ratePerHour);
         $absentAmount = $isDaily ? 0.0 : $this->money(($wholeAbsenceMinutes / 60) * $ratePerHour);
+        $unpaidLeaveAmount = $isDaily ? 0.0 : $this->money(($leaveTotals['unpaid_minutes'] / 60) * $ratePerHour);
         $deductions = $this->deductions($employee);
         $loanPayment = $this->loanPaymentDeduction($employee, $period);
 
@@ -392,6 +398,7 @@ class PayrollCalculator
             $undertimeAmount
             + $halfDayAmount
             + $absentAmount
+            + $unpaidLeaveAmount
             + $lateAmount
             + $shortages
             + $deductions['uniform']
@@ -434,6 +441,9 @@ class PayrollCalculator
             'undertime_amount' => $undertimeAmount,
             'halfday' => $halfDayAmount,
             'absent' => $absentAmount,
+            'paid_leave_days' => $this->number($leaveTotals['paid_days']),
+            'unpaid_leave_days' => $this->number($leaveTotals['unpaid_days']),
+            'unpaid_leave' => $unpaidLeaveAmount,
             'late' => $lateAmount,
             'shortages' => $shortages,
             'uniform' => $deductions['uniform'],
@@ -510,6 +520,7 @@ class PayrollCalculator
             'undertime_amount' => 'UNDERTIME AMOUNT',
             'halfday' => 'HALFDAY',
             'absent' => 'ABSENT',
+            'unpaid_leave' => 'UNPAID LEAVE',
             'late' => 'LATE',
             'shortages' => 'SHORTAGES',
             'uniform' => 'UNIFORM',
@@ -574,7 +585,7 @@ class PayrollCalculator
         }
 
         return Dtr::query()
-            ->with(['holiday.type'])
+            ->with(['holiday.type', 'leave'])
             ->where('payroll_period_id', $period->id)
             ->where('branch_id', $employee->branch_id)
             ->where('fingerprint_id', $fingerprintId)
@@ -586,6 +597,7 @@ class PayrollCalculator
         $finalized = $dtrs
             ->reject(fn (Dtr $dtr): bool => $dtr->requiresAttendanceApproval())
             ->values();
+        $finalized = app(LeavePayService::class)->effectiveRecords($finalized);
 
         if ($employee && $period) {
             return $this->syncDtrHolidaysFromCalendar($employee, $period, $finalized);
@@ -600,7 +612,7 @@ class PayrollCalculator
             return $dtrs;
         }
 
-        /** @var Collection<string, \App\Models\Holiday>|null $branchHolidays */
+        /** @var Collection<string, Holiday>|null $branchHolidays */
         $branchHolidays = $employee->relationLoaded('preloadedBranchHolidays')
             ? $employee->getRelation('preloadedBranchHolidays')
             : ((filled($period->date_start) && filled($period->date_end) && filled($employee->branch_id))
@@ -690,6 +702,7 @@ class PayrollCalculator
     {
         return $dtrs
             ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->reject(fn (Dtr $dtr): bool => app(LeavePayService::class)->isLeave($dtr))
             ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime');
     }
 
@@ -725,6 +738,12 @@ class PayrollCalculator
                     ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent || filled($dtr->leave_id))
                     ->filter(fn (Dtr $dtr): bool => $dayPartService->isRegularScheduleType($dtr->schedule_type))
                     ->map(fn (Dtr $dtr): string => $attendanceUnits->dayPartForRecord($dtr))
+                    ->unique();
+
+                if ($workedRegularParts->contains(DtrDayPartService::WHOLE_DAY)) {
+                    return 0.0;
+                }
+                $workedRegularParts = $workedRegularParts
                     ->filter(fn (string $part): bool => in_array($part, [
                         DtrDayPartService::MORNING,
                         DtrDayPartService::AFTERNOON,
@@ -785,6 +804,7 @@ class PayrollCalculator
         return $this->money(
             $dtrs
                 ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_holiday)
+                ->reject(fn (Dtr $dtr): bool => app(LeavePayService::class)->isLeave($dtr))
                 ->reject(fn (Dtr $dtr): bool => $this->isHolidayExcludedForPayroll($employee, $dtr))
                 ->filter(function (Dtr $dtr) use ($type): bool {
                     $holidayType = Str::lower((string) ($dtr->holiday_type ?: $dtr->holiday?->type?->type));

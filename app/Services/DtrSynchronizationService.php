@@ -599,11 +599,11 @@ class DtrSynchronizationService
         ) {
             $byLeave = Dtr::withTrashed()
                 ->where('leave_id', $visible->leave_id)
-                ->whereDate('date_in', $this->normalizeDate($visible->date_in))
+                ->where('date_in', $this->normalizeDate($visible->date_in))
+                ->where('day_part', $visible->day_part ?: DtrDayPartService::WHOLE_DAY)
                 ->first();
-            if ($byLeave) {
-                return $byLeave;
-            }
+
+            return $byLeave; // A new leave must never reuse an attendance row on the same date.
         }
 
         $employee = $visible->employee ?: (filled($visible->employee_id) ? Employee::query()->find($visible->employee_id) : null);
@@ -748,11 +748,11 @@ class DtrSynchronizationService
         ) {
             $byLeave = EmployeeVisibleDtr::withTrashed()
                 ->where('leave_id', $official->leave_id)
-                ->whereDate('date_in', $this->normalizeDate($official->date_in))
+                ->where('date_in', $this->normalizeDate($official->date_in))
+                ->where('day_part', $official->day_part ?: DtrDayPartService::WHOLE_DAY)
                 ->first();
-            if ($byLeave) {
-                return $byLeave;
-            }
+
+            return $byLeave;
         }
 
         $employee ??= $this->resolveEmployeeForOfficial($official);

@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Branch;
+use App\Models\Department;
+use App\Models\Designation;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveApprovalEvent;
@@ -63,18 +66,21 @@ class LeaveApprovalService
             $flow = LeaveApprovalWorkflow::lockForUpdate()->findOrFail($flow->id);
             // Resolve again under the configuration lock so submission cannot mix two revisions.
             [$flow, $steps] = $this->resolve($employee);
-            $data = Arr::only($data, ['leave_type', 'leave_from', 'leave_to', 'is_half_day', 'half_day_period',
+            $data = Arr::only($data, ['leave_type', 'pay_treatment', 'leave_from', 'leave_to', 'is_half_day', 'half_day_period',
                 'half_day_schedule', 'reason', 'attachment_path', 'attachment_original_name']);
+            $data['pay_treatment'] ??= Leave::PAID;
             validator($data, [
                 'leave_type' => 'required|string|max:255', 'leave_from' => 'required|date',
                 'leave_to' => 'required|date|after_or_equal:leave_from', 'reason' => 'required|string|max:255',
                 'is_half_day' => 'sometimes|boolean',
                 'half_day_period' => 'required_if:is_half_day,1|nullable|in:morning,afternoon',
+                'pay_treatment' => 'required|in:paid,unpaid',
             ])->validate();
-            Leave::validateCanCreateRequest($employee, $data['leave_type'], $data['leave_from'], $data['leave_to'], (bool) ($data['is_half_day'] ?? false));
+            Leave::validateCanCreateRequest($employee, $data['leave_type'], $data['leave_from'], $data['leave_to'], (bool) ($data['is_half_day'] ?? false), $data['pay_treatment']);
 
             $overlaps = Leave::where('employee_id', $employee->id)->whereIn('status', ['Pending', 'Approved'])
-                ->whereDate('leave_from', '<=', $data['leave_to'])->whereDate('leave_to', '>=', $data['leave_from'])->get();
+                ->where('leave_from', '<', Carbon::parse($data['leave_to'])->addDay()->toDateString())
+                ->where('leave_to', '>=', $data['leave_from'])->get();
             foreach ($overlaps as $other) {
                 if (! ($other->is_half_day && ($data['is_half_day'] ?? false)
                     && $other->half_day_period !== ($data['half_day_period'] ?? null))) {
@@ -138,10 +144,10 @@ class LeaveApprovalService
         });
     }
 
-    public function decideHr(Leave $request, User $actor, bool $approve, ?PayrollPeriod $period, ?string $remarks): void
+    public function decideHr(Leave $request, User $actor, bool $approve, ?PayrollPeriod $period, ?string $remarks, ?string $payTreatment = null): void
     {
         abort_unless(LeaveApprovalAccess::review($actor), 403);
-        DB::transaction(function () use ($request, $actor, $approve, $period, $remarks): void {
+        DB::transaction(function () use ($request, $actor, $approve, $period, $remarks, $payTreatment): void {
             $leave = $this->pending($request);
             if (! $leave->isReadyForHr()) {
                 throw new RuntimeException('All preliminary levels must be completed before HR review.');
@@ -156,13 +162,17 @@ class LeaveApprovalService
                 if (! $period) {
                     throw new RuntimeException('Select an open payroll period.');
                 }
-                app(LeaveDtrService::class)->approveLeaveWithPaidDtr($leave, $period, $remarks, $actor->id);
+                $treatment = $payTreatment ?? $leave->pay_treatment ?? Leave::PAID;
+                validator(['pay_treatment' => $treatment], ['pay_treatment' => 'required|in:paid,unpaid'])->validate();
+                $leave->forceFill(['pay_treatment' => $treatment])->save();
+                app(LeaveDtrService::class)->approveLeaveWithDtr($leave, $period, $remarks, $actor->id);
             } else {
                 $leave->rejectRequest($remarks, $actor->id);
             }
             $step?->update(['status' => $approve ? 'Approved' : 'Rejected', 'acted_by' => $actor->id, 'acted_at' => now(), 'remarks' => $remarks]);
             $leave->forceFill(['approval_phase' => 'complete', 'current_approval_order' => null])->save();
-            $event = $this->event($leave, $actor, $approve ? 'Final HR approval' : 'HR rejection', $remarks, $step);
+            $event = $this->event($leave, $actor, $approve ? 'Final HR approval' : 'HR rejection', $remarks, $step,
+                $approve ? ['pay_treatment' => $leave->pay_treatment] : []);
             app(LeaveApprovalNotifier::class)->requester($leave, $event, $approve ? 'Leave request approved' : 'Leave request rejected');
         });
     }
@@ -294,8 +304,8 @@ class LeaveApprovalService
                 ->contains(fn (string $scope): bool => filled($data[$scope.'_id'] ?? null))) {
                 throw ValidationException::withMessages(['scope_type' => 'Choose one scope using the Applies To dropdown.']);
             }
-            foreach (['employee' => Employee::class, 'branch' => \App\Models\Branch::class,
-                'department' => \App\Models\Department::class, 'designation' => \App\Models\Designation::class] as $scope => $model) {
+            foreach (['employee' => Employee::class, 'branch' => Branch::class,
+                'department' => Department::class, 'designation' => Designation::class] as $scope => $model) {
                 $id = $scopeType === $scope ? $scopeId : null;
                 if ($id && ! $model::whereKey($id)->exists()) {
                     throw ValidationException::withMessages(['scope_id' => 'Select an available '.$scope.'.']);

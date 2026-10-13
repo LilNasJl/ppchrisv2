@@ -73,6 +73,7 @@
                     </span>
                 </div>
                 <dd>{{ $leave->leave_type }}</dd>
+                <span class="detail-sub">{{ $leave->isPaid() ? 'Paid leave' : 'Unpaid leave' }}{{ $leave->status === 'Pending' ? ' · Requested treatment, subject to HR approval' : '' }}</span>
                 <span class="detail-sub">
                     {{ $leave->is_half_day ? 'Half-Day (' . ucfirst((string) $leave->half_day_period) . ')' : 'Full-Day Leave Schedule' }}
                 </span>

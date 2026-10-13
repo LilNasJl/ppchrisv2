@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use App\Services\LeaveApprovalAccess;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -17,9 +18,14 @@ class Leave extends Model
 
     public const HALF_DAY_LEAVE = 'Halfday';
 
+    public const PAID = 'paid';
+
+    public const UNPAID = 'unpaid';
+
     protected $fillable = [
         'employee_id',
         'leave_type',
+        'pay_treatment',
         'leave_from',
         'leave_to',
         'is_half_day',
@@ -47,6 +53,23 @@ class Leave extends Model
         'reviewed_at' => 'datetime',
         'approval_snapshot' => 'array',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (Leave $leave): void {
+            if ($leave->getOriginal('status') === 'Approved' && $leave->isDirty([
+                'employee_id', 'leave_type', 'pay_treatment', 'leave_from', 'leave_to',
+                'is_half_day', 'half_day_period', 'half_day_schedule', 'status',
+            ])) {
+                throw new RuntimeException('Approved leave requires a controlled HR correction; its dates and pay treatment cannot be edited directly.');
+            }
+        });
+        static::deleting(function (Leave $leave): void {
+            if ($leave->status === 'Approved') {
+                throw new RuntimeException('Approved leave history cannot be deleted. Use a controlled HR correction.');
+            }
+        });
+    }
 
     public function employee()
     {
@@ -126,7 +149,22 @@ class Leave extends Model
         return (float) ($from->diffInDays($to) + 1);
     }
 
-    public static function validateCanCreateRequest(Employee $employee, string $leaveType, mixed $leaveFrom, mixed $leaveTo, bool $isHalfDay = false): void
+    public static function payTreatmentOptions(): array
+    {
+        return [self::PAID => 'Paid Leave', self::UNPAID => 'Unpaid Leave'];
+    }
+
+    public function isPaid(): bool
+    {
+        return ($this->pay_treatment ?: self::PAID) === self::PAID;
+    }
+
+    public function coversDayPart(string $part): bool
+    {
+        return ! $this->is_half_day || $part === 'whole_day' || $this->half_day_period === $part;
+    }
+
+    public static function validateCanCreateRequest(Employee $employee, string $leaveType, mixed $leaveFrom, mixed $leaveTo, bool $isHalfDay = false, string $payTreatment = self::PAID): void
     {
         $employee->resetLeaveCreditsIfNeeded();
         $employee->refresh();
@@ -147,6 +185,17 @@ class Leave extends Model
 
         if ($leaveDays <= 0) {
             throw new RuntimeException('Leave date range is invalid.');
+        }
+
+        if (! in_array($payTreatment, [self::PAID, self::UNPAID], true)) {
+            throw new RuntimeException('Select paid or unpaid leave.');
+        }
+        if ($payTreatment === self::UNPAID) {
+            if ($leaveType === self::BIRTHDAY_LEAVE) {
+                throw new RuntimeException('Birthday leave must use paid leave treatment.');
+            }
+
+            return;
         }
 
         if ($leaveType === self::BIRTHDAY_LEAVE) {
@@ -181,7 +230,7 @@ class Leave extends Model
             if (! $leave->isReadyForHr()) {
                 throw new RuntimeException('Only requests ready for HR review can be approved.');
             }
-            abort_unless(\App\Services\LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
+            abort_unless(LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
 
             $employee = Employee::query()->lockForUpdate()->findOrFail($leave->employee_id);
             $employee->resetLeaveCreditsIfNeeded();
@@ -195,6 +244,22 @@ class Leave extends Model
 
             if ($leaveDays <= 0) {
                 throw new RuntimeException('Leave date range is invalid.');
+            }
+
+            if (! in_array($leave->pay_treatment ?: self::PAID, [self::PAID, self::UNPAID], true)) {
+                throw new RuntimeException('Select paid or unpaid leave.');
+            }
+            if (! $leave->isPaid()) {
+                if ($leave->leave_type === self::BIRTHDAY_LEAVE) {
+                    throw new RuntimeException('Birthday leave must use paid leave treatment.');
+                }
+                $leave->forceFill([
+                    'status' => 'Approved', 'hr_comment' => $comment,
+                    'deducted_leave_credits' => 0, 'deducted_birthday_leave_credits' => 0,
+                    'status_updated_at' => now(), 'reviewed_by' => $reviewedBy, 'reviewed_at' => now(),
+                ])->save();
+
+                return;
             }
 
             if ($leave->leave_type === self::BIRTHDAY_LEAVE) {
@@ -252,7 +317,7 @@ class Leave extends Model
             if (! $leave->isReadyForHr()) {
                 throw new RuntimeException('Only requests ready for HR review can be rejected here.');
             }
-            abort_unless(\App\Services\LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
+            abort_unless(LeaveApprovalAccess::review(User::find($reviewedBy)), 403);
             $employee = Employee::query()->lockForUpdate()->find($leave->employee_id);
 
             if ($employee && $leave->status === 'Approved') {

@@ -78,16 +78,16 @@ class AutomaticAbsenceImportTest extends TestCase
     }
 
     #[DataProvider('services')]
-    public function test_missing_morning_and_afternoon_are_half_absences_with_actual_punches_processed_first(string $service): void
+    public function test_half_day_attendance_stays_one_row_and_legacy_candidates_are_skipped(string $service): void
     {
         foreach (['morning', 'afternoon'] as $part) {
             $date = $part === 'morning' ? '2026-10-12' : '2026-10-13';
             $actual = $part === 'morning' ? $this->punch('13:00:00', '18:00:00', $date) : $this->punch('08:00:00', '12:30:00', $date);
             $result = app($service)->importRows([$this->absence($part, $date), $actual], 'Half absence');
-            $this->assertSame(2, $result['successful'], json_encode($result));
-            $absent = Dtr::query()->whereDate('date_in', $date)->where('is_absent', true)->sole();
-            $this->assertSame($part, $absent->day_part);
-            $this->assertSame(240, $absent->absence_minutes);
+            $this->assertSame(1, $result['successful'], json_encode($result));
+            $this->assertSame(1, $result['skipped']);
+            $this->assertSame(0, Dtr::query()->whereDate('date_in', $date)->where('is_absent', true)->count());
+            $this->assertSame(1, EmployeeVisibleDtr::query()->whereDate('date_in', $date)->count());
             $this->assertSame(1, Dtr::query()->whereDate('date_in', $date)->where('is_absent', false)->count());
         }
     }
@@ -99,8 +99,8 @@ class AutomaticAbsenceImportTest extends TestCase
         $result = app($service)->importRows([$this->punch('08:00:00', '12:30:00')], 'Correct morning');
         $this->assertSame(1, $result['successful'], json_encode($result));
         $absent = Dtr::query()->where('is_absent', true)->first();
-        $this->assertNotNull($absent, json_encode(Dtr::withTrashed()->get()->toArray()));
-        $this->assertSame('afternoon', $absent->day_part);
+        $this->assertNull($absent);
+        $this->assertSame(1, Dtr::query()->count());
         $result = app($service)->importRows([$this->punch('13:00:00', '18:00:00')], 'Correct afternoon');
         $this->assertSame(1, $result['successful'], json_encode($result));
         $this->assertSame(0, Dtr::query()->where('is_absent', true)->count());
@@ -153,8 +153,8 @@ class AutomaticAbsenceImportTest extends TestCase
         $result = app($service)->importRows([$bad], 'Unmarked');
         $this->assertSame(1, $result['failed']);
         $bad = $this->absence('whole_day');
-        $bad['absence_split'] = '19:00:00';
-        $result = app($service)->importRows([$bad], 'Bad split');
+        $bad['schedule_end'] = '07:00:00';
+        $result = app($service)->importRows([$bad], 'Invalid workday');
         $this->assertSame(1, $result['failed']);
         $this->period->update(['is_locked' => true]);
         $result = app($service)->importRows([$this->absence('whole_day')], 'Locked');
@@ -190,8 +190,9 @@ class AutomaticAbsenceImportTest extends TestCase
     {
         app($service)->importRows([$this->punch('08:00:00', '12:30:00')], 'Morning');
         $before = app(PayrollCalculator::class)->row($this->employee, $this->period);
-        $result = app($service)->importRows([$this->absence('afternoon')], 'Explicit afternoon absence');
-        $this->assertSame(1, $result['successful'], json_encode($result));
+        $result = app($service)->importRows([$this->absence('afternoon')], 'Obsolete afternoon absence');
+        $this->assertSame(1, $result['skipped'], json_encode($result));
+        $this->assertSame(1, Dtr::query()->count());
         $after = app(PayrollCalculator::class)->row($this->employee, $this->period);
         foreach (['halfday', 'absent', 'days_worked', 'late', 'undertime_minutes', 'overtime_minutes', 'gross_pay', 'net_pay'] as $key) {
             $this->assertEquals($before[$key], $after[$key], $key);
@@ -212,7 +213,7 @@ class AutomaticAbsenceImportTest extends TestCase
         $this->assertEqualsWithDelta($before['net_pay'] - $after['absent'], $after['net_pay'], .01);
     }
 
-    public function test_approved_leave_supersedes_only_automatic_absence_and_keeps_the_other_half(): void
+    public function test_half_leave_overlays_the_original_whole_absence_without_creating_half_rows(): void
     {
         app(DtrImportService::class)->importRows([$this->absence('whole_day')], 'Before leave');
         $leave = Leave::query()->create(['employee_id' => $this->employee->id, 'leave_type' => 'Vacation Leave',
@@ -229,10 +230,10 @@ class AutomaticAbsenceImportTest extends TestCase
             }
         };
         $service->generateApprovedRows($leave, $this->period);
-        $this->assertSame('afternoon', Dtr::query()->where('is_absent', true)->sole()->day_part);
-        $this->assertSame(240, Dtr::query()->where('is_absent', true)->sole()->absence_minutes);
+        $this->assertSame('whole_day', Dtr::query()->where('is_absent', true)->sole()->day_part);
+        $this->assertSame(480, Dtr::query()->where('is_absent', true)->sole()->absence_minutes);
         $this->assertSame(1, Dtr::query()->where('leave_id', $leave->id)->count());
-        $this->assertSame('afternoon', EmployeeVisibleDtr::query()->where('is_absent', true)->sole()->day_part);
+        $this->assertSame('whole_day', EmployeeVisibleDtr::query()->where('is_absent', true)->sole()->day_part);
     }
 
     #[DataProvider('services')]
@@ -249,10 +250,92 @@ class AutomaticAbsenceImportTest extends TestCase
         $this->assertSame(1, Dtr::query()->count());
     }
 
+    #[DataProvider('services')]
+    public function test_saturday_absence_is_one_three_hour_record_only_after_eleven(string $service): void
+    {
+        $this->employee->update(['monthly_rate' => 20800]);
+        $row = [...$this->absence('whole_day', '2026-10-10'),
+            'schedule_start' => '08:00:00', 'schedule_end' => '11:00:00'];
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:00:00', 'Asia/Manila'));
+        $this->assertSame(1, app($service)->importRows([$row], 'Still at cutoff')['skipped']);
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        $result = app($service)->importRows([$row], 'Saturday complete');
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
+            $saved = $model::query()->sole();
+            $this->assertSame('whole_day', $saved->day_part);
+            $this->assertSame(180, $saved->absence_minutes);
+            $this->assertNull($saved->time_in);
+            $this->assertNull($saved->time_out);
+        }
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(300, $pay['absent']); // existing 3-hour Saturday payroll
+        $this->assertEquals(0, $pay['halfday']);
+        $this->assertSame(1, app($service)->importRows([$row], 'Repeated')['skipped']);
+    }
+
+    #[DataProvider('services')]
+    public function test_saturday_invalid_window_and_actual_duty_block_absence(string $service): void
+    {
+        $bad = $this->absence('whole_day', '2026-10-10');
+        $this->assertSame(1, app($service)->importRows([$bad], 'Invalid Saturday window')['skipped']);
+        $candidate = [...$bad, 'schedule_end' => '11:00:00'];
+        $actual = [...$this->punch('08:00:00', '11:00:00', '2026-10-10'),
+            'schedule_type' => 'Saturday', 'schedule_end' => '11:00:00'];
+        $result = app($service)->importRows([$candidate, $actual], 'Saturday duty');
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(0, Dtr::where('is_absent', true)->count());
+    }
+
+    #[DataProvider('services')]
+    public function test_half_day_only_needs_one_actual_record_for_payroll(string $service): void
+    {
+        $this->employee->update(['monthly_rate' => 20800]);
+        $actual = $this->punch('12:31:00', '18:00:00');
+        $result = app($service)->importRows([$actual], 'Afternoon only');
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $this->assertSame('afternoon', Dtr::query()->sole()->day_part);
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(400, $pay['halfday']);
+        $this->assertEquals(0, $pay['absent']);
+        $this->assertEquals(0, $pay['late']);
+        $this->assertEquals(0, $pay['undertime_minutes']);
+        $this->assertSame(1, Dtr::count());
+        $this->assertSame(1, EmployeeVisibleDtr::count());
+        $this->assertSame(1, app($service)->importRows([$actual], 'Duplicate duty')['skipped']);
+        $this->assertSame(1, app($service)->importRows([$this->absence('whole_day')], 'Stale whole absence')['skipped']);
+    }
+
+    #[DataProvider('services')]
+    public function test_legacy_half_candidates_without_attendance_are_skipped_not_promoted_to_whole_absence(string $service): void
+    {
+        $result = app($service)->importRows([$this->absence('morning'), $this->absence('afternoon')], 'Legacy export');
+        $this->assertSame(2, $result['skipped'], json_encode($result));
+        $this->assertSame(0, Dtr::count());
+        $this->assertSame(0, EmployeeVisibleDtr::count());
+    }
+
+    #[DataProvider('services')]
+    public function test_historical_extra_absence_is_not_double_deducted_and_not_destroyed_by_calculation(string $service): void
+    {
+        $this->employee->update(['monthly_rate' => 20800]);
+        app($service)->importRows([$this->punch('08:00:00', '12:30:00')], 'Morning');
+        $legacy = Dtr::create(['payroll_period_id' => $this->period->id, 'branch_id' => $this->branch->id,
+            'fingerprint_id' => '123456', 'date_in' => '2026-10-12', 'date_out' => '2026-10-12',
+            'entry_source' => 'auto_absence', 'schedule_type' => 'Absent', 'is_absent' => true,
+            'day_part' => 'whole_day', 'absence_minutes' => 480, 'work_hrs' => 0]);
+        $before = $legacy->fresh()->getAttributes();
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(400, $pay['halfday']);
+        $this->assertEquals(0, $pay['absent']);
+        $this->assertSame($before, $legacy->fresh()->getAttributes());
+    }
+
     private function absence(string $part, string $date = '2026-10-12'): array
     {
         return [...$this->punch('', '', $date), 'schedule_type' => 'Absent', 'entry_source' => 'auto_absence',
-            'absence_candidate' => true, 'regular_schedule' => 'Regular Sched 1', 'absence_split' => '12:30:00',
+            'absence_candidate' => true, 'regular_schedule' => 'Regular Sched 1',
             'day_part' => $part, 'source_session_id' => "ABS-123456-{$date}-{$part}"];
     }
 

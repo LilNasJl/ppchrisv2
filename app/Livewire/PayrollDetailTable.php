@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Filament\Pages\EmployeePayroll;
 use App\Filament\Pages\OvertimeManagement;
 use App\Models\Branch;
 use App\Models\Dtr;
@@ -69,7 +70,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         ],
         'deductions' => [
             'index', 'bank_id_no', 'name', 'gross_pay', 'undertime_minutes',
-            'undertime_amount', 'halfday', 'absent', 'late', 'shortages', 'uniform',
+            'undertime_amount', 'halfday', 'absent', 'unpaid_leave', 'late', 'shortages', 'uniform',
             'other_deductions', 'loan_payment', 'total_deductions', 'net_pay',
         ],
         'remittances' => [
@@ -260,6 +261,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('undertime_amount', 'Undertime Amount'),
                 $this->moneyColumn('halfday', 'Halfday'),
                 $this->moneyColumn('absent', 'Absent'),
+                $this->moneyColumn('unpaid_leave', 'Unpaid Leave'),
                 $this->moneyColumn('late', 'Late'),
 
                 $this->totalizeColumn(TextInputColumn::make('shortages')
@@ -778,7 +780,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             return null;
         }
 
-        return \App\Filament\Pages\EmployeePayroll::getUrl([
+        return EmployeePayroll::getUrl([
             'employeeId' => $employee->publicKey(),
             'branchId' => $branch->publicKey(),
             'periodId' => $period->publicKey(),

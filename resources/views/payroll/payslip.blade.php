@@ -468,6 +468,7 @@
                         <tr><td>Undertime ({{ $number($row['undertime_minutes'] ?? 0) }} min)</td><td>{{ $money($row['undertime_amount'] ?? 0) }}</td></tr>
                         <tr><td>Half Day</td><td>{{ $money($row['halfday'] ?? 0) }}</td></tr>
                         <tr><td>Absent</td><td>{{ $money($row['absent'] ?? 0) }}</td></tr>
+                        <tr><td>Unpaid Leave</td><td>{{ $money($row['unpaid_leave'] ?? 0) }}</td></tr>
                         <tr><td>Late</td><td>{{ $money($row['late'] ?? 0) }}</td></tr>
                         <tr><td>Shortages</td><td>{{ $money($row['shortages'] ?? 0) }}</td></tr>
                         <tr><td>Company Uniform</td><td>{{ $money($row['uniform'] ?? 0) }}</td></tr>

@@ -27,10 +27,13 @@ class LeaveReviewActions
         $stepField = fn () => Hidden::make('step_id')->default(fn () => $leave->approvalSteps()->where('status', 'Pending')->value('id'));
         $approve = Action::make('approveLeave')->label($hr ? 'Final Approval' : 'Approve')
             ->icon(Heroicon::CheckCircle)->color('success')->visible($canAct)
-            ->modalHeading($hr ? 'Approve leave and create paid DTR' : 'Approve this level')
+            ->modalHeading($hr ? 'Approve leave and reconcile DTR' : 'Approve this level')
             ->modalSubmitActionLabel($hr ? 'Confirm Final Approval' : 'Confirm Approval')
             ->schema(array_filter([
                 $stepField(),
+                $hr ? Select::make('pay_treatment')->label('Final Pay Treatment')->required()
+                    ->options(Leave::payTreatmentOptions())->default(fn () => $leave->pay_treatment ?: Leave::PAID)
+                    ->helperText('Paid leave uses leave credits. Unpaid leave is approved time off without pay.') : null,
                 $hr ? Select::make('payroll_period_id')->label('Payroll Period')->required()->searchable()
                     ->options(fn () => PayrollPeriod::where('is_locked', false)
                         ->whereDate('date_start', '<=', $leave->leave_from)->whereDate('date_end', '>=', $leave->leave_to)
@@ -40,7 +43,7 @@ class LeaveReviewActions
                 self::run(function () use ($leave, $hr, $data): void {
                     $service = app(LeaveApprovalService::class);
                     if ($hr) {
-                        $service->decideHr($leave, auth()->user(), true, PayrollPeriod::findOrFail($data['payroll_period_id']), $data['remarks'] ?? null);
+                        $service->decideHr($leave, auth()->user(), true, PayrollPeriod::findOrFail($data['payroll_period_id']), $data['remarks'] ?? null, $data['pay_treatment']);
                     } else {
                         $service->decide($leave, (int) $data['step_id'], auth()->user(), true, $data['remarks'] ?? null);
                     }

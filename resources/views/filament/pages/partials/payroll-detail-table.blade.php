@@ -299,7 +299,7 @@
                 <th rowspan="2">Regular Holiday</th>
                 <th rowspan="2">Special Holiday</th>
                 <th rowspan="2">Gross Pay</th>
-                <th colspan="9">Deductions</th>
+                <th colspan="10">Deductions</th>
                 <th colspan="5">Remittances</th>
                 <th rowspan="2">Total Deductions</th>
                 <th rowspan="2">Net Pay</th>
@@ -312,6 +312,7 @@
                 <th>Undertime Amount</th>
                 <th>Halfday</th>
                 <th>Absent</th>
+                <th>Unpaid Leave</th>
                 <th>Late</th>
                 <th>Shortages</th>
                 <th>Uniform</th>
@@ -350,6 +351,7 @@
                     <td class="text-right">{{ $money($row['undertime_amount']) }}</td>
                     <td class="text-right">{{ $money($row['halfday']) }}</td>
                     <td class="text-right">{{ $money($row['absent']) }}</td>
+                    <td class="text-right">{{ $money($row['unpaid_leave'] ?? 0) }}</td>
                     <td class="text-right">{{ $money($row['late']) }}</td>
                     <td class="text-right">{{ $money($row['shortages']) }}</td>
                     <td class="text-right">{{ $money($row['uniform']) }}</td>
@@ -366,7 +368,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="36" class="text-center">No payroll data available.</td>
+                    <td colspan="37" class="text-center">No payroll data available.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -397,6 +399,7 @@
                     <td class="text-right">{{ $sum('undertime_amount') }}</td>
                     <td class="text-right">{{ $sum('halfday') }}</td>
                     <td class="text-right">{{ $sum('absent') }}</td>
+                    <td class="text-right">{{ $sum('unpaid_leave') }}</td>
                     <td class="text-right">{{ $sum('late') }}</td>
                     <td class="text-right">{{ $sum('shortages') }}</td>
                     <td class="text-right">{{ $sum('uniform') }}</td>

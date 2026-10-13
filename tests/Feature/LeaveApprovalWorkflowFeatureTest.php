@@ -146,6 +146,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
             $table->string('title');
             $table->date('date_start');
             $table->date('date_end');
+            $table->text('description')->nullable();
             $table->boolean('is_locked')->default(false);
             $table->softDeletes();
             $table->timestamps();
@@ -186,6 +187,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('employee_id');
             $table->string('leave_type');
+            $table->string('pay_treatment')->default('paid');
             $table->date('leave_from');
             $table->date('leave_to');
             $table->string('reason');

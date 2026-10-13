@@ -320,8 +320,8 @@ class DtrImportService
                 || ! in_array($data['day_part'], ['morning', 'afternoon', 'whole_day'], true)
                 || filled($data['time_in']) || filled($data['time_out'])
                 || (filled($data['date_out']) && $data['date_out'] !== $data['date_in'])
-                || blank($data['absence_split']) || ! ($data['schedule_start'] < $data['absence_split'] && $data['absence_split'] < $data['schedule_end'])) {
-                throw ValidationException::withMessages(['absence' => 'Absent rows require the explicit regular-schedule candidate marker, valid day-part and day split, and empty punch times.']);
+                || $data['schedule_start'] >= $data['schedule_end']) {
+                throw ValidationException::withMessages(['absence' => 'Absent rows require the explicit regular-schedule candidate marker, valid workday window, and empty punch times.']);
             }
             $data['date_out'] = $data['date_in'];
         }
@@ -370,8 +370,11 @@ class DtrImportService
     protected function saveValidatedRow(array $data, string $importName): array
     {
         $this->lockImportPeriod($data);
-        if ($this->isAbsenceRow($data) && ($reason = app(AutomaticAbsenceService::class)->exclusionReason($data, $this->getAbsenceEmployee($data)))) {
-            return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+        if ($this->isAbsenceRow($data)) {
+            [$data, $reason] = app(AutomaticAbsenceService::class)->assessCandidate($data, $this->getAbsenceEmployee($data));
+            if ($reason) {
+                return ['id' => 0, 'batch_id' => $data['batch_id'], 'skipped' => true, 'reason' => $reason];
+            }
         }
         $metadata = $this->getImportMetadata($data, $importName);
 
