@@ -41,6 +41,11 @@ class PayrollCalculation extends Page implements HasForms
 
     protected static ?string $title = 'Payroll Settings';
 
+    public static function canAccess(): bool
+    {
+        return false;
+    }
+
     #[Locked]
     public ?int $periodId = null;
 
