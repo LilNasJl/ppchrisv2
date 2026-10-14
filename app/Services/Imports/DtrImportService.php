@@ -10,6 +10,7 @@ use App\Services\AutomaticAbsenceService;
 use App\Services\DtrCalculator;
 use App\Services\DtrDailyAggregationService;
 use App\Services\DtrDayPartService;
+use App\Services\DtrEntryConflictService;
 use App\Services\DtrOvertimeTransferService;
 use App\Services\DtrSynchronizationService;
 use App\Services\HolidayEntitlementService;
@@ -919,66 +920,8 @@ class DtrImportService
         if ($this->isAbsenceRow($data)) {
             return false;
         }
-        $records = $records->reject(fn (Dtr $record): bool => $record->entry_source === AutomaticAbsenceService::SOURCE);
-        if ($records->isEmpty()) {
-            return false;
-        }
 
-        $dateIn = Carbon::parse($data['date_in'])->toDateString();
-        $administrativeRecords = $records
-            ->filter(fn (Dtr $record): bool => $this->isAdministrativeDtr($record))
-            ->filter(fn (Dtr $record): bool => Carbon::parse($record->date_in)->toDateString() === $dateIn)
-            ->values();
-
-        if (app(DtrDayPartService::class)->conflictsWith($administrativeRecords, $dayPart)) {
-            return true;
-        }
-
-        $newInterval = $this->getDtrInterval($data);
-        $newStart = $this->getDtrStart($data);
-
-        foreach ($records->reject(fn (Dtr $record): bool => $this->isAdministrativeDtr($record)) as $record) {
-            $existingInterval = $this->getDtrInterval($record);
-            $existingStart = $this->getDtrStart($record);
-
-            if ($existingInterval && $newInterval) {
-                if (
-                    $newInterval[0]->lessThan($existingInterval[1])
-                    && $existingInterval[0]->lessThan($newInterval[1])
-                ) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (! $existingStart || ! $newStart) {
-                return true;
-            }
-
-            // A later open punch is valid after a completed session. Treat the
-            // open punch as unresolved from its start onward for future rows.
-            if ($existingInterval && ! $newInterval) {
-                if ($newStart->greaterThanOrEqualTo($existingInterval[1])) {
-                    continue;
-                }
-
-                return true;
-            }
-
-            if (! $existingInterval && $newInterval) {
-                if ($newInterval[1]->lessThanOrEqualTo($existingStart)) {
-                    continue;
-                }
-
-                return true;
-            }
-
-            // Two unresolved sessions cannot be ordered safely without a Time Out.
-            return true;
-        }
-
-        return false;
+        return app(DtrEntryConflictService::class)->conflictsWith($records, $data, $dayPart);
     }
 
     /**
@@ -1048,82 +991,6 @@ class DtrImportService
             ->where('fingerprint_id', (string) $data['fingerprint_id'])
             ->whereBetween('date_in', [$rangeStart, $rangeEnd])
             ->get();
-    }
-
-    protected function isAdministrativeDtr(Dtr $record): bool
-    {
-        if (in_array($record->entry_source, [
-            DtrDayPartService::SOURCE_LEAVE,
-            DtrDayPartService::SOURCE_ABSENCE,
-        ], true)) {
-            return true;
-        }
-
-        $scheduleType = str($record->schedule_type ?? '')->lower();
-
-        return $scheduleType->contains('leave') || $scheduleType->contains('absent');
-    }
-
-    /**
-     * @param  array<string, mixed>|Dtr  $record
-     */
-    protected function getDtrStart(array|Dtr $record): ?Carbon
-    {
-        $dateIn = $record instanceof Dtr ? $record->date_in : ($record['date_in'] ?? null);
-        $timeIn = $record instanceof Dtr ? $record->time_in : ($record['time_in'] ?? null);
-
-        if (blank($dateIn) || blank($timeIn)) {
-            return null;
-        }
-
-        return Carbon::parse("{$dateIn} {$timeIn}");
-    }
-
-    /**
-     * @param  array<string, mixed>|Dtr  $record
-     * @return array{0: Carbon, 1: Carbon}|null
-     */
-    protected function getDtrInterval(array|Dtr $record): ?array
-    {
-        $dateIn = $record instanceof Dtr ? $record->date_in : ($record['date_in'] ?? null);
-        $timeIn = $record instanceof Dtr ? $record->time_in : ($record['time_in'] ?? null);
-        $dateOut = $record instanceof Dtr ? $record->date_out : ($record['date_out'] ?? null);
-        $timeOut = $record instanceof Dtr ? $record->time_out : ($record['time_out'] ?? null);
-
-        if (blank($dateIn) || blank($timeIn)) {
-            return null;
-        }
-
-        $start = Carbon::parse("{$dateIn} {$timeIn}");
-
-        // Forgot-to-punch rows are finalized at the calendar cutoff. Bounding
-        // them to their own day prevents one missed timeout from blocking all
-        // later dates while retaining same-day overlap protection.
-        if (blank($dateOut) || blank($timeOut)) {
-            return $this->isFinalizedForgotToPunch($record)
-                ? [$start, $start->copy()->endOfDay()]
-                : null;
-        }
-
-        $end = Carbon::parse("{$dateOut} {$timeOut}");
-
-        if ($end->lessThan($start)) {
-            $end->addDay();
-        }
-
-        return [$start, $end];
-    }
-
-    /**
-     * @param  array<string, mixed>|Dtr  $record
-     */
-    protected function isFinalizedForgotToPunch(array|Dtr $record): bool
-    {
-        $scheduleType = $record instanceof Dtr
-            ? $record->schedule_type
-            : ($record['schedule_type'] ?? null);
-
-        return $this->normalizeScheduleType($scheduleType) === 'Forgot to Punch';
     }
 
     /**

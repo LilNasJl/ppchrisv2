@@ -10,6 +10,7 @@ use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrCalculator;
 use App\Services\DtrDayPartService;
+use App\Services\DtrEntryConflictService;
 use App\Services\DtrRecordService;
 use App\Services\DtrSynchronizationService;
 use App\Services\HolidayEntitlementService;
@@ -485,7 +486,12 @@ class DtrManageTable extends BaseWidget
                         ->modalSubmitActionLabel('Save')
                         ->visible(fn (ModelsDtr $record): bool => $this->canEditDtrRecord($record))
                         ->fillForm(fn (ModelsDtr $record): array => $this->getEditFormData($record))
-                        ->action(fn (ModelsDtr $record, array $data): mixed => $this->updateDtr($record, $data)),
+                        ->successNotification(null)
+                        ->action(function (EditAction $action, ModelsDtr $record, array $data): void {
+                            if (! $this->updateDtr($record, $data)) {
+                                $action->failure();
+                            }
+                        }),
 
                     DeleteAction::make('deleteDtr')
                         ->label('Delete')
@@ -607,10 +613,10 @@ class DtrManageTable extends BaseWidget
 
         $dtrData = $this->buildDtrData($data);
 
-        if ($this->hasConflictingDtrOnDate($dtrData['date_in'], $dtrData['day_part'])) {
+        if ($this->hasConflictingDtrEntry($dtrData)) {
             Notification::make()
                 ->title('Unable to add D.T.R record')
-                ->body('A conflicting D.T.R, leave, or absence entry already exists for this date and day part.')
+                ->body('This time range overlaps another D.T.R entry, an unresolved punch, or a conflicting leave or absence.')
                 ->danger()
                 ->send();
 
@@ -661,10 +667,10 @@ class DtrManageTable extends BaseWidget
 
         $dtrData = $this->buildDtrData($data);
 
-        if ($this->hasConflictingDtrOnDate($dtrData['date_in'], $dtrData['day_part'], $record->id)) {
+        if ($this->hasConflictingDtrEntry($dtrData, $record->id)) {
             Notification::make()
                 ->title('Unable to update D.T.R record')
-                ->body('A conflicting D.T.R, leave, or absence entry already exists for this date and day part.')
+                ->body('This time range overlaps another D.T.R entry, an unresolved punch, or a conflicting leave or absence.')
                 ->danger()
                 ->send();
 
@@ -1784,6 +1790,31 @@ class DtrManageTable extends BaseWidget
 
         return app(DtrDayPartService::class)
             ->conflictsWith($this->getDayPartRecords($date, $exceptRecordId), $dayPart);
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function hasConflictingDtrEntry(array $data, ?int $exceptRecordId = null): bool
+    {
+        $dateIn = Carbon::parse($data['date_in']);
+        $rangeStart = $dateIn->copy()->subDay()->toDateString();
+        $dateOut = Carbon::parse($data['date_out'] ?? $data['date_in']);
+        if (
+            $dateOut->isSameDay($dateIn)
+            && filled($data['time_in'] ?? null)
+            && filled($data['time_out'] ?? null)
+            && $data['time_out'] < $data['time_in']
+        ) {
+            $dateOut->addDay();
+        }
+
+        $rangeEnd = $dateOut->toDateString();
+        $records = $this->getScopedDtrQuery()
+            ->whereBetween('date_in', [$rangeStart, $rangeEnd])
+            ->when($exceptRecordId, fn (Builder $query) => $query->whereKeyNot($exceptRecordId))
+            ->get();
+
+        return app(DtrEntryConflictService::class)
+            ->conflictsWith($records, $data, $data['day_part'] ?? null);
     }
 
     protected function getDayPartRecords(mixed $date, ?int $exceptRecordId = null)
