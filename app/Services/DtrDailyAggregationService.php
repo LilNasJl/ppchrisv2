@@ -170,6 +170,78 @@ class DtrDailyAggregationService
     }
 
     /**
+     * Combine the actual intervals of one assigned shift or broken-time segment.
+     * The caller groups records by duty date and scheduled window first.
+     *
+     * @param  Collection<int, Dtr>  $records
+     * @return array<string, mixed>|null
+     */
+    public function calculateScheduled(Collection $records): ?array
+    {
+        $completed = $records->filter(fn (Dtr $record): bool => $this->isScheduledSegment($record)
+            && filled($record->date_in) && filled($record->time_in)
+            && filled($record->date_out) && filled($record->time_out))->values();
+        if ($completed->isEmpty()) {
+            return null;
+        }
+
+        $first = $completed->first();
+        $dutyDate = $this->dutyDate($first);
+        $start = $this->timeToSeconds($first->schedule_start);
+        $end = $this->timeToSeconds($first->schedule_end);
+        if ($start === null || $end === null || $start === $end) {
+            return null;
+        }
+        if ($end < $start) {
+            $end += 86400;
+        }
+
+        $intervals = $completed->map(function (Dtr $record) use ($dutyDate): ?array {
+            $in = $this->timeToSeconds($record->time_in);
+            $out = $this->timeToSeconds($record->time_out);
+            if ($in === null || $out === null) {
+                return null;
+            }
+            $in += Carbon::parse($dutyDate)->diffInDays(Carbon::parse($record->date_in), false) * 86400;
+            $out += Carbon::parse($dutyDate)->diffInDays(Carbon::parse($record->date_out), false) * 86400;
+
+            return $out > $in ? [$in, $out] : null;
+        })->filter()->values();
+        if ($intervals->isEmpty()) {
+            return null;
+        }
+
+        $required = (int) floor(($end - $start) / 60);
+        $worked = (int) floor($this->mergedWindowSeconds($intervals, $start, $end) / 60);
+        $earliest = (int) $intervals->min(fn (array $interval): int => $interval[0]);
+        $latest = (int) $intervals->max(fn (array $interval): int => $interval[1]);
+        $late = (int) floor(max(0, min($earliest, $end) - $start) / 60);
+        // Missing scheduled time, including an internal gap, is charged once.
+        $undertime = max(0, $required - $worked - $late);
+        $representative = $completed->sortBy(fn (Dtr $record): string => sprintf('%s %s', $record->date_out, $record->time_out))->last();
+
+        return [
+            'date' => $dutyDate,
+            'day_part' => $this->dayPartService->normalize($first->day_part),
+            'day_count' => preg_match('/^(brkn[12]|brokenshift[12]|saturday)$/', preg_replace('/[^a-z0-9]/', '', strtolower((string) $first->schedule_type))) ? 0.5 : 1.0,
+            'schedule_start' => $first->schedule_start,
+            'schedule_end' => $first->schedule_end,
+            'first_time_in' => $first->time_in,
+            'last_time_out' => $representative->time_out,
+            'required_minutes' => $required,
+            'worked_minutes' => $worked,
+            'credited_work_minutes' => max(0, $required - $late - $undertime),
+            'late' => $late,
+            'undertime' => $undertime,
+            'early_clock_in' => (int) floor(max(0, $start - $earliest) / 60),
+            'overtime' => (int) floor(max(0, $latest - $end) / 60),
+            'overtime_status' => ($latest - $end >= 1800 || $start - $earliest >= 1800) ? 'Pending' : 'n/a',
+            'representative' => $representative,
+            'completed_records' => $completed,
+        ];
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $rows
      */
     public function recalculateRows(array $rows): int
@@ -179,7 +251,7 @@ class DtrDailyAggregationService
                 'payroll_period_id' => $row['payroll_period_id'] ?? null,
                 'branch_id' => $row['branch_id'] ?? null,
                 'fingerprint_id' => $row['fingerprint_id'] ?? null,
-                'date_in' => $row['date_in'] ?? null,
+                'date_in' => $this->dutyDateFromFields($row),
             ])
             ->filter(fn (array $key): bool => $this->validKey($key))
             ->unique(fn (array $key): string => $this->keyString($key))
@@ -214,7 +286,7 @@ class DtrDailyAggregationService
             ->whereNotNull('branch_id')
             ->whereNotNull('fingerprint_id')
             ->whereNotNull('date_in')
-            ->get(['payroll_period_id', 'branch_id', 'fingerprint_id', 'date_in'])
+            ->get(['payroll_period_id', 'branch_id', 'fingerprint_id', 'date_in', 'time_in', 'schedule_type', 'schedule_start', 'schedule_end'])
             ->map(fn (Dtr $record): array => $this->recordKey($record))
             ->unique(fn (array $key): string => $this->keyString($key))
             ->values();
@@ -236,12 +308,18 @@ class DtrDailyAggregationService
         $this->recalculating = true;
 
         try {
+            $dutyDate = Carbon::parse($key['date_in'])->toDateString();
+            $nextDate = Carbon::parse($dutyDate)->addDay()->toDateString();
             $records = Dtr::query()
                 ->where('payroll_period_id', $key['payroll_period_id'])
                 ->where('branch_id', $key['branch_id'])
                 ->where('fingerprint_id', (string) $key['fingerprint_id'])
-                ->whereDate('date_in', $key['date_in'])
-                ->get();
+                ->where(function ($query) use ($dutyDate, $nextDate): void {
+                    $query->whereDate('date_in', $dutyDate)->orWhereDate('date_in', $nextDate);
+                })
+                ->get()
+                ->filter(fn (Dtr $record): bool => $this->dutyDate($record) === $dutyDate)
+                ->values();
             $period = PayrollPeriod::query()->find($key['payroll_period_id']);
             $settings = $period
                 ? PayrollCalculationSetting::forPeriod($period)
@@ -285,9 +363,40 @@ class DtrDailyAggregationService
                 ])->saveQuietly();
             });
 
-            return;
+        } else {
+            $this->applyAggregate($aggregate);
+            $forgotten->each(function (Dtr $record): void {
+                $record->forceFill([
+                    'late' => 0,
+                    'undertime' => 0,
+                    'early_clock_in' => 0,
+                    'overtime' => 0,
+                    'credited_early_clock_in' => 0,
+                    'credited_overtime' => 0,
+                    'work_hrs' => 0,
+                    'credited_work_hrs' => 0,
+                    'overtime_status' => 'n/a',
+                    'early_clock_in_approved' => false,
+                    'overtime_approved' => false,
+                    'is_absent' => false,
+                    'absence_minutes' => 0,
+                ])->saveQuietly();
+            });
         }
 
+        $records->filter(fn (Dtr $record): bool => $this->isScheduledSegment($record))
+            ->groupBy(fn (Dtr $record): string => $this->scheduledGroupKey($record))
+            ->each(function (Collection $group): void {
+                $scheduledAggregate = $this->calculateScheduled($group);
+                if ($scheduledAggregate) {
+                    $this->applyAggregate($scheduledAggregate);
+                }
+            });
+    }
+
+    /** @param array<string, mixed> $aggregate */
+    protected function applyAggregate(array $aggregate): void
+    {
         /** @var Collection<int, Dtr> $completed */
         $completed = $aggregate['completed_records'];
         /** @var Dtr $representative */
@@ -368,24 +477,6 @@ class DtrDailyAggregationService
             'is_absent' => false,
             'absence_minutes' => 0,
         ])->saveQuietly();
-
-        $forgotten->each(function (Dtr $record): void {
-            $record->forceFill([
-                'late' => 0,
-                'undertime' => 0,
-                'early_clock_in' => 0,
-                'overtime' => 0,
-                'credited_early_clock_in' => 0,
-                'credited_overtime' => 0,
-                'work_hrs' => 0,
-                'credited_work_hrs' => 0,
-                'overtime_status' => 'n/a',
-                'early_clock_in_approved' => false,
-                'overtime_approved' => false,
-                'is_absent' => false,
-                'absence_minutes' => 0,
-            ])->saveQuietly();
-        });
     }
 
     /**
@@ -500,6 +591,47 @@ class DtrDailyAggregationService
         return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
     }
 
+    protected function isScheduledSegment(Dtr $record): bool
+    {
+        $type = preg_replace('/[^a-z0-9]/', '', strtolower((string) $record->schedule_type));
+
+        return (bool) preg_match('/^(shift[123]|brkn[12]|brokenshift[12]|saturday)$/', $type)
+            && filled($record->schedule_start) && filled($record->schedule_end);
+    }
+
+    protected function scheduledGroupKey(Dtr $record): string
+    {
+        $type = preg_replace('/[^a-z0-9]/', '', strtolower((string) $record->schedule_type));
+
+        return implode('|', [$type, (string) $record->schedule_start, (string) $record->schedule_end]);
+    }
+
+    protected function dutyDate(Dtr $record): ?string
+    {
+        return $this->dutyDateFromFields($record->getAttributes());
+    }
+
+    /** @param array<string, mixed> $row */
+    protected function dutyDateFromFields(array $row): ?string
+    {
+        if (blank($row['date_in'] ?? null)) {
+            return null;
+        }
+
+        $date = Carbon::parse($row['date_in'])->startOfDay();
+        $type = preg_replace('/[^a-z0-9]/', '', strtolower((string) ($row['schedule_type'] ?? $row['sched'] ?? '')));
+        $start = $this->timeToSeconds($row['schedule_start'] ?? $row['sched_start'] ?? null);
+        $end = $this->timeToSeconds($row['schedule_end'] ?? $row['sched_end'] ?? null);
+        $in = $this->timeToSeconds($row['time_in'] ?? null);
+
+        if (str_starts_with($type, 'shift') && $start !== null && $end !== null
+            && $end < $start && $in !== null && $in < $end) {
+            $date->subDay();
+        }
+
+        return $date->toDateString();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -511,7 +643,13 @@ class DtrDailyAggregationService
             'payroll_period_id' => $value('payroll_period_id'),
             'branch_id' => $value('branch_id'),
             'fingerprint_id' => $value('fingerprint_id'),
-            'date_in' => $value('date_in'),
+            'date_in' => $this->dutyDateFromFields([
+                'date_in' => $value('date_in'),
+                'time_in' => $value('time_in'),
+                'schedule_type' => $value('schedule_type'),
+                'schedule_start' => $value('schedule_start'),
+                'schedule_end' => $value('schedule_end'),
+            ]),
         ];
     }
 

@@ -17,7 +17,7 @@ class DtrAttendanceUnitService
     public function attendanceDays(Collection $records): float
     {
         return (float) $this->payableRecords($records)
-            ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
+            ->groupBy(fn (Dtr $record): string => $this->dutyDate($record))
             ->sum(function (Collection $dateRecords): float {
                 $hasOtherFullDayRecord = $dateRecords->contains(
                     fn (Dtr $record): bool => ! $this->isRegular($record)
@@ -37,23 +37,29 @@ class DtrAttendanceUnitService
     }
 
     /**
-     * Pay units for daily-rate employees. Existing non-broken entries remain
-     * individually payable, while each unique broken segment is half a day.
+     * Pay units for daily-rate employees. A split shift is one payable shift;
+     * distinct assigned shifts and broken-time segments retain their units.
      *
      * @param  Collection<int, Dtr>  $records
      */
     public function dailyRatePayUnits(Collection $records): float
     {
         return (float) $this->payableRecords($records)
-            ->groupBy(fn (Dtr $record): string => Carbon::parse($record->date_in)->toDateString())
+            ->groupBy(fn (Dtr $record): string => $this->dutyDate($record))
             ->sum(function (Collection $dateRecords): float {
                 $fullDayEntries = $dateRecords
                     ->filter(fn (Dtr $record): bool => ! $this->isRegular($record)
                         && ! $this->isSaturday($record)
-                        && $this->brokenSegment($record) === null)
+                        && $this->brokenSegment($record) === null);
+                $separateEntries = $fullDayEntries
+                    ->reject(fn (Dtr $record): bool => $this->isShift($record))
+                    ->count();
+                $assignedShifts = $fullDayEntries
+                    ->filter(fn (Dtr $record): bool => $this->isShift($record))
+                    ->unique(fn (Dtr $record): string => $this->shiftKey($record))
                     ->count();
 
-                return $fullDayEntries
+                return $separateEntries + $assignedShifts
                     + $this->regularUnits($dateRecords)
                     + $this->brokenUnits($dateRecords)
                     + $this->saturdayUnits($dateRecords);
@@ -183,6 +189,34 @@ class DtrAttendanceUnitService
             ->toString();
 
         return $scheduleType === 'saturday';
+    }
+
+    protected function isShift(Dtr $record): bool
+    {
+        return (bool) preg_match('/^shift[123]$/', preg_replace('/[^a-z0-9]/', '', strtolower((string) $record->schedule_type)));
+    }
+
+    protected function shiftKey(Dtr $record): string
+    {
+        return implode('|', [
+            (string) $record->branch_id,
+            preg_replace('/[^a-z0-9]/', '', strtolower((string) $record->schedule_type)),
+            (string) $record->schedule_start,
+            (string) $record->schedule_end,
+        ]);
+    }
+
+    protected function dutyDate(Dtr $record): string
+    {
+        $date = Carbon::parse($record->date_in)->startOfDay();
+        if ($this->isShift($record) && filled($record->schedule_start)
+            && filled($record->schedule_end) && filled($record->time_in)
+            && strcmp((string) $record->schedule_end, (string) $record->schedule_start) < 0
+            && strcmp((string) $record->time_in, (string) $record->schedule_end) < 0) {
+            $date->subDay();
+        }
+
+        return $date->toDateString();
     }
 
     protected function brokenSegment(Dtr $record): ?string

@@ -60,6 +60,17 @@ class DtrAttendanceUnitServiceTest extends TestCase
         $this->assertSame(2.0, $this->service()->dailyRatePayUnits($records));
     }
 
+    public function test_two_sessions_in_one_shift_count_as_one_daily_rate_unit(): void
+    {
+        $records = collect([
+            $this->record('Shift1'),
+            $this->record('Shift1'),
+        ]);
+
+        $this->assertSame(1.0, $this->service()->attendanceDays($records));
+        $this->assertSame(1.0, $this->service()->dailyRatePayUnits($records));
+    }
+
     public function test_saturday_schedule_is_half_a_day_across_all_attendance_totals(): void
     {
         $record = $this->record('Saturday');

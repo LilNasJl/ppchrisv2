@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\Dtr;
 use App\Models\PayrollPeriod;
+use App\Services\DtrAttendanceUnitService;
 use App\Services\Imports\DtrImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -113,6 +115,101 @@ class DtrImportServiceTest extends TestCase
         $this->assertSame(2, $result['successful']);
         $this->assertSame(0, $result['failed']);
         $this->assertDatabaseCount('dtrs', 2);
+    }
+
+    public function test_two_sessions_of_one_shift_are_imported_but_calculated_once(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $first = $this->row($branch, $period, [
+            'Time In' => '04:30:00', 'Time Out' => '06:00:00',
+            'Schedule Type' => 'Shift1', 'Schedule Start' => '04:30:00', 'Schedule End' => '12:30:00',
+        ]);
+        $second = $this->row($branch, $period, [
+            'Time In' => '06:30:00', 'Time Out' => '12:30:00',
+            'Schedule Type' => 'Shift1', 'Schedule Start' => '04:30:00', 'Schedule End' => '12:30:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$first, $second], 'Split Shift1');
+        $rows = Dtr::query()->where('fingerprint_id', '999999')->get();
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertCount(2, $rows);
+        $this->assertSame(0, (int) $rows->sum('late'));
+        $this->assertSame(30, (int) $rows->sum('undertime'));
+        $this->assertSame(450, (int) $rows->sum('credited_work_hrs'));
+        $this->assertSame(1.0, app(DtrAttendanceUnitService::class)->dailyRatePayUnits($rows));
+    }
+
+    public function test_regular_emergency_exit_and_return_are_one_workday(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $first = $this->row($branch, $period, [
+            'Time In' => '08:00:00', 'Time Out' => '10:00:00',
+        ]);
+        $second = $this->row($branch, $period, [
+            'Time In' => '10:30:00', 'Time Out' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$first, $second], 'Emergency exit and return');
+        $rows = Dtr::query()->where('fingerprint_id', '999999')->get();
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertCount(2, $rows);
+        $this->assertSame(0, (int) $rows->sum('late'));
+        $this->assertSame(30, (int) $rows->sum('undertime'));
+        $this->assertSame(510, (int) $rows->sum('credited_work_hrs'));
+        $this->assertSame(1.0, app(DtrAttendanceUnitService::class)->dailyRatePayUnits($rows));
+    }
+
+    public function test_split_broken_segment_does_not_create_an_extra_half_day(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $first = $this->row($branch, $period, [
+            'Time In' => '06:00:00', 'Time Out' => '07:00:00',
+            'Schedule Type' => 'Brkn1', 'Schedule Start' => '06:00:00', 'Schedule End' => '10:00:00',
+        ]);
+        $second = $this->row($branch, $period, [
+            'Time In' => '07:15:00', 'Time Out' => '10:00:00',
+            'Schedule Type' => 'Brkn1', 'Schedule Start' => '06:00:00', 'Schedule End' => '10:00:00',
+        ]);
+        $afternoon = $this->row($branch, $period, [
+            'Time In' => '14:00:00', 'Time Out' => '18:00:00',
+            'Schedule Type' => 'Brkn2', 'Schedule Start' => '14:00:00', 'Schedule End' => '18:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$first, $second, $afternoon], 'Split broken segment');
+        $rows = Dtr::query()->where('fingerprint_id', '999999')->get();
+
+        $this->assertSame(3, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertCount(3, $rows);
+        $this->assertSame(15, (int) $rows->sum('undertime'));
+        $this->assertSame(1.0, app(DtrAttendanceUnitService::class)->dailyRatePayUnits($rows));
+    }
+
+    public function test_split_overnight_shift_is_one_duty_date_and_one_pay_unit(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $first = $this->row($branch, $period, [
+            'Time In' => '20:30:00', 'Time Out' => '23:00:00',
+            'Schedule Type' => 'Shift3', 'Schedule Start' => '20:30:00', 'Schedule End' => '04:30:00',
+        ]);
+        $second = $this->row($branch, $period, [
+            'Date In' => '2026-07-22', 'Date Out' => '2026-07-22',
+            'Time In' => '00:15:00', 'Time Out' => '04:30:00',
+            'Schedule Type' => 'Shift3', 'Schedule Start' => '20:30:00', 'Schedule End' => '04:30:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$first, $second], 'Split Shift3');
+        $rows = Dtr::query()->where('fingerprint_id', '999999')->get();
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertCount(2, $rows);
+        $this->assertSame(75, (int) $rows->sum('undertime'));
+        $this->assertSame(1.0, app(DtrAttendanceUnitService::class)->dailyRatePayUnits($rows));
     }
 
     public function test_completed_session_followed_by_later_forgot_to_punch_is_imported(): void
