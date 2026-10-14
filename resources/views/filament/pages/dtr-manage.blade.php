@@ -205,7 +205,7 @@
         /* Thematic Stat Summary Cards */
         .dtr-summary-strip {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 0.65rem;
         }
 
@@ -253,6 +253,9 @@
         }
         .dtr-stat-card.theme-purple::before {
             background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 100%);
+        }
+        .dtr-stat-card.theme-red::before {
+            background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
         }
 
         .dtr-stat-header {
@@ -314,6 +317,14 @@
         .theme-purple .dtr-stat-icon-wrapper {
             background: rgb(245, 243, 255);
             color: #7c3aed;
+        }
+        .theme-red .dtr-stat-icon-wrapper {
+            background: rgb(254, 242, 242);
+            color: #dc2626;
+        }
+        .dark .theme-red .dtr-stat-icon-wrapper {
+            background: rgba(220, 38, 38, 0.18);
+            color: #f87171;
         }
         .dark .theme-purple .dtr-stat-icon-wrapper {
             background: rgba(124, 58, 237, 0.18);
@@ -504,7 +515,7 @@
             padding: 0.45rem 0.75rem !important;
         }
 
-        @media (max-width: 1024px) {
+        @media (max-width: 1280px) {
             .dtr-summary-strip {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -589,6 +600,18 @@
 
         {{-- Thematic Stat Cards --}}
         <section class="dtr-summary-strip" aria-label="Employee DTR Period Summary">
+            <div class="dtr-stat-card theme-red">
+                <div class="dtr-stat-header">
+                    <span class="dtr-stat-label">Absent Days</span>
+                    <div class="dtr-stat-icon-wrapper">
+                        <x-filament::icon icon="heroicon-o-no-symbol" class="w-3.5 h-3.5" />
+                    </div>
+                </div>
+                <div>
+                    <div class="dtr-stat-value">{{ number_format($metrics['absent_days']) }} Days</div>
+                    <div class="dtr-stat-meta">Distinct dates marked absent</div>
+                </div>
+            </div>
             {{-- Card 1: Total Days & Entries (Blue Theme) --}}
             <div class="dtr-stat-card theme-blue">
                 <div class="dtr-stat-header">

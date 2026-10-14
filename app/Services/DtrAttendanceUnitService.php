@@ -10,6 +10,23 @@ use Illuminate\Support\Str;
 class DtrAttendanceUnitService
 {
     /**
+     * Distinct dates with an effective absence, excluding leave-covered rows.
+     *
+     * @param  Collection<int, Dtr>  $records
+     */
+    public function absenceDays(Collection $records): int
+    {
+        return $records
+            ->filter(fn (Dtr $record): bool => (bool) $record->is_absent
+                || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
+            ->reject(fn (Dtr $record): bool => filled($record->leave_id)
+                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE)
+            ->filter(fn (Dtr $record): bool => filled($record->date_in))
+            ->unique(fn (Dtr $record): string => $this->dutyDate($record))
+            ->count();
+    }
+
+    /**
      * Calendar attendance days, capped at one workday per date.
      *
      * @param  Collection<int, Dtr>  $records

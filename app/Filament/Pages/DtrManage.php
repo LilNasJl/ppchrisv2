@@ -130,7 +130,7 @@ class DtrManage extends Page
     }
 
     /**
-     * @return array{total_entries:int, total_days_work:float, credited_work_hrs:int, credited_overtime:int, pending_ot_count:int, late:int, undertime:int}
+     * @return array{total_entries:int, total_days_work:float, absent_days:int, credited_work_hrs:int, credited_overtime:int, pending_ot_count:int, late:int, undertime:int}
      */
     public function getSummaryMetrics(): array
     {
@@ -141,6 +141,7 @@ class DtrManage extends Page
             return [
                 'total_entries' => 0,
                 'total_days_work' => 0.0,
+                'absent_days' => 0,
                 'credited_work_hrs' => 0,
                 'credited_overtime' => 0,
                 'pending_ot_count' => 0,
@@ -154,6 +155,7 @@ class DtrManage extends Page
             return [
                 'total_entries' => 0,
                 'total_days_work' => 0.0,
+                'absent_days' => 0,
                 'credited_work_hrs' => 0,
                 'credited_overtime' => 0,
                 'pending_ot_count' => 0,
@@ -196,6 +198,7 @@ class DtrManage extends Page
         return [
             'total_entries' => $records->count(),
             'total_days_work' => (float) ($workDayUnits + $leaveDayCount),
+            'absent_days' => app(DtrAttendanceUnitService::class)->absenceDays($finalizedRecords),
             'credited_work_hrs' => (int) $finalizedRecords->sum('credited_work_hrs'),
             'credited_overtime' => (int) $finalizedRecords->sum('credited_overtime'),
             'pending_ot_count' => $pendingOtCount,

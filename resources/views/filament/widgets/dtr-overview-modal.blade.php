@@ -22,6 +22,12 @@
             <div style="{{ $subStyle }}">work + paid leave equivalent</div>
         </div>
 
+        <div style="{{ $metricStyle }}border-color:rgba(220,38,38,.35);">
+            <div style="{{ $labelStyle }}">Absent Days</div>
+            <div style="{{ $valueStyle }}color:#dc2626;">{{ number_format((int) ($overview['absent_days'] ?? 0)) }}</div>
+            <div style="{{ $subStyle }}">distinct dates with an absence</div>
+        </div>
+
         <div style="{{ $metricStyle }}">
             <div style="{{ $labelStyle }}">Late</div>
             <div style="{{ $valueStyle }}">{{ number_format((int) ($overview['late'] ?? 0)) }}</div>
