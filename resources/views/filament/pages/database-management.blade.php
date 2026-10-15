@@ -1,563 +1,332 @@
 <x-filament-panels::page>
-    <div class="db-mgmt-container">
-        <!-- Overview Hero / Banner Section -->
-        <x-filament::section class="db-mgmt-hero-section">
-            <div class="db-mgmt-hero-grid">
-                <div class="db-mgmt-hero-main">
-                    <div class="db-mgmt-badge-row">
-                        <span class="db-mgmt-badge">
-                            <x-filament::icon icon="heroicon-m-circle-stack" class="h-4 w-4" />
-                            <span>System & Database Operations</span>
-                        </span>
-                    </div>
-
-                    <h2 class="db-mgmt-hero-title">Protect, Backup & Recover HRIS Data</h2>
-                    <p class="db-mgmt-hero-description">
-                        Generate full database snapshots and asset bundles for backup or migration. Backups created here are structured for seamless 1-click import into <strong>phpMyAdmin</strong>, <strong>MySQL CLI</strong>, or through the built-in restore utility.
-                    </p>
-                </div>
-
-                <!-- Database Metrics Card -->
-                <div class="db-mgmt-stats-card">
-                    <div class="db-mgmt-stats-header">
-                        <x-filament::icon icon="heroicon-m-server-stack" class="h-4 w-4 text-primary-500" />
-                        <span>Live Database Specs</span>
-                    </div>
-                    <div class="db-mgmt-stats-grid">
-                        <div class="db-mgmt-stat-item">
-                            <span class="db-mgmt-stat-label">Database</span>
-                            <span class="db-mgmt-stat-val db-mgmt-truncate" title="{{ $databaseName }}">{{ $databaseName }}</span>
-                        </div>
-                        <div class="db-mgmt-stat-item">
-                            <span class="db-mgmt-stat-label">Tables</span>
-                            <span class="db-mgmt-stat-val">{{ $tablesCount }} tables</span>
-                        </div>
-                        <div class="db-mgmt-stat-item">
-                            <span class="db-mgmt-stat-label">Storage Size</span>
-                            <span class="db-mgmt-stat-val">{{ $databaseSizeMb }} MB</span>
-                        </div>
-                        <div class="db-mgmt-stat-item">
-                            <span class="db-mgmt-stat-label">Engine</span>
-                            <span class="db-mgmt-stat-val">MySQL / InnoDB</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </x-filament::section>
-
-        <!-- Main Backup Action Cards -->
-        <div class="db-mgmt-cards-grid">
-            <!-- Card 1: Database SQL Backup -->
-            <x-filament::section class="db-mgmt-action-card">
-                <x-slot name="heading">
-                    <div class="db-mgmt-card-title-row">
-                        <div class="db-mgmt-card-icon-wrap primary">
-                            <x-filament::icon icon="heroicon-m-circle-stack" class="h-6 w-6" />
-                        </div>
-                        <div>
-                            <h3 class="db-mgmt-card-title">Database Backup</h3>
-                            <p class="db-mgmt-card-subtitle">Complete schema, constraints & table rows</p>
-                        </div>
-                    </div>
-                </x-slot>
-
-                <x-slot name="headerEnd">
-                    <x-filament::badge color="info">
-                        phpMyAdmin Ready
-                    </x-filament::badge>
-                </x-slot>
-
-                <div class="db-mgmt-card-body">
-                    <p class="db-mgmt-card-text">
-                        Includes all <strong>{{ $tablesCount }} tables</strong>, foreign keys, UTF-8 collation, and transactional bulk insertion syntax. Fully optimized for instant upload into phpMyAdmin.
-                    </p>
-
-                    <div class="db-mgmt-btn-group">
-                        <x-filament::button
-                            tag="a"
-                            href="{{ $sqlGzDownloadUrl }}"
-                            target="_blank"
-                            download
-                            data-navigate-ignore="true"
-                            color="primary"
-                            icon="heroicon-m-archive-box"
-                            class="db-mgmt-primary-btn"
-                        >
-                            Download .sql.gz (Fast)
-                        </x-filament::button>
-
-                        <x-filament::button
-                            tag="a"
-                            href="{{ $sqlDownloadUrl }}"
-                            target="_blank"
-                            download
-                            data-navigate-ignore="true"
-                            color="gray"
-                            icon="heroicon-m-document-text"
-                        >
-                            Raw .sql (Plain)
-                        </x-filament::button>
-                    </div>
-
-                    <div class="db-mgmt-note-box info">
-                        <x-filament::icon icon="heroicon-m-sparkles" class="h-4 w-4 shrink-0" />
-                        <span><strong>Recommended:</strong> <code class="db-mgmt-code">.sql.gz</code> is ~90% smaller (1.7 MB vs 16 MB). It bypasses Hostinger file upload limits and imports automatically in phpMyAdmin.</span>
-                    </div>
-                </div>
-            </x-filament::section>
-
-            <!-- Card 2: Full System Archive -->
-            <x-filament::section class="db-mgmt-action-card">
-                <x-slot name="heading">
-                    <div class="db-mgmt-card-title-row">
-                        <div class="db-mgmt-card-icon-wrap success">
-                            <x-filament::icon icon="heroicon-m-folder-arrow-down" class="h-6 w-6" />
-                        </div>
-                        <div>
-                            <h3 class="db-mgmt-card-title">Full System Archive</h3>
-                            <p class="db-mgmt-card-subtitle">Database + Employee uploaded media & files</p>
-                        </div>
-                    </div>
-                </x-slot>
-
-                <x-slot name="headerEnd">
-                    <x-filament::badge color="success">
-                        Complete ZIP
-                    </x-filament::badge>
-                </x-slot>
-
-                <div class="db-mgmt-card-body">
-                    <p class="db-mgmt-card-text">
-                        Bundles the MySQL database SQL file together with employee profile photos, office memos, leave proof documents, and support tickets into a single compressed ZIP archive.
-                    </p>
-
-                    <div class="db-mgmt-btn-group">
-                        <x-filament::button
-                            tag="a"
-                            href="{{ $fullDownloadUrl }}"
-                            target="_blank"
-                            download
-                            data-navigate-ignore="true"
-                            color="success"
-                            icon="heroicon-m-arrow-down-tray"
-                            class="db-mgmt-success-btn"
-                        >
-                            Download Full Backup ZIP
-                        </x-filament::button>
-                    </div>
-
-                    <div class="db-mgmt-note-box success">
-                        <x-filament::icon icon="heroicon-m-shield-check" class="h-4 w-4 shrink-0" />
-                        <span>Use this for complete server transfers, disaster recovery, or offline archiving. Can be restored using the top-right button.</span>
-                    </div>
-                </div>
-            </x-filament::section>
-        </div>
-
-        <!-- phpMyAdmin Import Guide Section -->
-        <x-filament::section>
-            <x-slot name="heading">
-                <div class="db-mgmt-guide-header">
-                    <x-filament::icon icon="heroicon-m-lifebuoy" class="h-5 w-5 text-primary-500" />
-                    <span>How to Import into phpMyAdmin (Local Server or Hostinger)</span>
-                </div>
-            </x-slot>
-
-            <div class="db-mgmt-steps-grid">
-                <div class="db-mgmt-step-card">
-                    <div class="db-mgmt-step-num">1</div>
-                    <h4 class="db-mgmt-step-title">Open phpMyAdmin</h4>
-                    <p class="db-mgmt-step-desc">Log into phpMyAdmin from your Hostinger hPanel or local development dashboard.</p>
-                </div>
-
-                <div class="db-mgmt-step-card">
-                    <div class="db-mgmt-step-num">2</div>
-                    <h4 class="db-mgmt-step-title">Select Database</h4>
-                    <p class="db-mgmt-step-desc">Click your database (<code class="db-mgmt-code">{{ $databaseName }}</code>) in the left navigation sidebar.</p>
-                </div>
-
-                <div class="db-mgmt-step-card">
-                    <div class="db-mgmt-step-num">3</div>
-                    <h4 class="db-mgmt-step-title">Click "Import"</h4>
-                    <p class="db-mgmt-step-desc">Navigate to the top menu tabs and click on the <strong>Import</strong> tab.</p>
-                </div>
-
-                <div class="db-mgmt-step-card">
-                    <div class="db-mgmt-step-num">4</div>
-                    <h4 class="db-mgmt-step-title">Upload & Execute</h4>
-                    <p class="db-mgmt-step-desc">Choose your downloaded <code class="db-mgmt-code">.sql.gz</code> file and click <strong>Go / Import</strong>.</p>
-                </div>
-            </div>
-        </x-filament::section>
-    </div>
-
     <style>
+        .fi-page-header-main-ctn > header.fi-header {
+            display: none !important;
+        }
+
         .db-mgmt-container {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
+            display: grid;
+            gap: 1.25rem;
             width: 100%;
         }
 
-        .db-mgmt-hero-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
+        .db-mgmt-header {
+            display: flex;
+            flex-wrap: wrap;
             align-items: center;
-        }
-
-        @media (min-width: 1024px) {
-            .db-mgmt-hero-grid {
-                grid-template-columns: 1.7fr 1.1fr;
-            }
-        }
-
-        .db-mgmt-badge-row {
-            margin-bottom: 0.65rem;
-        }
-
-        .db-mgmt-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            font-size: 0.725rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #3b82f6;
-            background: rgba(59, 130, 246, 0.1);
-            padding: 0.25rem 0.65rem;
-            border-radius: 9999px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .dark .db-mgmt-badge {
-            color: #93c5fd;
-            background: rgba(30, 58, 138, 0.35);
-            border-color: rgba(96, 165, 250, 0.25);
-        }
-
-        .db-mgmt-hero-title {
-            font-size: 1.35rem;
-            font-weight: 800;
-            line-height: 1.3;
-            color: #0f172a;
-            margin: 0 0 0.5rem 0;
-            letter-spacing: -0.015em;
-        }
-
-        .dark .db-mgmt-hero-title {
-            color: #f8fafc;
-        }
-
-        .db-mgmt-hero-description {
-            font-size: 0.875rem;
-            line-height: 1.6;
-            color: #64748b;
-            margin: 0;
-            max-width: 65ch;
-        }
-
-        .dark .db-mgmt-hero-description {
-            color: #94a3b8;
-        }
-
-        .db-mgmt-stats-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            justify-content: space-between;
+            gap: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid #3b82f6;
             border-radius: 0.75rem;
-            padding: 1rem 1.25rem;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            color: #ffffff;
+            box-shadow: 0 4px 14px -2px rgba(18, 87, 184, 0.25);
         }
 
-        .dark .db-mgmt-stats-card {
-            background: rgba(15, 23, 42, 0.6);
-            border-color: rgba(51, 65, 85, 0.8);
+        .db-mgmt-header-copy {
+            display: flex;
+            min-width: 0;
+            flex-direction: column;
+            gap: 0.25rem;
         }
 
-        .db-mgmt-stats-header {
+        .db-mgmt-eyebrow {
+            margin: 0;
+            color: #d9f722;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        .db-mgmt-title {
+            margin: 0;
+            color: #ffffff;
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .db-mgmt-subtitle {
+            margin: 0;
+            color: #bfdbfe;
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        .db-mgmt-header-actions {
             display: flex;
             align-items: center;
-            gap: 0.4rem;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #64748b;
-            margin-bottom: 0.75rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #e2e8f0;
+            gap: 0.75rem;
         }
 
-        .dark .db-mgmt-stats-header {
-            color: #94a3b8;
-            border-color: rgba(51, 65, 85, 0.6);
-        }
-
-        .db-mgmt-stats-grid {
+        .db-mgmt-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.85rem;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1.25rem;
         }
 
-        .db-mgmt-stat-item {
+        .db-card {
             display: flex;
             flex-direction: column;
-            gap: 0.15rem;
+            justify-content: space-between;
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
         }
 
-        .db-mgmt-stat-label {
-            font-size: 0.7rem;
-            color: #94a3b8;
-            font-weight: 600;
-            text-transform: uppercase;
+        .dark .db-card {
+            background: rgb(24, 24, 27);
+            border-color: rgba(63, 63, 70, 0.6);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
         }
 
-        .dark .db-mgmt-stat-label {
-            color: #64748b;
+        .db-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.12);
         }
 
-        .db-mgmt-stat-val {
-            font-size: 0.875rem;
-            font-weight: 700;
-            color: #1e293b;
-        }
-
-        .dark .db-mgmt-stat-val {
-            color: #f1f5f9;
-        }
-
-        .db-mgmt-truncate {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .db-mgmt-cards-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-        }
-
-        @media (min-width: 768px) {
-            .db-mgmt-cards-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        .db-mgmt-card-title-row {
+        .db-card-header {
             display: flex;
-            align-items: center;
-            gap: 0.85rem;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
         }
 
-        .db-mgmt-card-icon-wrap {
+        .db-card-icon {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 2.75rem;
             height: 2.75rem;
-            border-radius: 0.65rem;
+            border-radius: 0.625rem;
             flex-shrink: 0;
         }
 
-        .db-mgmt-card-icon-wrap.primary {
-            background: #eff6ff;
+        .db-card-icon svg {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+
+        .db-card-icon.blue {
+            background: rgba(37, 99, 235, 0.12);
             color: #2563eb;
         }
 
-        .dark .db-mgmt-card-icon-wrap.primary {
-            background: rgba(37, 99, 235, 0.2);
+        .dark .db-card-icon.blue {
+            background: rgba(37, 99, 235, 0.25);
             color: #60a5fa;
         }
 
-        .db-mgmt-card-icon-wrap.success {
-            background: #f0fdf4;
-            color: #16a34a;
+        .db-card-icon.emerald {
+            background: rgba(16, 185, 129, 0.12);
+            color: #059669;
         }
 
-        .dark .db-mgmt-card-icon-wrap.success {
-            background: rgba(22, 163, 74, 0.2);
-            color: #4ade80;
+        .dark .db-card-icon.emerald {
+            background: rgba(16, 185, 129, 0.25);
+            color: #34d399;
         }
 
-        .db-mgmt-card-title {
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin: 0;
-            line-height: 1.3;
-        }
-
-        .dark .db-mgmt-card-title {
-            color: #f8fafc;
-        }
-
-        .db-mgmt-card-subtitle {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin: 0.15rem 0 0 0;
-        }
-
-        .dark .db-mgmt-card-subtitle {
-            color: #94a3b8;
-        }
-
-        .db-mgmt-card-body {
+        .db-card-title-group {
             display: flex;
             flex-direction: column;
-            gap: 1.15rem;
-            padding-top: 0.5rem;
+            gap: 0.25rem;
         }
 
-        .db-mgmt-card-text {
-            font-size: 0.85rem;
-            line-height: 1.6;
-            color: #475569;
+        .db-card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: rgb(15, 23, 42);
             margin: 0;
         }
 
-        .dark .db-mgmt-card-text {
-            color: #94a3b8;
+        .dark .db-card-title {
+            color: rgb(244, 244, 245);
         }
 
-        .db-mgmt-btn-group {
+        .db-card-desc {
+            font-size: 0.85rem;
+            color: rgb(100, 116, 139);
+            margin: 0;
+            line-height: 1.45;
+        }
+
+        .dark .db-card-desc {
+            color: rgb(161, 161, 170);
+        }
+
+        .db-card-features {
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-        }
-
-        .db-mgmt-primary-btn,
-        .db-mgmt-success-btn {
-            flex: 1;
-            min-width: 180px;
-        }
-
-        .db-mgmt-note-box {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.6rem;
-            font-size: 0.775rem;
-            line-height: 1.5;
-            padding: 0.65rem 0.85rem;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            padding: 0.875rem;
+            background: rgb(248, 250, 252);
             border-radius: 0.5rem;
+            border: 1px solid rgb(241, 245, 249);
         }
 
-        .db-mgmt-note-box.info {
-            background: #eff6ff;
-            color: #1e40af;
-            border: 1px solid #bfdbfe;
+        .dark .db-card-features {
+            background: rgba(39, 39, 42, 0.5);
+            border-color: rgba(63, 63, 70, 0.4);
         }
 
-        .dark .db-mgmt-note-box.info {
-            background: rgba(30, 58, 138, 0.25);
-            color: #bfdbfe;
-            border-color: rgba(59, 130, 246, 0.3);
-        }
-
-        .db-mgmt-note-box.success {
-            background: #f0fdf4;
-            color: #166534;
-            border: 1px solid #bbf7d0;
-        }
-
-        .dark .db-mgmt-note-box.success {
-            background: rgba(20, 83, 45, 0.25);
-            color: #bbf7d0;
-            border-color: rgba(34, 197, 94, 0.3);
-        }
-
-        .db-mgmt-code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 0.75rem;
-            font-weight: 700;
-            background: rgba(0, 0, 0, 0.06);
-            padding: 0.1rem 0.35rem;
-            border-radius: 0.25rem;
-        }
-
-        .dark .db-mgmt-code {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .db-mgmt-guide-header {
+        .db-feature-item {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            font-size: 0.95rem;
-            font-weight: 700;
+            font-size: 0.8rem;
+            color: rgb(71, 85, 105);
         }
 
-        .db-mgmt-steps-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1rem;
+        .dark .db-feature-item {
+            color: rgb(212, 212, 216);
         }
 
-        @media (min-width: 640px) {
-            .db-mgmt-steps-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+        .db-feature-item svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+            color: #10b981;
         }
 
-        @media (min-width: 1024px) {
-            .db-mgmt-steps-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        .db-mgmt-step-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 0.65rem;
-            padding: 1rem;
+        .db-card-actions {
             display: flex;
-            flex-direction: column;
-            gap: 0.4rem;
-        }
-
-        .dark .db-mgmt-step-card {
-            background: rgba(15, 23, 42, 0.5);
-            border-color: rgba(51, 65, 85, 0.6);
-        }
-
-        .db-mgmt-step-num {
-            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
             align-items: center;
-            justify-content: center;
-            width: 1.5rem;
-            height: 1.5rem;
-            border-radius: 9999px;
-            background: #3b82f6;
-            color: #ffffff;
-            font-size: 0.75rem;
-            font-weight: 800;
-            margin-bottom: 0.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(226, 232, 240, 0.8);
         }
 
-        .dark .db-mgmt-step-num {
-            background: #2563eb;
+        .dark .db-card-actions {
+            border-top-color: rgba(63, 63, 70, 0.6);
         }
 
-        .db-mgmt-step-title {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin: 0;
-        }
+        @media (max-width: 840px) {
+            .db-mgmt-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
 
-        .dark .db-mgmt-step-title {
-            color: #f8fafc;
-        }
-
-        .db-mgmt-step-desc {
-            font-size: 0.775rem;
-            line-height: 1.5;
-            color: #64748b;
-            margin: 0;
-        }
-
-        .dark .db-mgmt-step-desc {
-            color: #94a3b8;
+            .db-card-actions > * {
+                flex: 1 1 100%;
+            }
         }
     </style>
+
+    <div class="db-mgmt-container">
+        <!-- Gradient Top Header -->
+        <header class="db-mgmt-header">
+            <div class="db-mgmt-copy">
+                <p class="db-mgmt-eyebrow">SETTINGS</p>
+                <h1 class="db-mgmt-title">Database Management</h1>
+                <p class="db-mgmt-subtitle">Manage snapshots, exports, and system backup archives securely.</p>
+            </div>
+
+            <div class="db-mgmt-header-actions">
+                <x-filament::actions :actions="$this->getCachedHeaderActions()" />
+            </div>
+        </header>
+
+        <!-- Main Content Cards -->
+        <div class="db-mgmt-grid">
+            <!-- Database Backup Card -->
+            <div class="db-card">
+                <div>
+                    <div class="db-card-header">
+                        <div class="db-card-icon blue">
+                            <x-heroicon-o-circle-stack />
+                        </div>
+                        <div class="db-card-title-group">
+                            <h2 class="db-card-title">Database SQL Backup</h2>
+                            <p class="db-card-desc">Exports SQL dumps of all current tables, schemas, and relational records.</p>
+                        </div>
+                    </div>
+
+                    <div class="db-card-features">
+                        <div class="db-feature-item">
+                            <x-heroicon-s-check-circle />
+                            <span>Includes complete table schemas and row contents</span>
+                        </div>
+                        <div class="db-feature-item">
+                            <x-heroicon-s-check-circle />
+                            <span>Available in raw SQL format (.sql) or gzip compression (.sql.gz)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="db-card-actions">
+                    <x-filament::button
+                        tag="a"
+                        href="{{ $sqlDownloadUrl }}"
+                        target="_blank"
+                        download
+                        data-navigate-ignore="true"
+                        color="primary"
+                        icon="heroicon-o-document-text"
+                    >
+                        Download SQL
+                    </x-filament::button>
+
+                    <x-filament::button
+                        tag="a"
+                        href="{{ $sqlGzDownloadUrl }}"
+                        target="_blank"
+                        download
+                        data-navigate-ignore="true"
+                        color="gray"
+                        icon="heroicon-o-archive-box"
+                    >
+                        Download Compressed (.gz)
+                    </x-filament::button>
+                </div>
+            </div>
+
+            <!-- Full System Backup Card -->
+            <div class="db-card">
+                <div>
+                    <div class="db-card-header">
+                        <div class="db-card-icon emerald">
+                            <x-heroicon-o-server-stack />
+                        </div>
+                        <div class="db-card-title-group">
+                            <h2 class="db-card-title">Full System Backup</h2>
+                            <p class="db-card-desc">Comprehensive archive containing both database dumps and uploaded media assets.</p>
+                        </div>
+                    </div>
+
+                    <div class="db-card-features">
+                        <div class="db-feature-item">
+                            <x-heroicon-s-check-circle />
+                            <span>Full database snapshot bundled with application uploads</span>
+                        </div>
+                        <div class="db-feature-item">
+                            <x-heroicon-s-check-circle />
+                            <span>ZIP archive compatible with Full System Restore</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="db-card-actions">
+                    <x-filament::button
+                        tag="a"
+                        href="{{ $fullDownloadUrl }}"
+                        target="_blank"
+                        download
+                        data-navigate-ignore="true"
+                        color="success"
+                        icon="heroicon-o-arrow-down-tray"
+                    >
+                        Download Full Backup (.zip)
+                    </x-filament::button>
+                </div>
+            </div>
+        </div>
+    </div>
 </x-filament-panels::page>

@@ -26,7 +26,7 @@ class AccountLogs extends Page implements HasTable
     use HasPageShield;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.account-logs';
 
     protected static ?string $title = 'Account Logs';
 
@@ -98,10 +98,14 @@ class AccountLogs extends Page implements HasTable
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('occurred_at', 'desc')
             ->recordActions([
                 Action::make('view')
-                    ->label('View')
+                    ->label('View Details')
                     ->icon(Heroicon::Eye)
+                    ->button()
+                    ->size('xs')
+                    ->color('info')
                     ->modalHeading('Account Log Details')
                     ->modalSubmitAction(false)
                     ->schema($this->detailsSchema())

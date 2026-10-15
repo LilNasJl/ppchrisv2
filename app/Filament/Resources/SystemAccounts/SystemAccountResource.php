@@ -115,20 +115,27 @@ class SystemAccountResource extends Resource
                 TextColumn::make('username')
                     ->label('Username')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->weight('bold')
+                    ->icon(Heroicon::User),
 
                 TextColumn::make('shield_roles')
                     ->label('Shield Roles')
                     ->badge()
+                    ->color('info')
                     ->getStateUsing(fn (SystemAccount $record): string => $record->roles->pluck('name')->join(', ') ?: 'No Shield role'),
 
                 IconColumn::make('is_disabled')
-                    ->label('Disabled')
-                    ->boolean(),
+                    ->label('Account Status')
+                    ->boolean()
+                    ->trueIcon(Heroicon::XCircle)
+                    ->falseIcon(Heroicon::CheckCircle)
+                    ->trueColor('danger')
+                    ->falseColor('success'),
 
                 TextColumn::make('created_at')
                     ->label('Created At')
-                    ->dateTime()
+                    ->dateTime('M d, Y h:i A')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -142,7 +149,8 @@ class SystemAccountResource extends Resource
                         ->withoutSpa(),
                     DeleteAction::make(),
                 ])
-                    ->icon(Heroicon::EllipsisHorizontal),
+                    ->icon(Heroicon::EllipsisHorizontal)
+                    ->color('gray'),
             ]);
     }
 

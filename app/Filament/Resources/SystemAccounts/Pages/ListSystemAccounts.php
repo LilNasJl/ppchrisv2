@@ -11,6 +11,8 @@ class ListSystemAccounts extends ListRecords
 {
     protected static string $resource = SystemAccountResource::class;
 
+    protected string $view = 'filament.resources.system-accounts.pages.list-system-accounts';
+
     protected function getHeaderActions(): array
     {
         return [

@@ -14,6 +14,7 @@ use App\Services\LeaveApprovalService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -42,7 +43,7 @@ class LeaveApprovalWorkflows extends Page implements HasTable
     }
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.leave-approval-workflows';
 
     protected static ?string $title = 'Approval Workflows';
 
@@ -73,48 +74,68 @@ class LeaveApprovalWorkflows extends Page implements HasTable
     {
         return $table->query(LeaveApprovalWorkflow::with('levels'))->defaultSort('name')
             ->columns([
-                TextColumn::make('name')->label('Workflow')->searchable()->weight('semibold')
+                TextColumn::make('index')
+                    ->label('#')
+                    ->rowIndex(),
+                TextColumn::make('name')->label('Workflow')->searchable()->weight('bold')
+                    ->icon(Heroicon::AdjustmentsHorizontal)
                     ->description(fn (LeaveApprovalWorkflow $record): string => $record->isCompanyDefault() ? 'Company Default (Read Only)' : 'Revision '.$record->version),
-                TextColumn::make('scope')->state(fn ($record) => $record->scopeLabel())->wrap(),
-                TextColumn::make('route')->label('Approval Route')->state(fn ($record) => $record->levels->pluck('label')->push('HR')->join(' > '))->wrap(),
-                IconColumn::make('is_active')->label('Active')->boolean(),
-                TextColumn::make('updated_at')->label('Updated')->dateTime('M d, Y h:i A'),
+                TextColumn::make('scope')->state(fn ($record) => $record->scopeLabel())
+                    ->badge()
+                    ->color('info')
+                    ->wrap(),
+                TextColumn::make('route')->label('Approval Route')
+                    ->state(fn ($record) => $record->levels->pluck('label')->push('HR')->join(' → '))
+                    ->wrap(),
+                IconColumn::make('is_active')
+                    ->label('Active')
+                    ->boolean()
+                    ->trueIcon(Heroicon::CheckCircle)
+                    ->falseIcon(Heroicon::XCircle)
+                    ->trueColor('success')
+                    ->falseColor('gray'),
+                TextColumn::make('updated_at')->label('Updated')->dateTime('M d, Y h:i A')->sortable(),
             ])->recordActions([
-                Action::make('edit')->label('Edit Workflow')->icon(Heroicon::PencilSquare)
-                    ->visible(fn (LeaveApprovalWorkflow $record): bool => ! $record->isCompanyDefault())
-                    ->schema($this->formFields())
-                    ->fillForm(function (LeaveApprovalWorkflow $record): array {
-                        $scope = collect(['employee', 'designation', 'branch', 'department'])
-                            ->first(fn (string $type): bool => filled($record->{$type.'_id'}));
+                ActionGroup::make([
+                    Action::make('edit')->label('Edit')->icon(Heroicon::PencilSquare)
+                        ->visible(fn (LeaveApprovalWorkflow $record): bool => ! $record->isCompanyDefault())
+                        ->schema($this->formFields())
+                        ->fillForm(function (LeaveApprovalWorkflow $record): array {
+                            $scope = collect(['employee', 'designation', 'branch', 'department'])
+                                ->first(fn (string $type): bool => filled($record->{$type.'_id'}));
 
-                        return [
-                            'name' => $record->name,
-                            'is_active' => $record->is_active,
-                            'version' => $record->version,
-                            'scope_type' => $scope ?: 'branch',
-                            'scope_id' => $scope ? $record->{$scope.'_id'} : null,
-                            'levels' => $record->levels->map(fn ($level): array => [
-                                'label' => $level->label,
-                                'approver_employee_id' => $level->approver_employee_id,
-                            ])->all(),
-                        ];
-                    })
-                    ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Save Workflow')
-                    ->action(fn ($record, array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record)),
-                Action::make('delete')->label('Delete')->icon(Heroicon::Trash)->color('danger')
-                    ->visible(fn (LeaveApprovalWorkflow $record): bool => ! $record->isCompanyDefault())
-                    ->requiresConfirmation()
-                    ->modalHeading('Delete Approval Workflow')
-                    ->modalDescription('Are you sure you want to delete this approval workflow? This cannot be undone.')
-                    ->action(function (LeaveApprovalWorkflow $record): void {
-                        $record->delete();
-                        \Filament\Notifications\Notification::make()
-                            ->title('Workflow deleted successfully')
-                            ->success()
-                            ->send();
-                    }),
-                Action::make('revisions')->label('History')->icon(Heroicon::Clock)->modalSubmitAction(false)
-                    ->modalContent(fn ($record) => view('filament.leave.workflow-revisions', ['revisions' => DB::table('leave_workflow_revisions')->where('workflow_id', $record->id)->orderByDesc('version')->get()])),
+                            return [
+                                'name' => $record->name,
+                                'is_active' => $record->is_active,
+                                'version' => $record->version,
+                                'scope_type' => $scope ?: 'branch',
+                                'scope_id' => $scope ? $record->{$scope.'_id'} : null,
+                                'levels' => $record->levels->map(fn ($level): array => [
+                                    'label' => $level->label,
+                                    'approver_employee_id' => $level->approver_employee_id,
+                                ])->all(),
+                            ];
+                        })
+                        ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Save Workflow')
+                        ->action(fn ($record, array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record)),
+                    Action::make('revisions')->label('History')->icon(Heroicon::Clock)->color('gray')->modalSubmitAction(false)
+                        ->modalContent(fn ($record) => view('filament.leave.workflow-revisions', ['revisions' => DB::table('leave_workflow_revisions')->where('workflow_id', $record->id)->orderByDesc('version')->get()])),
+                    Action::make('delete')->label('Delete')->icon(Heroicon::Trash)->color('danger')
+                        ->visible(fn (LeaveApprovalWorkflow $record): bool => ! $record->isCompanyDefault())
+                        ->requiresConfirmation()
+                        ->modalHeading('Delete Approval Workflow')
+                        ->modalDescription('Are you sure you want to delete this approval workflow? This cannot be undone.')
+                        ->action(function (LeaveApprovalWorkflow $record): void {
+                            $record->delete();
+                            \Filament\Notifications\Notification::make()
+                                ->title('Workflow deleted successfully')
+                                ->success()
+                                ->send();
+                        }),
+                ])
+                    ->icon(Heroicon::Bars3)
+                    ->color('gray')
+                    ->tooltip('Workflow Actions'),
             ]);
     }
 
