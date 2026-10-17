@@ -380,13 +380,23 @@
             overflow: hidden;
         }
 
+        .dark .employee-dashboard-shoutout {
+            background: #111827;
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
         .employee-dashboard-shoutout-header {
             align-items: center;
-            background: var(--ed-blue-soft);
+            background: var(--ed-surface-muted);
             border-bottom: 1px solid var(--ed-border);
             display: flex;
             gap: 8px;
             padding: 9px 12px;
+        }
+
+        .dark .employee-dashboard-shoutout-header {
+            background: #182234;
+            border-bottom-color: rgba(255, 255, 255, 0.08);
         }
 
         .employee-dashboard-shoutout-header svg {
@@ -436,6 +446,11 @@
         .employee-dashboard-shoutout tbody,
         .employee-dashboard-shoutout tbody tr {
             background: var(--ed-surface) !important;
+        }
+
+        .dark .employee-dashboard-shoutout tbody,
+        .dark .employee-dashboard-shoutout tbody tr {
+            background: #111827 !important;
         }
 
         .employee-dashboard-shoutout td {

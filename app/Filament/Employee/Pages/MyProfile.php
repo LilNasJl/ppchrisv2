@@ -163,7 +163,6 @@ class MyProfile extends Page implements HasForms
                                         ->rules(fn () => [
                                             Rule::unique('users', 'email')->ignore(auth()->id()),
                                         ])
-                                        ->helperText('Used for system sign-in and communications.')
                                         ->columnSpan(['default' => 1, 'sm' => 2, 'xl' => 2]),
 
                                     FileUpload::make('profile_photo_path')

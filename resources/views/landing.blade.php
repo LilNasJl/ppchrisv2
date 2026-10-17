@@ -648,7 +648,7 @@
                         Human Resource
                         <span class="title-accent">Information System</span>
                     </h1>
-                    <p class="hero-summary">Everything your people operations need, in one secure place.</p>
+                    <p class="hero-summary">Powering Your Drive with Quality and Care the Philfumes way</p>
                     <!-- <p class="hero-description">
                         Manage employee records, D.T.R., payroll, leave, loans, benefits, notices, and self-service access through one connected workspace.
                     </p> -->
@@ -672,11 +672,11 @@
                     <nav class="portal-actions" aria-label="Login portals">
                         <a href="{{ route('filament.hr.auth.login') }}" class="portal-link portal-link-primary" data-portal="hris">
                             <i class="fi fi-rr-building" aria-hidden="true"></i>
-                            <span>HRIS Portal</span>
+                            <span>HRIS: Admin</span>
                         </a>
                         <a href="{{ route('filament.employee.auth.login') }}" class="portal-link portal-link-secondary" data-portal="employee">
                             <i class="fi fi-rr-user" aria-hidden="true"></i>
-                            <span>Self-Service</span>
+                            <span>HRIS: Self-Service</span>
                         </a>
                     </nav>
                     <p class="access-note">Authorized access for Philfumes HR teams, SIC / RC users, employees, and assigned KPI raters.</p>

@@ -19,66 +19,134 @@
 
 <div class="emp-account-card">
     <div class="emp-avatar-block">
-        <div class="emp-avatar-frame">
+        <button
+            type="button"
+            class="emp-avatar-frame emp-avatar-clickable"
+            x-on:click="$dispatch('open-modal', { id: 'emp-profile-photo-modal' })"
+            title="Click to view and download profile photo"
+            aria-label="View and download profile photo"
+            aria-haspopup="dialog"
+        >
             @if ($photoUrl)
                 <img src="{{ $photoUrl }}" alt="{{ $displayName }}" class="emp-avatar-img">
             @else
                 <div class="emp-avatar-initials">{{ $initials }}</div>
             @endif
-        </div>
-        @if ($photoUrl)
-            <div class="emp-avatar-actions">
-                <a href="{{ $photoUrl }}" target="_blank" rel="noopener noreferrer" class="emp-avatar-btn" title="View full image">
-                    <x-filament::icon icon="heroicon-m-eye" class="w-3.5 h-3.5" />
-                    <span>View</span>
-                </a>
-                <a href="{{ $photoUrl }}" download class="emp-avatar-btn" title="Download image">
-                    <x-filament::icon icon="heroicon-m-arrow-down-tray" class="w-3.5 h-3.5" />
-                    <span>Save</span>
-                </a>
+
+            <div class="emp-avatar-overlay" aria-hidden="true">
+                <x-filament::icon icon="heroicon-m-magnifying-glass-plus" class="w-5 h-5 text-white" />
+                <span class="emp-avatar-overlay-text">View</span>
             </div>
-        @endif
+        </button>
     </div>
 
     <div class="emp-account-details">
         <div class="emp-account-header-row">
             <div>
                 <h3 class="emp-account-name">{{ $displayName }}</h3>
-                <p class="emp-account-sub">
-                    <span class="emp-chip primary">
-                        <x-filament::icon icon="heroicon-m-identification" class="w-3 h-3" />
-                        ID: {{ $companyId }}
-                    </span>
-                    @if ($record?->email)
-                        <span class="emp-chip muted">
-                            <x-filament::icon icon="heroicon-m-envelope" class="w-3 h-3" />
-                            {{ $record->email }}
-                        </span>
-                    @endif
-                </p>
             </div>
-            <span class="emp-badge-status">Active Account</span>
+            <span class="emp-badge-status">
+                <span class="emp-status-dot" aria-hidden="true"></span>
+                Active Account
+            </span>
         </div>
 
-        <div class="emp-account-meta-chips">
-            @if ($designation)
-                <span class="emp-chip violet">
-                    <x-filament::icon icon="heroicon-m-briefcase" class="w-3 h-3" />
-                    {{ $designation }}
+        <div class="emp-account-badges-group">
+            <div class="emp-account-badges-row">
+                <span class="emp-chip emp-chip-id" title="Employee ID">
+                    <x-filament::icon icon="heroicon-m-identification" class="w-3.5 h-3.5" />
+                    <span>ID: {{ $companyId }}</span>
                 </span>
-            @endif
-            @if ($department)
-                <span class="emp-chip sky">
-                    <x-filament::icon icon="heroicon-m-building-office-2" class="w-3 h-3" />
-                    {{ $department }}
-                </span>
-            @endif
-            @if ($branch)
-                <span class="emp-chip slate">
-                    <x-filament::icon icon="heroicon-m-building-storefront" class="w-3 h-3" />
-                    {{ $branch }}
-                </span>
-            @endif
+                @if ($record?->email)
+                    <span class="emp-chip" title="Work Email">
+                        <x-filament::icon icon="heroicon-m-envelope" class="w-3.5 h-3.5" />
+                        <span>{{ $record->email }}</span>
+                    </span>
+                @endif
+            </div>
+
+            <div class="emp-account-badges-row">
+                @if ($designation)
+                    <span class="emp-chip" title="Designation">
+                        <x-filament::icon icon="heroicon-m-briefcase" class="w-3.5 h-3.5" />
+                        <span>{{ $designation }}</span>
+                    </span>
+                @endif
+                @if ($department)
+                    <span class="emp-chip" title="Department">
+                        <x-filament::icon icon="heroicon-m-building-office-2" class="w-3.5 h-3.5" />
+                        <span>{{ $department }}</span>
+                    </span>
+                @endif
+                @if ($branch)
+                    <span class="emp-chip" title="Branch / Location">
+                        <x-filament::icon icon="heroicon-m-building-storefront" class="w-3.5 h-3.5" />
+                        <span>{{ $branch }}</span>
+                    </span>
+                @endif
+            </div>
         </div>
     </div>
 </div>
+
+<x-filament::modal id="emp-profile-photo-modal" width="md" :close-button="true">
+    <x-slot name="heading">
+        Profile Photo
+    </x-slot>
+
+    <x-slot name="description">
+        {{ $displayName }} &bull; {{ $companyId }}
+    </x-slot>
+
+    <div class="emp-modal-photo-content">
+        @if ($photoUrl)
+            <div class="emp-modal-photo-frame">
+                <img src="{{ $photoUrl }}" alt="{{ $displayName }}" class="emp-modal-photo-img">
+            </div>
+        @else
+            <div class="emp-modal-initials-frame">
+                <span class="emp-modal-initials">{{ $initials }}</span>
+            </div>
+        @endif
+
+        <div class="emp-modal-meta-info">
+            <span class="emp-modal-meta-name">{{ $displayName }}</span>
+            <span class="emp-modal-meta-sub">{{ $designation }} &bull; {{ $companyId }}</span>
+        </div>
+    </div>
+
+    <x-slot name="footer">
+        <div class="emp-modal-footer">
+            @if ($photoUrl)
+                <x-filament::button
+                    tag="a"
+                    href="{{ $photoUrl }}"
+                    download="profile-{{ $companyId }}.png"
+                    icon="heroicon-m-arrow-down-tray"
+                    color="primary"
+                >
+                    Download Photo
+                </x-filament::button>
+
+                <x-filament::button
+                    tag="a"
+                    href="{{ $photoUrl }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    icon="heroicon-m-arrow-top-right-on-square"
+                    color="gray"
+                >
+                    Open Original
+                </x-filament::button>
+            @endif
+
+            <x-filament::button
+                type="button"
+                color="gray"
+                x-on:click="$dispatch('close-modal', { id: 'emp-profile-photo-modal' })"
+            >
+                Close
+            </x-filament::button>
+        </div>
+    </x-slot>
+</x-filament::modal>
