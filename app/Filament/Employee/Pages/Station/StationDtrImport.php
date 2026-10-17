@@ -93,17 +93,6 @@ class StationDtrImport extends Page
         ]] : [];
     }
 
-    /**
-     * @return array<int, array{value:string, label:string}>
-     */
-    public function getBranchOptions(): array
-    {
-        return $this->branch ? [[
-            'value' => (string) $this->branch->getKey(),
-            'label' => (string) $this->branch->branch_name,
-        ]] : [];
-    }
-
     protected function getHeaderActions(): array
     {
         return [

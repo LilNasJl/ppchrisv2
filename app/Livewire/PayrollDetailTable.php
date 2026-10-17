@@ -42,6 +42,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     public ?int $branchId = null;
 
+    public ?int $departmentId = null;
+
     public ?int $employeeId = null;
 
     public ?string $paymentType = null;
@@ -109,6 +111,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     public function mount(
         ?int $periodId = null,
         ?int $branchId = null,
+        ?int $departmentId = null,
         ?int $employeeId = null,
         ?string $paymentType = null,
         bool $usePagination = true,
@@ -122,6 +125,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     ): void {
         $this->periodId = $periodId;
         $this->branchId = $branchId;
+        $this->departmentId = $departmentId;
         $this->employeeId = $employeeId;
         $this->paymentType = filled($paymentType) ? strtolower($paymentType) : null;
         $this->usePagination = $usePagination;
@@ -406,7 +410,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         if ((bool) $period->is_locked) {
             $snapshotEmployeeIds = $this->snapshotEmployeeIds($period);
 
-            if ($snapshotEmployeeIds->isNotEmpty()) {
+            if (PayrollSnapshot::query()->where('payroll_period_id', $period->id)->exists()) {
                 return $this->cachedIncludedEmployeeIds = $snapshotEmployeeIds;
             }
         }
@@ -425,10 +429,18 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 return $this->cachedIncludedEmployeeIds = collect();
             }
 
+            if (filled($this->departmentId) && (int) $employee->department_id !== (int) $this->departmentId) {
+                return $this->cachedIncludedEmployeeIds = collect();
+            }
+
             return $this->cachedIncludedEmployeeIds = collect([(int) $employee->id]);
         }
 
         $employeeIds = $calculator->includedEmployeeIds($period, filled($this->branchId) ? (int) $this->branchId : null);
+        if (filled($this->departmentId)) {
+            $employeeIds = Employee::query()->whereIn('id', $employeeIds->all())
+                ->where('department_id', $this->departmentId)->pluck('id');
+        }
 
         if (blank($this->paymentType) || $employeeIds->isEmpty()) {
             return $this->cachedIncludedEmployeeIds = $employeeIds->map(fn (mixed $id): int => (int) $id)->values();
@@ -452,11 +464,18 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function snapshotEmployeeIds(PayrollPeriod $period): Collection
     {
+        $calculator = app(PayrollCalculator::class);
+
         return PayrollSnapshot::query()
             ->where('payroll_period_id', $period->id)
             ->when(filled($this->branchId), fn (Builder $query) => $query->where('branch_id', (int) $this->branchId))
             ->get()
-            ->filter(function (PayrollSnapshot $snapshot): bool {
+            ->filter(function (PayrollSnapshot $snapshot) use ($calculator): bool {
+                $data = $calculator->snapshotData($snapshot);
+
+                if (filled($this->departmentId) && (int) ($data['department_id'] ?? 0) !== (int) $this->departmentId) {
+                    return false;
+                }
                 if (filled($this->employeeId) && (int) $snapshot->employee_id !== (int) $this->employeeId) {
                     return false;
                 }
@@ -465,7 +484,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                     return true;
                 }
 
-                $paymentType = str((string) data_get($snapshot->data, 'payment_type'))->lower();
+                $paymentType = str((string) ($data['payment_type'] ?? ''))->lower();
 
                 return $this->paymentType === 'atm'
                     ? $paymentType->contains('atm')
@@ -676,13 +695,13 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ]])
             ->all();
 
-        if ($fingerprintToEmployee->isEmpty() || blank($this->periodId) || blank($this->branchId)) {
+        if ($fingerprintToEmployee->isEmpty() || blank($this->periodId)) {
             return;
         }
 
         Dtr::query()
             ->where('payroll_period_id', $this->periodId)
-            ->where('branch_id', $this->branchId)
+            ->when(filled($this->branchId), fn (Builder $query) => $query->where('branch_id', $this->branchId))
             ->whereIn('fingerprint_id', $fingerprintToEmployee->keys()->all())
             ->where(function (Builder $query): void {
                 $query

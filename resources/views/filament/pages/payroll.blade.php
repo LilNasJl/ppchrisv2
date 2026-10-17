@@ -429,7 +429,7 @@
                 @if ($this->payrollByBranchUrl())
                     <a href="{{ $this->payrollByBranchUrl() }}" class="payroll-btn outline">
                         <x-filament::icon icon="heroicon-o-building-storefront" class="payroll-btn-icon" />
-                        Payroll By Branch
+                        Payroll Branch/Department
                     </a>
                 @endif
 

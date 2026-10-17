@@ -44,6 +44,10 @@ class EmployeeDetailsTable extends TableWidget
 
     public ?int $branchId = null;
 
+    public bool $inactiveOnly = false;
+
+    public ?string $returnPageUrl = null;
+
     protected const DEDUCTION_GROUPS = [
         'Deductions' => [
             'SHORTAGES',
@@ -574,11 +578,15 @@ class EmployeeDetailsTable extends TableWidget
     public function table(Table $table): Table
     {
         return $table
+            ->columnManager(false)
             ->selectable(false)
             ->query(fn (): Builder => User::query()
                 ->with(['employee.designation', 'employee.department', 'employee.branch'])
                 ->where('role', 'employee')
-                ->whereHas('employee')
+                ->whereHas('employee', fn (Builder $q): Builder => $this->inactiveOnly
+                    ? $q->inactiveEmployment()
+                    : $q->activeEmployment()
+                )
                 ->leftJoin('employees as account_employees', 'account_employees.user_id', '=', 'users.id')
                 ->when(filled($this->branchId), fn (Builder $query): Builder => $query
                     ->where('account_employees.branch_id', $this->branchId))
@@ -590,7 +598,7 @@ class EmployeeDetailsTable extends TableWidget
                 : null)
             ->recordUrl(fn (User $record): string => ViewEmployeeDetails::getUrl([
                 'employeeId' => $record->employee?->publicKey(),
-                'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
             ]))
             ->columns([
                 TextColumn::make('index')
@@ -651,7 +659,6 @@ class EmployeeDetailsTable extends TableWidget
 
                 TextColumn::make('created_at')
                     ->label('Created At')
-                    ->toggleable(isToggledHiddenByDefault: true)
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query
                         ->where('users.created_at', 'like', "%{$search}%"))
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
@@ -667,7 +674,7 @@ class EmployeeDetailsTable extends TableWidget
                         ->icon(Heroicon::Eye)
                         ->url(fn (User $record): string => ViewEmployeeDetails::getUrl([
                             'employeeId' => $record->employee?->publicKey(),
-                            'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                            'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
                         ])),
 
                     Action::make('editEmployeeDetails')
@@ -675,7 +682,7 @@ class EmployeeDetailsTable extends TableWidget
                         ->icon(Heroicon::PencilSquare)
                         ->url(fn (User $record): string => EditEmployeeDetails::getUrl([
                             'employeeId' => $record->employee?->publicKey(),
-                            'returnUrl' => $this->tableReturnUrl(EmployeeDetails::getUrl()),
+                            'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
                         ])),
 
                     Action::make('toggleAccountStatus')
@@ -728,7 +735,7 @@ class EmployeeDetailsTable extends TableWidget
                         ->label('Impersonate')
                         ->guard('web')
                         ->redirectTo(url('/employee'))
-                        ->backTo(fn (): string => $this->tableReturnUrl(EmployeeDetails::getUrl()))
+                        ->backTo(fn (): string => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()))
                         ->withoutSpa()
                         ->hidden(fn (User $record): bool => ! auth()->user()?->can('Impersonate:Employee')
                             || (bool) $record->is_disabled

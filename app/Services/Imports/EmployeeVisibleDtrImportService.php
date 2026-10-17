@@ -2,7 +2,6 @@
 
 namespace App\Services\Imports;
 
-use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeVisibleDtr;
@@ -231,6 +230,16 @@ class EmployeeVisibleDtrImportService extends DtrImportService
     protected function validateRow(array $row, string $fallbackBatchId): array
     {
         $data = parent::validateRow($row, $fallbackBatchId);
+
+        if (blank($data['source_branch_id'] ?? null)) {
+            throw ValidationException::withMessages([
+                'branch_id' => 'An authorized station branch is required for this import.',
+            ]);
+        }
+
+        // The station-visible row belongs to the uploading station; the
+        // synchronized official row belongs to the employee's home branch.
+        $data['branch_id'] = $data['source_branch_id'];
         $employee = $this->resolveEmployeeForSelectedBranch($data);
 
         $data['employee_id'] = $employee->getKey();
@@ -240,6 +249,17 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         }
 
         return $data;
+    }
+
+    protected function getImportMetadata(array $data, string $importName): array
+    {
+        $metadata = parent::getImportMetadata($data, $importName);
+        unset($metadata['source_branch_id']);
+
+        // Station-side DTRs retain the upload station for SIC/RC visibility.
+        $metadata['branch_id'] = $data['branch_id'];
+
+        return $metadata;
     }
 
     protected function hasExistingOrConflictingDatabaseRecord(array $data, array $metadata): bool
@@ -289,7 +309,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
         $record = new EmployeeVisibleDtr;
 
-        $record->forceFill([
+        $record->forceFill($this->filterAttributesForTable('employee_visible_dtrs', [
             'batch_id' => $data['batch_id'],
             'payroll_period_id' => $data['payroll_period_id'],
             'branch_id' => $data['branch_id'],
@@ -307,7 +327,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             'latest_source_payload' => null,
             'needs_review' => false,
             'review_reason' => null,
-        ])->save();
+        ]))->save();
 
         app(AutomaticAbsenceService::class)->supersede($record);
 
@@ -319,7 +339,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
     protected function makePendingRecord(array $data, array $metadata): Dtr
     {
-        return (new EmployeeVisibleDtr)->forceFill([
+        return (new EmployeeVisibleDtr)->forceFill($this->filterAttributesForTable('employee_visible_dtrs', [
             'batch_id' => $data['batch_id'],
             'payroll_period_id' => $data['payroll_period_id'],
             'branch_id' => $data['branch_id'],
@@ -333,7 +353,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             'schedule_start' => $data['schedule_start'],
             'schedule_end' => $data['schedule_end'],
             ...$metadata,
-        ]);
+        ]));
     }
 
     protected function getExistingSourceRowHashes(array $sourceRowHashes): array
@@ -465,14 +485,14 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             ]);
         }
 
-        $branchEmployees = $this->employeesForBranch($branchId);
-        $matches = $branchEmployees
+        $activeEmployees = $this->activeImportEmployees();
+        $matches = $activeEmployees
             ->filter(fn (Employee $employee): bool => filled($employee->fingerprint_id)
                 && $this->canonicalIdentity($employee->fingerprint_id) === $identity)
             ->values();
 
         if ($matches->isEmpty()) {
-            $matches = $branchEmployees
+            $matches = $activeEmployees
                 ->filter(fn (Employee $employee): bool => blank($employee->fingerprint_id)
                     && $this->canonicalIdentity($employee->uid) === $identity)
                 ->values();
@@ -485,39 +505,15 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         if ($matches->count() > 1) {
             throw ValidationException::withMessages([
                 'fingerprint_id' => sprintf(
-                    'Fingerprint ID %s matches multiple active employees in the selected branch. Correct the duplicate fingerprint IDs before importing.',
+                    'Fingerprint ID %s matches multiple active employees. Correct the duplicate fingerprint IDs before importing.',
                     $data['fingerprint_id'],
-                ),
-            ]);
-        }
-
-        $outsideMatches = Employee::query()
-            ->with('branch:id,branch_name')
-            ->activeEmployment()
-            ->whereNot('branch_id', $branchId)
-            ->get(['id', 'uid', 'fingerprint_id', 'branch_id', 'firstname', 'middlename', 'lastname'])
-            ->filter(fn (Employee $employee): bool => filled($employee->fingerprint_id)
-                && $this->canonicalIdentity($employee->fingerprint_id) === $identity)
-            ->values();
-
-        if ($outsideMatches->isNotEmpty()) {
-            $employee = $outsideMatches->first();
-            $selectedBranch = Branch::query()->whereKey($branchId)->value('branch_name') ?: 'selected branch';
-
-            throw ValidationException::withMessages([
-                'fingerprint_id' => sprintf(
-                    'Fingerprint ID %s belongs to %s in %s, not %s.',
-                    $data['fingerprint_id'],
-                    $employee->full_name,
-                    $employee->branch?->branch_name ?: 'another branch',
-                    $selectedBranch,
                 ),
             ]);
         }
 
         throw ValidationException::withMessages([
             'fingerprint_id' => sprintf(
-                'Fingerprint ID %s does not match an active employee in the selected branch.',
+                'Fingerprint ID %s does not match an active employee.',
                 $data['fingerprint_id'],
             ),
         ]);

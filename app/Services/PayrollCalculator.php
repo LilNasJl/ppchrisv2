@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Branch;
+use App\Models\Department;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
@@ -22,6 +23,9 @@ use Illuminate\Support\Str;
 
 class PayrollCalculator
 {
+    /** @var array<string, int|null>|null */
+    private ?array $legacySnapshotDepartmentIds = null;
+
     public const REGULAR_WORK_DAYS_PER_MONTH = 26;
 
     public const REGULAR_HALF_MONTH_DAYS = 13;
@@ -67,6 +71,21 @@ class PayrollCalculator
         }
 
         return $this->liveRows($period, $branchId);
+    }
+
+    public function rowsForScope(PayrollPeriod $period, string $scope, ?int $scopeId = null): Collection
+    {
+        if ($scope === 'branch') {
+            return $scopeId ? $this->rows($period, $scopeId) : collect();
+        }
+
+        if ($scope === 'department') {
+            return $scopeId ? $this->rows($period)
+                ->filter(fn (array $row): bool => (int) ($row['department_id'] ?? 0) === $scopeId)
+                ->values() : collect();
+        }
+
+        return $scope === 'all' ? $this->rows($period) : collect();
     }
 
     public function snapshotPeriod(PayrollPeriod $period): void
@@ -138,18 +157,32 @@ class PayrollCalculator
         $fingerprintIds = $employees
             ->map(fn (Employee $employee): string => (string) ($employee->fingerprint_id ?: $employee->uid))
             ->filter(fn (string $fp): bool => $fp !== '')
-            ->unique()
+            ->flatMap(fn (string $fp): array => ctype_digit($fp) ? [$fp, ltrim($fp, '0') ?: '0'] : [$fp])
+            ->uniqueStrict()
             ->values();
 
-        $dtrsByBranchAndFp = ($branchIds->isNotEmpty() && $fingerprintIds->isNotEmpty())
+        $identityCounts = Employee::query()->activeEmployment()->get(['fingerprint_id', 'uid'])
+            ->map(fn (Employee $employee): string => $this->fingerprintIdentity($employee->fingerprint_id ?: $employee->uid))
+            ->filter()
+            ->countBy();
+
+        $periodDtrs = ($branchIds->isNotEmpty() && $fingerprintIds->isNotEmpty())
             ? Dtr::query()
                 ->with(['holiday.type', 'leave'])
                 ->where('payroll_period_id', $period->id)
-                ->whereIn('branch_id', $branchIds->all())
-                ->whereIn('fingerprint_id', $fingerprintIds->all())
+                ->where(function (Builder $query) use ($employeeIds, $fingerprintIds): void {
+                    $query->whereIn('employee_id', $employeeIds->all())
+                        ->orWhere(function (Builder $legacy) use ($fingerprintIds): void {
+                            $legacy->whereNull('employee_id')
+                                ->whereIn('fingerprint_id', $fingerprintIds->all());
+                        });
+                })
                 ->get()
-                ->groupBy(fn (Dtr $dtr): string => (int) $dtr->branch_id.'|'.(string) $dtr->fingerprint_id)
             : collect();
+        $dtrsByEmployee = $periodDtrs->filter(fn (Dtr $dtr): bool => filled($dtr->employee_id))
+            ->groupBy(fn (Dtr $dtr): int => (int) $dtr->employee_id);
+        $legacyDtrs = $periodDtrs->filter(fn (Dtr $dtr): bool => blank($dtr->employee_id))
+            ->groupBy(fn (Dtr $dtr): string => $this->fingerprintIdentity($dtr->fingerprint_id));
 
         $adjustmentsByEmployee = PayrollPeriodEmployeeAdjustment::query()
             ->where('payroll_period_id', $period->id)
@@ -182,15 +215,21 @@ class PayrollCalculator
         foreach ($employees as $employee) {
             $empId = (int) $employee->id;
             $fpId = (string) ($employee->fingerprint_id ?: $employee->uid);
-            $dtrKey = (int) $employee->branch_id.'|'.$fpId;
+            $dtrKey = $this->fingerprintIdentity($fpId);
+            $legacyForEmployee = $legacyDtrs->get($dtrKey) ?? collect();
+            if ((int) $identityCounts->get($dtrKey, 0) !== 1) {
+                $legacyForEmployee = $legacyForEmployee->where('branch_id', $employee->branch_id);
+            }
 
             $employee->setRelation('preloadedPayrollSettings', $settings);
             $employee->setRelation('preloadedDefaultDeductions', $defaultDeductions);
             $employee->setRelation(
                 'preloadedDtrs',
-                (filled($fpId) && filled($employee->branch_id))
-                    ? ($dtrsByBranchAndFp->get($dtrKey) ?? collect())
-                    : collect()
+                ($dtrsByEmployee->get($empId) ?? collect())
+                    ->concat(filled($fpId) ? $legacyForEmployee : collect())
+                    ->unique(fn (Dtr $dtr): string => implode('|', [
+                        $dtr->date_in, $dtr->time_in, $dtr->date_out, $dtr->time_out, $dtr->schedule_type,
+                    ]))
             );
             $employee->setRelation('preloadedPayrollAdjustment', $adjustmentsByEmployee->get($empId));
             $employee->setRelation('preloadedPayrollLoans', $loansByEmployee->get($empId) ?? collect());
@@ -307,12 +346,35 @@ class PayrollCalculator
 
     public function snapshotData(PayrollSnapshot $snapshot): array
     {
+        $data = (array) $snapshot->data;
+
+        if (! array_key_exists('employee_id', $data) && filled($snapshot->employee_id)) {
+            $data['employee_id'] = (int) $snapshot->employee_id;
+        }
+
+        if (! array_key_exists('branch_id', $data) && filled($snapshot->branch_id)) {
+            $data['branch_id'] = (int) $snapshot->branch_id;
+        }
+
+        // Older locked snapshots stored the department name but not its ID.
+        // Resolve only an unambiguous name; never recalculate finalized pay.
+        if (! array_key_exists('department_id', $data) && filled($data['department'] ?? null)) {
+            $name = mb_strtolower(trim((string) $data['department']));
+            $this->legacySnapshotDepartmentIds ??= Department::withTrashed()
+                ->get(['id', 'name'])
+                ->groupBy(fn (Department $department): string => mb_strtolower(trim($department->name)))
+                ->map(fn (Collection $departments): ?int => $departments->count() === 1
+                    ? (int) $departments->first()->id : null)
+                ->all();
+            $data['department_id'] = $this->legacySnapshotDepartmentIds[$name] ?? null;
+        }
+
         return [
             'shift3_premium' => 0.0,
             'paid_leave_days' => 0.0,
             'unpaid_leave_days' => 0.0,
             'unpaid_leave' => 0.0,
-            ...(array) $snapshot->data,
+            ...$data,
         ];
     }
 
@@ -415,6 +477,7 @@ class PayrollCalculator
             'number' => $number,
             'employee_id' => $employee->id,
             'branch_id' => $employee->branch_id,
+            'department_id' => $employee->department_id,
             'payment_type' => $employee->payment_type ?: '',
             'bank_id_no' => $employee->bank_id_no ?? '',
             'name' => $this->employeeName($employee),
@@ -462,27 +525,151 @@ class PayrollCalculator
 
     public function branchSummaryRows(PayrollPeriod $period): Collection
     {
+        return $this->summaryRows($period, 'branch');
+    }
+
+    /**
+     * Ensure each employee appears at most once in the payroll collection using their unique employee_id.
+     */
+    public function deduplicateEmployeeRows(Collection $rows): Collection
+    {
+        $seenEmployeeIds = [];
+
+        return $rows->filter(function (array $row) use (&$seenEmployeeIds): bool {
+            $employeeId = $row['employee_id'] ?? null;
+
+            if (filled($employeeId)) {
+                $id = (int) $employeeId;
+
+                if (isset($seenEmployeeIds[$id])) {
+                    return false;
+                }
+
+                $seenEmployeeIds[$id] = true;
+            }
+
+            return true;
+        })->values();
+    }
+
+    /**
+     * Resolve summary rows with support for simultaneous Branch and Department selection
+     * and Department Priority deduplication:
+     *   Selected Department -> Selected Branch -> Exclude Duplicate Employee
+     */
+    public function summaryRows(
+        PayrollPeriod $period,
+        string $groupBy = 'branch',
+        array $includedIds = [],
+        ?array $branchIds = null,
+        ?array $departmentIds = null,
+    ): Collection {
+        if (! in_array($groupBy, ['branch', 'department'], true)) {
+            return collect();
+        }
+
+        // Normalize branch & department selections, preserving legacy ($groupBy, $includedIds) calls
+        $legacyIds = array_values(array_unique(array_filter(array_map('intval', $includedIds))));
+
+        $selectedBranchIds = $branchIds !== null
+            ? array_values(array_unique(array_filter(array_map('intval', $branchIds))))
+            : ($groupBy === 'branch' ? $legacyIds : []);
+
+        $selectedDepartmentIds = $departmentIds !== null
+            ? array_values(array_unique(array_filter(array_map('intval', $departmentIds))))
+            : ($groupBy === 'department' ? $legacyIds : []);
+
+        $hasSelection = $selectedBranchIds !== [] || $selectedDepartmentIds !== [];
+
+        $assignAndGroup = function (Collection $rawRows) use (
+            $groupBy,
+            $hasSelection,
+            $selectedBranchIds,
+            $selectedDepartmentIds
+        ): Collection {
+            $uniqueRows = $this->deduplicateEmployeeRows($rawRows);
+
+            if (! $hasSelection) {
+                $idKey = $groupBy.'_id';
+                $labelDefault = $groupBy === 'department' ? 'No Department' : 'No Branch';
+
+                return $uniqueRows
+                    ->map(function (array $row) use ($groupBy, $idKey, $labelDefault): array {
+                        $groupId = (int) ($row[$idKey] ?? 0);
+                        $row['_summary_group_key'] = $groupBy.':'.$groupId;
+                        $row['_summary_group_type'] = $groupBy;
+                        $row['_summary_group_id'] = $groupId;
+                        $row['_summary_group_label'] = ($row[$groupBy] ?? '') ?: $labelDefault;
+
+                        return $row;
+                    })
+                    ->groupBy('_summary_group_key');
+            }
+
+            // Priority Rule: Selected Department -> Selected Branch -> Exclude
+            $assignedRows = $uniqueRows
+                ->map(function (array $row) use ($selectedBranchIds, $selectedDepartmentIds): ?array {
+                    $deptId = (int) ($row['department_id'] ?? 0);
+                    $branchId = (int) ($row['branch_id'] ?? 0);
+
+                    if ($selectedDepartmentIds !== [] && in_array($deptId, $selectedDepartmentIds, true)) {
+                        $row['_summary_group_key'] = 'department:'.$deptId;
+                        $row['_summary_group_type'] = 'department';
+                        $row['_summary_group_id'] = $deptId;
+                        $row['_summary_group_label'] = ($row['department'] ?? '') ?: 'No Department';
+
+                        return $row;
+                    }
+
+                    if ($selectedBranchIds !== [] && in_array($branchId, $selectedBranchIds, true)) {
+                        $row['_summary_group_key'] = 'branch:'.$branchId;
+                        $row['_summary_group_type'] = 'branch';
+                        $row['_summary_group_id'] = $branchId;
+                        $row['_summary_group_label'] = ($row['branch'] ?? '') ?: 'No Branch';
+
+                        return $row;
+                    }
+
+                    return null;
+                })
+                ->filter()
+                ->values();
+
+            // Group and order so Department groupings appear first, followed by Branch groupings
+            return $assignedRows
+                ->sortBy(fn (array $row): int => $row['_summary_group_type'] === 'department' ? 0 : 1)
+                ->groupBy('_summary_group_key');
+        };
+
         $previousPeriod = $this->previousPeriod($period);
-        $previousNetByBranch = $previousPeriod
-            ? $this->rows($previousPeriod)
-                ->groupBy(fn (array $row): string => $row['branch'] ?: 'No Branch')
+        $previousNetByGroup = $previousPeriod
+            ? $assignAndGroup($this->rows($previousPeriod))
                 ->map(fn (Collection $rows): float => $this->money($rows->sum('net_pay')))
             : collect();
 
-        return $this->rows($period)
-            ->groupBy(fn (array $row): string => $row['branch'] ?: 'No Branch')
-            ->map(function (Collection $rows, string $branch) use ($previousNetByBranch): array {
+        return $assignAndGroup($this->rows($period))
+            ->map(function (Collection $rows, string $groupKey) use ($previousNetByGroup): array {
+                $first = $rows->first();
                 $netPay = $this->money($rows->sum('net_pay'));
-                $previousNetPay = $this->money($previousNetByBranch->get($branch, 0));
+                $previousNetPay = $this->money($previousNetByGroup->get($groupKey, 0));
 
                 return [
-                    'branch' => $branch,
+                    'group_key' => $groupKey,
+                    'group_type' => $first['_summary_group_type'] ?? 'branch',
+                    'group_id' => $first['_summary_group_id'] ?? 0,
+                    'branch' => $first['_summary_group_label'] ?? 'No Branch',
                     'workers' => $rows->count(),
                     'gross_pay' => $this->money($rows->sum('gross_pay')),
                     'total_deductions' => $this->money($rows->sum('total_deductions')),
                     'net_pay' => $netPay,
                     'previous_net_pay' => $previousNetPay,
                     'variance' => $this->money($netPay - $previousNetPay),
+                    'employees' => $rows->map(fn (array $r): array => [
+                        'employee_id' => $r['employee_id'] ?? null,
+                        'name' => $r['name'] ?? ($r['employee_name'] ?? '-'),
+                        'gross_pay' => $this->money((float) ($r['gross_pay'] ?? 0)),
+                        'net_pay' => $this->money((float) ($r['net_pay'] ?? 0)),
+                    ])->values()->all(),
                 ];
             })
             ->values()
@@ -537,11 +724,27 @@ class PayrollCalculator
         ];
     }
 
-    public function summaryHeaders(): array
-    {
+    public function summaryHeaders(
+        string $groupBy = 'branch',
+        array $branchIds = [],
+        array $departmentIds = [],
+    ): array {
+        $hasBranches = array_filter($branchIds) !== [];
+        $hasDepartments = array_filter($departmentIds) !== [];
+
+        if ($hasBranches && $hasDepartments) {
+            $groupLabel = 'DEPARTMENTS / BRANCHES';
+        } elseif ($hasDepartments) {
+            $groupLabel = 'DEPARTMENTS';
+        } elseif ($hasBranches) {
+            $groupLabel = 'BRANCHES';
+        } else {
+            $groupLabel = $groupBy === 'department' ? 'DEPARTMENTS' : 'BRANCHES';
+        }
+
         return [
             'number' => '#',
-            'branch' => 'BRANCHES',
+            'branch' => $groupLabel,
             'workers' => 'NO. OF WORKERS',
             'gross_pay' => 'GROSS PAY',
             'total_deductions' => 'LESS: TOTAL DEDUCTIONS',
@@ -584,12 +787,34 @@ class PayrollCalculator
             return collect();
         }
 
+        $identity = $this->fingerprintIdentity($fingerprintId);
+        $unique = Employee::query()->activeEmployment()->get(['fingerprint_id', 'uid'])
+            ->filter(fn (Employee $candidate): bool => $this->fingerprintIdentity($candidate->fingerprint_id ?: $candidate->uid) === $identity)
+            ->count() === 1;
+        $variants = ctype_digit((string) $fingerprintId)
+            ? array_unique([(string) $fingerprintId, ltrim((string) $fingerprintId, '0') ?: '0'])
+            : [(string) $fingerprintId];
+
         return Dtr::query()
             ->with(['holiday.type', 'leave'])
             ->where('payroll_period_id', $period->id)
-            ->where('branch_id', $employee->branch_id)
-            ->where('fingerprint_id', $fingerprintId)
-            ->get();
+            ->where(fn (Builder $query) => $query
+                ->where('employee_id', $employee->id)
+                ->orWhere(fn (Builder $legacy) => $legacy
+                    ->whereNull('employee_id')
+                    ->when(! $unique, fn (Builder $query) => $query->where('branch_id', $employee->branch_id))
+                    ->whereIn('fingerprint_id', $variants)))
+            ->get()
+            ->unique(fn (Dtr $dtr): string => implode('|', [
+                $dtr->date_in, $dtr->time_in, $dtr->date_out, $dtr->time_out, $dtr->schedule_type,
+            ]));
+    }
+
+    protected function fingerprintIdentity(mixed $value): string
+    {
+        $value = trim((string) $value);
+
+        return ctype_digit($value) ? (ltrim($value, '0') ?: '0') : mb_strtolower($value);
     }
 
     protected function finalizedDtrs(Collection $dtrs, ?Employee $employee = null, ?PayrollPeriod $period = null): Collection

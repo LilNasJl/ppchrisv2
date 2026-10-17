@@ -195,7 +195,7 @@
             <div></div>
         </header>
 
-        <h1 class="document-title">{{ $branch->branch_name }}</h1>
+        <h1 class="document-title">{{ $scopeName }}</h1>
         <div class="period-label">Payroll Period: {{ $period->title }}</div>
         <div class="generated-at">Date Generated: {{ \App\Support\CompanyExportHeader::generatedAt() }}</div>
 

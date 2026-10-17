@@ -87,6 +87,11 @@ class EmployeeDetails extends Page
 
         $actions[] =
             ActionGroup::make([
+                Action::make('inactiveEmployees')
+                    ->label('Inactive Employee')
+                    ->icon(Heroicon::UserMinus)
+                    ->url(InactiveEmployeeDetails::getUrl()),
+
                 Action::make('importEmployee')
                     ->label('Import Employee')
                     ->icon(Heroicon::ArrowDownTray)

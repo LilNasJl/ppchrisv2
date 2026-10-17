@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests;
 use App\Filament\Employee\Widgets\StationDtrManageTable;
 use App\Models\Branch;
 use App\Models\Dtr;
@@ -895,7 +896,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         $this->actingAs($sicUser);
 
-        $tableWidget = new TestStationDtrManageTable();
+        $tableWidget = new TestStationDtrManageTable;
 
         // With no change request, editing is denied
         $this->assertFalse($tableWidget->testCanEditDtrRecord($visibleDtr));
@@ -967,7 +968,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Now acting as RC at level 2
         $this->actingAs($rcUser);
-        $tableWidget = new TestStationDtrManageTable();
+        $tableWidget = new TestStationDtrManageTable;
 
         $this->assertFalse($tableWidget->testCanEditDtrRecord($visibleDtr));
     }
@@ -1087,7 +1088,6 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
     public function test_scenario_11_locked_payroll_period_protection(): void
     {
         [$employee, $branch, $period] = $this->setupEmployeeAndBranch();
-        $period->update(['is_locked' => true]);
 
         $dtr = Dtr::query()->create([
             'employee_id' => $employee->id,
@@ -1099,6 +1099,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'time_out' => '05:00 PM',
             'schedule_type' => 'Regular',
         ]);
+        $period->update(['is_locked' => true]);
 
         $service = app(DtrChangeRequestService::class);
 
@@ -1527,11 +1528,11 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Navigation Badge visibility
         $this->actingAs($sicUser);
-        $this->assertSame('1', \App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertSame('1', ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($rcUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($amUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
 
         // Authorization checks
         $this->assertTrue($request->canBeReviewedBy($sic));
@@ -1565,11 +1566,11 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Navigation Badge visibility
         $this->actingAs($sicUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($rcUser);
-        $this->assertSame('1', \App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertSame('1', ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($amUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
 
         // Authorization checks
         $this->assertFalse($request->canBeReviewedBy($sic));
@@ -1596,11 +1597,11 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Navigation Badge visibility
         $this->actingAs($sicUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($rcUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
         $this->actingAs($amUser);
-        $this->assertSame('1', \App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertSame('1', ReviewDtrChangeRequests::getNavigationBadge());
 
         // Authorization checks
         $this->assertFalse($request->canBeReviewedBy($sic));
@@ -1618,7 +1619,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(0, DtrChangeRequest::query()->pendingForApprover($am)->count());
 
         $this->actingAs($amUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
     }
 
     public function test_sequential_rejection_at_intermediate_level_stops_workflow_and_hides_from_higher_levels(): void
@@ -1698,14 +1699,14 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(0, DtrChangeRequest::query()->pendingForApprover($am)->count());
 
         $this->actingAs($amUser);
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
 
         $this->assertFalse($request->canBeReviewedBy($am));
 
         try {
             $service->approve($request, $am, 'Area manager trying to approve rejected');
             $this->fail('Area manager should not be able to approve a rejected request');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             $this->assertTrue(true);
         }
     }
@@ -1731,7 +1732,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         // Immediately visible to SIC
         $this->assertSame(1, DtrChangeRequest::query()->pendingForApprover($sic)->count());
         $this->actingAs($sicUser);
-        $this->assertSame('1', \App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertSame('1', ReviewDtrChangeRequests::getNavigationBadge());
         $this->assertTrue($request->canBeReviewedBy($sic));
 
         // SIC approves -> Automatically treated as fully approved
@@ -1740,7 +1741,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Badge and table cleared
         $this->assertSame(0, DtrChangeRequest::query()->pendingForApprover($sic)->count());
-        $this->assertNull(\App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests::getNavigationBadge());
+        $this->assertNull(ReviewDtrChangeRequests::getNavigationBadge());
     }
 
     public function test_forgot_to_punch_edit_modal_uses_branch_configured_shift(): void
@@ -1869,7 +1870,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'Punch out missing.',
         ]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage("The selected schedule type is not configured for {$branch->branch_name}.");
 
         $service->saveCorrections($request, $sic, [
@@ -1910,7 +1911,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'Punch out missing.',
         ]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage("No schedule configuration is available for this employee's assigned station or branch.");
 
         $service->saveCorrections($request, $sic, [
@@ -2018,7 +2019,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'Punch out missing.',
         ]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Please provide a valid time format for Time In.');
 
         $service->saveCorrections($request, $sic, [
@@ -2069,7 +2070,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'description' => 'Test mismatched employee target.',
         ]);
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('The selected DTR record does not belong to the requesting employee.');
 
         $service->saveCorrections($request, $sic, [

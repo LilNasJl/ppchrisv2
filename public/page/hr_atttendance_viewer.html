@@ -67,15 +67,15 @@ input[type=file]{display:none;}
 .del-row{padding:6px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);border-radius:4px;color:var(--ah);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .del-row:hover{background:rgba(239,68,68,.18);color:#fecaca;}
 
-.import-bar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:end;margin-bottom:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;}
-.import-destination{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.import-bar{display:grid;grid-template-columns:minmax(220px,320px) minmax(260px,1fr) auto;gap:12px;align-items:end;margin-bottom:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:8px;}
+.import-destination{display:contents;}
 .import-field{display:grid;gap:6px;}
 .import-field label{color:var(--dim);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
-.import-input{width:100%;background:#0d1017;border:1px solid var(--border);border-radius:5px;color:var(--white);font-size:13px;padding:10px 12px;outline:none;}
+.import-input{width:100%;height:38px;box-sizing:border-box;background:#0d1017;border:1px solid var(--border);border-radius:5px;color:var(--white);font-size:13px;padding:8px 12px;outline:none;}
 .import-input:focus{border-color:var(--accent);}
 .import-input::placeholder{color:var(--muted);}
 .import-input option{background:#0d1017;color:var(--white);}
-.import-btn{border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:#04110d;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.5px;padding:10px 18px;text-transform:uppercase;white-space:nowrap;}
+.import-btn{height:38px;box-sizing:border-box;border:1px solid var(--accent);border-radius:5px;background:var(--accent);color:#04110d;cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.5px;padding:0 20px;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;}
 .import-btn:hover{filter:brightness(1.08);}
 .import-btn:disabled{cursor:not-allowed;filter:none;opacity:.38;}
 .source-note{grid-column:1/-1;color:var(--dim);font-size:11px;line-height:1.5;}
@@ -143,7 +143,7 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
 .exp-item .ei{font-size:15px;width:20px;text-align:center;}
 .exp-item.csv .ei{color:#22c55e;} .exp-item.xls .ei{color:#16a34a;} .exp-item.pdf .ei{color:#ef4444;} .exp-item.prn .ei{color:#60a5fa;}
 @media print{.no-print{display:none!important;}}
-@media(max-width:700px){.import-bar,.import-destination{grid-template-columns:1fr}.import-btn{width:100%}.result-grid{grid-template-columns:1fr}}
+@media(max-width:768px){.import-bar{grid-template-columns:1fr}.import-btn{width:100%}.result-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -169,19 +169,11 @@ tbody td{padding:13px 20px;font-size:13px;color:var(--text);white-space:nowrap;f
     <div id="dtr-data" style="display:none">
       <div class="stats" id="dtr-stats"></div>
       <div class="import-bar no-print">
-        <div class="import-destination">
-          <div class="import-field">
-            <label for="dtr-period-id">Payroll Period</label>
-            <select class="import-input" id="dtr-period-id" onchange="updateImportButton()">
-              <option value="">Select payroll period</option>
-            </select>
-          </div>
-          <div class="import-field">
-            <label for="dtr-branch-id">Branch</label>
-            <select class="import-input" id="dtr-branch-id" onchange="updateImportButton()">
-              <option value="">Select branch</option>
-            </select>
-          </div>
+        <div class="import-field">
+          <label for="dtr-period-id">Payroll Period</label>
+          <select class="import-input" id="dtr-period-id" onchange="updateImportButton()">
+            <option value="">Select payroll period</option>
+          </select>
         </div>
         <div class="import-field">
           <label for="dtr-import-name">Import Name</label>
@@ -348,12 +340,12 @@ function populateDestinationSelect(id,options,placeholder,initialValue=''){
 
 function populateDestinationOptions(){
   populateDestinationSelect('dtr-period-id',decodeFrameOptions('periodOptions'),'Select payroll period',PARAMS.get('period_id'));
-  populateDestinationSelect('dtr-branch-id',decodeFrameOptions('branchOptions'),'Select branch',PARAMS.get('branch_id'));
   updateImportButton();
 }
 
 function selectedPeriodId(){return document.getElementById('dtr-period-id')?.value||'';}
-function selectedBranchId(){return document.getElementById('dtr-branch-id')?.value||'';}
+// SIC/RC station context is supplied by the authorized station page, never a manual selector.
+function selectedBranchId(){return DTR_ONLY?(PARAMS.get('branch_id')||''):'';}
 
 populateDestinationOptions();
 
@@ -743,7 +735,7 @@ function updateImportButton(){
   const ready=S.dtr.raw.length>0
     && !S.dtr.imported
     && !!selectedPeriodId()
-    && !!selectedBranchId()
+    && (!DTR_ONLY || !!selectedBranchId())
     && document.getElementById('dtr-import-name').value.trim().length>0;
   button.disabled=!ready;
 }
@@ -757,7 +749,7 @@ function buildImportRows(){
     return {
       batch_id:S.dtr.batchId,
       payroll_period_id:periodId,
-      branch_id:branchId,
+      ...(branchId?{branch_id:branchId}:{}),
       fingerprint_id:r.uid??'',
       date_in:r.date_in||'',
       time_in:r.time_in||'',
@@ -790,8 +782,8 @@ function importDtr(){
   const name=document.getElementById('dtr-import-name').value.trim();
   const periodId=selectedPeriodId();
   const branchId=selectedBranchId();
-  if(!periodId||!branchId){
-    showResult(false,'Import setup is incomplete','Select both a payroll period and branch before importing.',0,0,0,[]);
+  if(!periodId||(DTR_ONLY&&!branchId)){
+    showResult(false,'Import setup is incomplete',DTR_ONLY?'Station context is unavailable. Return to the station page and try again.':'Select a payroll period before importing.',0,0,0,[]);
     return;
   }
   if(!name||!S.dtr.raw.length)return;
@@ -801,7 +793,7 @@ function importDtr(){
     import_name:name,
     batch_id:S.dtr.batchId,
     period_id:Number(periodId),
-    branch_id:Number(branchId),
+    ...(branchId?{branch_id:Number(branchId)}:{}),
     rows
   });
   const request=new XMLHttpRequest();
@@ -878,14 +870,14 @@ function getExportData(t,batchId){
   if(!data.length){alert('No records to export.');return null;}
   const periodId = selectedPeriodId();
   const branchId = selectedBranchId();
-  if(t==='dtr' && (!periodId || !branchId)){
-    alert('Please select both payroll period and branch before exporting D.T.R records.');
+  if(t==='dtr' && (!periodId || (DTR_ONLY && !branchId))){
+    alert(DTR_ONLY?'Station context is unavailable. Return to the station page and try again.':'Please select a payroll period before exporting D.T.R records.');
     return null;
   }
 
   let headers,rows;
   if(t==='dtr'){
-    headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End','Branch ID','Entry Source','Absence Candidate','Regular Schedule','Absence Split','Source Session ID'];
+    headers=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End',...(branchId?['Branch ID']:[]),'Entry Source','Absence Candidate','Regular Schedule','Absence Split','Source Session ID'];
     rows=data.map((r,i)=>{
       const forgotToPunch=String(r.sched||'').toLowerCase().includes('forgot');
       const hasTimeOut=!forgotToPunch&&String(r.time_out||'').trim()!=='';
@@ -900,7 +892,7 @@ function getExportData(t,batchId){
         dayCount(r).toFixed(1),
         forgotToPunch?'':(r.sched_start||''),
         forgotToPunch?'':(r.sched_end||''),
-        branchId,r.entry_source||'',isAbsence(r)?'true':'false',r.regular_schedule||'',r.absence_split||'',r.session_id||''
+        ...(branchId?[branchId]:[]),r.entry_source||'',isAbsence(r)?'true':'false',r.regular_schedule||'',r.absence_split||'',r.session_id||''
       ];
     });
   }else{

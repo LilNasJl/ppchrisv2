@@ -6,6 +6,6 @@ test('the application displays the landing page', function () {
     $response
         ->assertOk()
         ->assertSee('Human Resource Information System')
-        ->assertSee('HR Portal')
-        ->assertSee('Self-Service');
+        ->assertSee('HRIS: Admin')
+        ->assertSee('HRIS: Self-Service');
 });

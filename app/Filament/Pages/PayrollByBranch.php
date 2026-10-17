@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Branch;
+use App\Models\Department;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
 use App\Services\PayrollCalculator;
@@ -33,11 +34,15 @@ class PayrollByBranch extends Page implements HasForms
 
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $title = 'Payroll By Branch';
+    protected static ?string $title = 'Payroll Generator';
 
     public ?string $period_id = null;
 
     public ?string $branch_id = null;
+
+    public string $scope_type = 'branch';
+
+    public ?string $department_id = null;
 
     public ?string $period_display = null;
 
@@ -94,6 +99,10 @@ class PayrollByBranch extends Page implements HasForms
         $resolvedPeriodId = PayrollPeriod::resolvePublicId(request()->query('periodId')) ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
         $this->period_id = filled($resolvedPeriodId) ? (string) $resolvedPeriodId : null;
         $this->branch_id = $this->resolveBranchId();
+        $scope = (string) request()->query('scope', 'branch');
+        $this->scope_type = in_array($scope, ['branch', 'department', 'all'], true) ? $scope : 'branch';
+        $departmentId = request()->query('departmentId');
+        $this->department_id = filled($departmentId) ? (string) $departmentId : (string) array_key_first($this->departmentOptions());
         $this->period_display = $this->selectedPeriod?->title ?? 'No payroll period selected';
         $this->payroll_search = str(request()->query('payrollSearch', ''))->limit(120)->toString();
         $this->payroll_page = max(1, request()->integer('payrollPage', 1));
@@ -200,6 +209,32 @@ class PayrollByBranch extends Page implements HasForms
         $this->payroll_page = 1;
     }
 
+    public function updatedScopeType(): void
+    {
+        $this->cachedRows = null;
+        $this->cachedRowsKey = null;
+        $this->payroll_page = 1;
+    }
+
+    public function updatedDepartmentId(): void
+    {
+        $this->updatedScopeType();
+    }
+
+    public function departmentOptions(): array
+    {
+        return Department::query()->orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    public function selectedScopeName(): string
+    {
+        return match ($this->scope_type) {
+            'department' => Department::query()->find((int) $this->department_id)?->name ?: 'Department Payroll',
+            'all' => 'All Branches Payroll',
+            default => $this->selectedBranch()?->branch_name ?: 'Branch Payroll',
+        };
+    }
+
     public function previousBranchId(): ?string
     {
         $keys = array_map('strval', array_keys($this->branchOptions()));
@@ -279,11 +314,12 @@ class PayrollByBranch extends Page implements HasForms
 
     public function getRowsProperty(): Collection
     {
-        if (! $this->selectedPeriod || blank($this->branch_id)) {
+        if (! $this->selectedPeriod) {
             return collect();
         }
 
-        $key = $this->selectedPeriod->id.'|'.(int) $this->branch_id;
+        $scopeId = $this->scope_type === 'department' ? $this->department_id : $this->branch_id;
+        $key = $this->selectedPeriod->id.'|'.$this->scope_type.'|'.$scopeId;
 
         if ($this->cachedRows !== null && $this->cachedRowsKey === $key) {
             return $this->cachedRows;
@@ -291,7 +327,11 @@ class PayrollByBranch extends Page implements HasForms
 
         $this->cachedRowsKey = $key;
 
-        return $this->cachedRows = app(PayrollCalculator::class)->rows($this->selectedPeriod, (int) $this->branch_id);
+        return $this->cachedRows = app(PayrollCalculator::class)->rowsForScope(
+            $this->selectedPeriod,
+            $this->scope_type,
+            filled($scopeId) ? (int) $scopeId : null,
+        );
     }
 
     /**
@@ -320,7 +360,7 @@ class PayrollByBranch extends Page implements HasForms
     public function payrollSummaryUrl(): ?string
     {
         return $this->selectedPeriod
-            ? PayrollSummary::getUrl(['periodId' => $this->selectedPeriod->publicKey()])
+            ? PayrollProcessingSummary::getUrl(['periodId' => $this->selectedPeriod->publicKey()])
             : null;
     }
 
@@ -333,13 +373,16 @@ class PayrollByBranch extends Page implements HasForms
 
     public function printUrl(): ?string
     {
-        if (blank($this->period_id) || blank($this->branch_id)) {
+        if (blank($this->period_id) || ($this->scope_type === 'branch' && blank($this->branch_id))
+            || ($this->scope_type === 'department' && blank($this->department_id))) {
             return null;
         }
 
         return route('hr_tools.payroll_by_branch.print', [
             'period_id' => $this->period_id,
-            'branch_id' => $this->branch_id,
+            'scope' => $this->scope_type,
+            'branch_id' => $this->scope_type === 'branch' ? $this->branch_id : null,
+            'department_id' => $this->scope_type === 'department' ? $this->department_id : null,
         ]);
     }
 
@@ -409,7 +452,9 @@ class PayrollByBranch extends Page implements HasForms
                     ->icon(Heroicon::Printer)
                     ->url(fn (): string => route('hr_tools.payroll_by_branch.print', [
                         'period_id' => $this->period_id,
-                        'branch_id' => $this->branch_id,
+                        'scope' => $this->scope_type,
+                        'branch_id' => $this->scope_type === 'branch' ? $this->branch_id : null,
+                        'department_id' => $this->scope_type === 'department' ? $this->department_id : null,
                     ]))
                     ->openUrlInNewTab(),
             ])
@@ -462,12 +507,12 @@ class PayrollByBranch extends Page implements HasForms
     {
         $headers = app(PayrollCalculator::class)->payrollHeaders();
         $period = $this->selectedPeriod?->title ?? 'payroll';
-        $branch = $this->selectedBranch()?->branch_name ?? 'branch';
+        $branch = $this->selectedScopeName();
         $filename = 'payroll-'.str($branch)->slug().'-'.str($period)->slug().'.xls';
 
         return response()->streamDownload(function () use ($headers): void {
             echo CompanyExportHeader::excelHtml(count($headers));
-            echo CompanyExportHeader::exportTitleHtml('Payroll By Branch', count($headers));
+            echo CompanyExportHeader::exportTitleHtml('Payroll - '.$this->selectedScopeName(), count($headers));
             echo '<table '.CompanyExportHeader::tableAttributes().'><thead><tr>';
 
             foreach ($headers as $label) {

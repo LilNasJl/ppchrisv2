@@ -3,11 +3,15 @@
 namespace Tests\Feature;
 
 use App\Filament\Auth\EmployeeLogin;
+use App\Filament\Employee\Pages\Station\ManageStationDtr;
 use App\Filament\Employee\Pages\Station\StationEmployees;
 use App\Filament\Employee\Widgets\StationBranchAttendanceChart;
+use App\Filament\Pages\StationManagers;
 use App\Models\Branch;
-use App\Models\EmployeeVisibleDtr;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
+use App\Models\LeaveApprovalLevel;
+use App\Models\LeaveApprovalWorkflow;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use Filament\Facades\Filament;
@@ -48,7 +52,21 @@ class StationManagementConsolidationFeatureTest extends TestCase
 
         Schema::create('leave_request_approvals', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedBigInteger('leave_id');
             $table->unsignedBigInteger('approver_employee_id');
+            $table->string('status')->default('Waiting');
+            $table->timestamp('activated_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('leaves', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('employee_id');
+            $table->string('leave_type')->nullable();
+            $table->date('leave_from')->nullable();
+            $table->date('leave_to')->nullable();
+            $table->string('status')->default('Pending');
+            $table->softDeletes();
             $table->timestamps();
         });
 
@@ -390,14 +408,14 @@ class StationManagementConsolidationFeatureTest extends TestCase
             ->assertActionDoesNotExist('downloadDtr')
             ->assertActionExists('importDtr');
 
-        Livewire::test(\App\Filament\Employee\Pages\Station\ManageStationDtr::class)
+        Livewire::test(ManageStationDtr::class)
             ->assertActionDoesNotExist('submitDtr')
-            ->assertActionExists('submitDtrProof');
+            ->assertActionDoesNotExist('submitDtrProof');
     }
 
     public function test_station_managers_hr_page_is_removed(): void
     {
-        $this->assertFalse(class_exists(\App\Filament\Pages\StationManagers::class));
+        $this->assertFalse(class_exists(StationManagers::class));
         $this->assertFileDoesNotExist(app_path('Filament/Pages/StationManagers.php'));
     }
 
@@ -509,12 +527,12 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $managerEmp->setRelation('user', $managerUser);
         $managerUser->setRelation('employee', $managerEmp);
 
-        $workflow = \App\Models\LeaveApprovalWorkflow::query()->create([
+        $workflow = LeaveApprovalWorkflow::query()->create([
             'name' => 'Tagum Station Workflow',
             'branch_id' => $branch->id,
             'is_active' => true,
         ]);
-        \App\Models\LeaveApprovalLevel::query()->create([
+        LeaveApprovalLevel::query()->create([
             'workflow_id' => $workflow->id,
             'sequence' => 1,
             'label' => 'Station In-Charge',

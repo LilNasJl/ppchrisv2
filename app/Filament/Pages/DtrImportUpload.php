@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\PayrollPeriod;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -14,6 +15,22 @@ class DtrImportUpload extends Page
     protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $title = 'Import D.T.R Entries';
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function getPayrollPeriodOptions(): array
+    {
+        return PayrollPeriod::query()
+            ->where('is_locked', false)
+            ->newestFirst()
+            ->get(['id', 'title'])
+            ->map(fn (PayrollPeriod $period): array => [
+                'value' => (string) $period->getKey(),
+                'label' => (string) $period->title,
+            ])
+            ->all();
+    }
 
     #[Override]
     protected function getHeaderActions(): array

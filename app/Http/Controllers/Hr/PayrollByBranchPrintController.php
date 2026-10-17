@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Hr;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\Department;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
 use App\Services\PayrollCalculator;
@@ -18,19 +19,25 @@ class PayrollByBranchPrintController extends Controller
 
         $validated = $request->validate([
             'period_id' => ['required', 'integer', 'exists:payroll_periods,id'],
-            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'scope' => ['nullable', 'in:branch,department,all'],
+            'branch_id' => ['required_if:scope,branch', 'nullable', 'integer', 'exists:branches,id'],
+            'department_id' => ['required_if:scope,department', 'nullable', 'integer', 'exists:departments,id'],
         ]);
 
         $period = PayrollPeriod::query()->findOrFail($validated['period_id']);
-        $branch = Branch::query()->findOrFail($validated['branch_id']);
-        $branchOptions = $calculator->branchOptionsForPeriod($period);
-
-        abort_unless(array_key_exists($branch->id, $branchOptions), 404);
+        $scope = $validated['scope'] ?? 'branch';
+        $branch = $scope === 'branch' ? Branch::query()->findOrFail($validated['branch_id']) : null;
+        $department = $scope === 'department' ? Department::query()->findOrFail($validated['department_id']) : null;
+        if ($branch) {
+            abort_unless(array_key_exists($branch->id, $calculator->branchOptionsForPeriod($period)), 404);
+        }
+        $scopeId = $branch?->id ?: $department?->id;
 
         return view('payroll.print-by-branch', [
             'period' => $period,
             'branch' => $branch,
-            'rows' => $calculator->rows($period, $branch->id),
+            'scopeName' => $branch?->branch_name ?: ($department?->name ?: 'All Branches'),
+            'rows' => $calculator->rowsForScope($period, $scope, $scopeId),
             'signatory' => PayrollSignatory::default(),
         ]);
     }

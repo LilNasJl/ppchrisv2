@@ -47,7 +47,8 @@ class DtrSynchronizationService
         $payload = $this->filterColumns('dtrs', [
             'batch_id' => $visible->batch_id,
             'payroll_period_id' => $visible->payroll_period_id,
-            'branch_id' => $visible->branch_id ?: $employee?->branch_id,
+            'branch_id' => $employee?->branch_id ?: $visible->branch_id,
+            'source_branch_id' => $visible->branch_id,
             'employee_id' => $visible->employee_id ?: $employee?->id,
             'on_field_dtr_submission_id' => $visible->on_field_dtr_submission_id,
             'leave_id' => $visible->leave_id,
@@ -621,8 +622,8 @@ class DtrSynchronizationService
             $baseQuery->where(fn ($q) => $q->whereNull('entry_source')->orWhere('entry_source', '!=', AutomaticAbsenceService::SOURCE));
         }
 
-        if (in_array('branch_id', $dtrColumns, true) && filled($visible->branch_id)) {
-            $baseQuery->where('branch_id', $visible->branch_id);
+        if (in_array('branch_id', $dtrColumns, true) && filled($employee?->branch_id ?: $visible->branch_id)) {
+            $baseQuery->where('branch_id', $employee?->branch_id ?: $visible->branch_id);
         }
 
         if (in_array('fingerprint_id', $dtrColumns, true)) {

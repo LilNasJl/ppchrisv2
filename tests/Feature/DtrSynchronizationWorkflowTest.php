@@ -8,6 +8,7 @@ use App\Filament\Employee\Pages\Station\StationDtrImportHistory;
 use App\Filament\Employee\Pages\Station\StationEmployees;
 use App\Filament\Employee\Pages\Station\StationSubmissions;
 use App\Filament\Pages\Dtr as HrDtrPage;
+use App\Filament\Pages\DtrManage;
 use App\Filament\Pages\Payroll as HrPayrollPage;
 use App\Models\ActionHistory;
 use App\Models\Branch;
@@ -27,7 +28,9 @@ use App\Services\Imports\DtrImportService;
 use App\Services\Imports\EmployeeVisibleDtrImportService;
 use App\Services\OvertimeApprovalService;
 use App\Services\SicRcDtrImportDeletionService;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -219,6 +222,44 @@ class DtrSynchronizationWorkflowTest extends TestCase
         $this->assertSame(45, (int) $officialOtRow->early_clock_in);
         $this->assertSame(90, (int) $officialOtRow->overtime);
         $this->assertSame('Pending', $officialOtRow->overtime_status);
+    }
+
+    public function test_station_import_uses_authorized_route_branch_without_a_row_branch_column(): void
+    {
+        $ctx = $this->seedStationScenario();
+        $this->actingAs($ctx['sicUser'], 'web');
+        $payload = [
+            'import_name' => 'Station BIN upload',
+            'period_id' => $ctx['period']->id,
+            'batch_id' => 'STATION-NO-SELECTOR',
+            'rows' => [[
+                'Batch ID' => 'STATION-NO-SELECTOR',
+                'Fingerprint ID' => '2001',
+                'Date In' => '2026-10-02', 'Time In' => '08:00:00',
+                'Date Out' => '2026-10-02', 'Time Out' => '17:00:00',
+                'Schedule Type' => 'Regular',
+                'Schedule Start' => '08:00:00', 'Schedule End' => '17:00:00',
+            ]],
+        ];
+
+        $this->postJson(route('sicrc_tools.import.dtr_preview'), $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('branch_id');
+        $this->postJson(route('sicrc_tools.import.dtr_preview'), [
+            ...$payload, 'branch_id' => $ctx['branchB']->id,
+        ])->assertForbidden();
+        $this->assertDatabaseCount('dtrs', 0);
+
+        $this->postJson(route('sicrc_tools.import.dtr_preview'), [
+            ...$payload, 'branch_id' => $ctx['branch']->id,
+        ])->assertSuccessful()->assertJsonPath('successful', 1);
+        $this->assertDatabaseHas('employee_visible_dtrs', [
+            'employee_id' => $ctx['employee']->id, 'branch_id' => $ctx['branch']->id,
+        ]);
+        $this->assertDatabaseHas('dtrs', [
+            'employee_id' => $ctx['employee']->id,
+            'branch_id' => $ctx['branch']->id,
+            'source_branch_id' => $ctx['branch']->id,
+        ]);
     }
 
     public function test_overtime_and_early_ot_approval_on_station_dtr_automatically_syncs_to_hr_dtr(): void
@@ -467,12 +508,12 @@ class DtrSynchronizationWorkflowTest extends TestCase
     {
         $ctx = $this->seedStationScenario();
         $this->actingAs($ctx['sicUser'], 'web');
-        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('employee'));
+        Filament::setCurrentPanel(Filament::getPanel('employee'));
 
-        // 1. ManageStationDtr does not have submitDtr
+        // The branch landing page has no proof-submission or manual-transfer action.
         Livewire::test(ManageStationDtr::class)
             ->assertActionDoesNotExist('submitDtr')
-            ->assertActionExists('submitDtrProof');
+            ->assertActionDoesNotExist('submitDtrProof');
 
         // 2. StationEmployees does not have downloadDtr
         Livewire::withQueryParams([
@@ -527,9 +568,9 @@ class DtrSynchronizationWorkflowTest extends TestCase
     public function test_hr_dtr_and_payroll_pages_support_direct_period_branch_and_employee_filtering(): void
     {
         $ctx = $this->seedStationScenario();
-        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Gate::before(fn () => true);
         $this->actingAs($ctx['hrUser'], 'web');
-        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('hr'));
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
 
         // Import synchronized DTR for Juan Dela Cruz in Tagum Station
         app(DtrImportService::class)->importRows([
@@ -563,7 +604,7 @@ class DtrSynchronizationWorkflowTest extends TestCase
         // Verify HR Payroll page filters and layout
         $payrollComponent = Livewire::test(HrPayrollPage::class)
             ->assertSet('periodId', $ctx['period']->id)
-            ->assertSee('Payroll By Branch')
+            ->assertSee('Payroll Branch/Department')
             ->assertDontSee('Browse Branches')
             ->assertDontSee('Selected Period')
             ->assertDontSee('Payout Date')
@@ -582,9 +623,9 @@ class DtrSynchronizationWorkflowTest extends TestCase
     public function test_hr_dtr_manage_and_return_direct_navigation_preserves_filters(): void
     {
         $ctx = $this->seedStationScenario();
-        \Illuminate\Support\Facades\Gate::before(fn () => true);
+        Gate::before(fn () => true);
         $this->actingAs($ctx['hrUser'], 'web');
-        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('hr'));
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
 
         // 1. Check HR DTR page rows generate Manage DTR url with search & filters preserved
         $dtrComponent = Livewire::withQueryParams([
@@ -610,10 +651,10 @@ class DtrSynchronizationWorkflowTest extends TestCase
             'branchId' => $ctx['branch']->publicKey(),
             'employeeId' => $ctx['employee']->publicKey(),
             'search' => 'Juan',
-        ])->test(\App\Filament\Pages\DtrManage::class)
+        ])->test(DtrManage::class)
             ->assertActionExists('return');
 
-        $method = new \ReflectionMethod(\App\Filament\Pages\DtrManage::class, 'getHeaderActions');
+        $method = new \ReflectionMethod(DtrManage::class, 'getHeaderActions');
         $actions = $method->invoke($manageComponent->instance());
         $returnAction = collect($actions)->first(fn ($a) => $a->getName() === 'return');
         $this->assertNotNull($returnAction);
@@ -627,4 +668,3 @@ class DtrSynchronizationWorkflowTest extends TestCase
         $this->assertStringContainsString('search=Juan', $returnUrl);
     }
 }
-

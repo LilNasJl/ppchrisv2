@@ -36,7 +36,7 @@ class ProbationaryEmploymentPromotionTest extends TestCase
             'employee_id' => $eligible->id,
             'previous_type' => 'Probationary',
             'employment_type' => 'Permanent',
-            'effective_date' => '2026-07-31',
+            'effective_date' => '2026-07-31 00:00:00',
             'explanation' => ProbationaryEmploymentPromotionService::AUTOMATIC_EXPLANATION,
             'changed_by_user_id' => null,
         ]);

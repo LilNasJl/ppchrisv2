@@ -35,7 +35,6 @@
 
     @php
         $payrollPeriodOptions = base64_encode((string) json_encode($this->getPayrollPeriodOptions(), JSON_UNESCAPED_UNICODE));
-        $branchOptions = base64_encode((string) json_encode($this->getBranchOptions(), JSON_UNESCAPED_UNICODE));
     @endphp
 
     <div class="station-dtr-import-shell">
@@ -43,7 +42,6 @@
             src="{{ $this->getIframeUrl() }}"
             class="station-dtr-import-frame"
             data-period-options="{{ $payrollPeriodOptions }}"
-            data-branch-options="{{ $branchOptions }}"
             loading="eager"
             title="Import Station D.T.R"
         ></iframe>

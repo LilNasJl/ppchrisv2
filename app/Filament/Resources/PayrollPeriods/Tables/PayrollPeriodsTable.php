@@ -4,12 +4,11 @@ namespace App\Filament\Resources\PayrollPeriods\Tables;
 
 use App\Filament\Pages\Payroll;
 use App\Filament\Pages\PayrollByBranch;
-use App\Filament\Pages\PayrollSummary;
+use App\Filament\Pages\PayrollProcessingSummary;
 use App\Models\PayrollPeriod;
 use App\Services\PayrollPeriodLockService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
@@ -134,7 +133,7 @@ class PayrollPeriodsTable
                         ->color('primary')
                         ->url(fn (PayrollPeriod $record): string => Payroll::getUrl(['periodId' => $record->publicKey()])),
                     Action::make('open_branch')
-                        ->label('Payroll By Branch')
+                        ->label('Payroll Branch/Department')
                         ->icon('heroicon-o-building-storefront')
                         ->color('info')
                         ->url(fn (PayrollPeriod $record): string => PayrollByBranch::getUrl(['periodId' => $record->publicKey()])),
@@ -142,7 +141,7 @@ class PayrollPeriodsTable
                         ->label('Payroll Summary')
                         ->icon('heroicon-o-chart-bar')
                         ->color('success')
-                        ->url(fn (PayrollPeriod $record): string => PayrollSummary::getUrl(['periodId' => $record->publicKey()])),
+                        ->url(fn (PayrollPeriod $record): string => PayrollProcessingSummary::getUrl(['periodId' => $record->publicKey()])),
                 ])
                     ->icon('heroicon-m-ellipsis-vertical')
                     ->tooltip('Actions')

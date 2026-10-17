@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use App\Services\StationManagementAccess;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -275,17 +276,17 @@ class Employee extends Model
 
     public function isStationManager(): bool
     {
-        return \App\Services\StationManagementAccess::canAccessStationManagement($this);
+        return StationManagementAccess::canAccessStationManagement($this);
     }
 
     public function assignedBranchIds(): array
     {
-        return \App\Services\StationManagementAccess::getManagedBranchIds($this);
+        return StationManagementAccess::getManagedBranchIds($this);
     }
 
     public function branchAssignments(): array
     {
-        return \App\Services\StationManagementAccess::getAssignedBranches($this);
+        return StationManagementAccess::getAssignedBranches($this);
     }
 
     public function assignedBranchCount(): int
@@ -345,6 +346,18 @@ class Employee extends Model
             $query
                 ->whereNull($this->qualifyColumn('employment_type'))
                 ->orWhereNotIn($this->qualifyColumn('employment_type'), self::ENDED_EMPLOYMENT_TYPES);
+        });
+    }
+
+    public function scopeInactiveEmployment(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query): void {
+            $query
+                ->whereIn($this->qualifyColumn('employment_type'), self::ENDED_EMPLOYMENT_TYPES)
+                ->orWhere($this->qualifyColumn('employment_type'), 'like', '%End%')
+                ->orWhere($this->qualifyColumn('employment_type'), 'like', '%Resign%')
+                ->orWhere($this->qualifyColumn('employment_type'), 'like', '%Terminat%')
+                ->orWhereHas('user', fn (Builder $userQuery): Builder => $userQuery->where('is_disabled', true));
         });
     }
 

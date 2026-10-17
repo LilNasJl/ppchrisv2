@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Branch;
 use App\Models\PayrollPeriod;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -32,21 +31,6 @@ class DtrViewer extends Page
             ->map(fn (PayrollPeriod $period): array => [
                 'value' => (string) $period->getKey(),
                 'label' => (string) $period->title,
-            ])
-            ->all();
-    }
-
-    /**
-     * @return array<int, array{value: string, label: string}>
-     */
-    public function getBranchOptions(): array
-    {
-        return Branch::query()
-            ->orderBy('branch_name')
-            ->get(['id', 'branch_name'])
-            ->map(fn (Branch $branch): array => [
-                'value' => (string) $branch->getKey(),
-                'label' => (string) $branch->branch_name,
             ])
             ->all();
     }

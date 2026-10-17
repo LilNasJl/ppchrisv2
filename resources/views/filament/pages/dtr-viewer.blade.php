@@ -42,14 +42,12 @@
                 'endpoint' => route('hr_tools.import.dtr'),
             ]);
             $payrollPeriodOptions = base64_encode((string) json_encode($this->getPayrollPeriodOptions(), JSON_UNESCAPED_UNICODE));
-            $branchOptions = base64_encode((string) json_encode($this->getBranchOptions(), JSON_UNESCAPED_UNICODE));
         @endphp
 
         <section class="dtr-viewer-panel dtr-viewer-frame-wrap">
             <iframe
                 class="dtr-viewer-frame"
                 data-period-options="{{ $payrollPeriodOptions }}"
-                data-branch-options="{{ $branchOptions }}"
                 src="{{ asset('page/hr_atttendance_viewer.html') }}?{{ $viewerQuery }}"
                 wire:key="dtr-viewer"
                 title="D.T.R Viewer">

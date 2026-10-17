@@ -2,31 +2,15 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\PayrollPeriod;
-use App\Models\PayrollSignatory;
-use App\Services\PayrollCalculator;
-use App\Support\CompanyExportHeader;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\Group;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Collection;
-use Override;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
-class PayrollSummary extends Page implements HasForms
+class PayrollSummary extends Page
 {
     use HasPageShield;
-    use InteractsWithForms;
 
     protected string $view = 'filament.pages.under-construction';
 
@@ -39,169 +23,4 @@ class PayrollSummary extends Page implements HasForms
     protected static string|UnitEnum|null $navigationGroup = 'Analytics & Reports';
 
     protected static ?int $navigationSort = 1;
-
-    public ?string $period_id = null;
-
-    public ?string $prepared_by = null;
-
-    public ?string $checked_by = null;
-
-    public ?string $approved_by = null;
-
-    protected ?PayrollPeriod $cachedSelectedPeriod = null;
-
-    protected ?string $cachedSelectedPeriodKey = null;
-
-    protected ?Collection $cachedSummaryRows = null;
-
-    protected ?string $cachedSummaryRowsKey = null;
-
-    public function mount(): void
-    {
-        $periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'))
-            ?: app(PayrollCalculator::class)->defaultPeriod()?->id;
-
-        $this->period_id = filled($periodId) ? (string) $periodId : null;
-
-        $this->form->fill([
-            'period_id' => $this->period_id,
-        ]);
-
-        $this->loadSignatories();
-    }
-
-    protected function getFormSchema(): array
-    {
-        return [
-            Select::make('period_id')
-                ->label('Payroll Period')
-                ->options(fn (): array => app(PayrollCalculator::class)->periodOptions())
-                ->searchable()
-                ->reactive(),
-
-        ];
-    }
-
-    public function getSelectedPeriodProperty(): ?PayrollPeriod
-    {
-        if (blank($this->period_id)) {
-            return null;
-        }
-
-        $key = (string) $this->period_id;
-
-        if ($this->cachedSelectedPeriodKey === $key) {
-            return $this->cachedSelectedPeriod;
-        }
-
-        $this->cachedSelectedPeriodKey = $key;
-
-        return $this->cachedSelectedPeriod = PayrollPeriod::query()->find($this->period_id);
-    }
-
-    public function getSummaryRowsProperty(): Collection
-    {
-        if (! $this->selectedPeriod) {
-            return collect();
-        }
-
-        $key = (string) $this->selectedPeriod->id;
-
-        if ($this->cachedSummaryRows !== null && $this->cachedSummaryRowsKey === $key) {
-            return $this->cachedSummaryRows;
-        }
-
-        $this->cachedSummaryRowsKey = $key;
-
-        return $this->cachedSummaryRows = app(PayrollCalculator::class)->branchSummaryRows($this->selectedPeriod);
-    }
-
-    public function exportExcel(): StreamedResponse
-    {
-        return $this->downloadExcel();
-    }
-
-    #[Override]
-    protected function getHeaderActions(): array
-    {
-        return [];
-    }
-
-    protected function getSignatoryFormSchema(): array
-    {
-        return [
-            Group::make([
-                TextInput::make('prepared_by')
-                    ->label('Prepared By')
-                    ->required(),
-
-                TextInput::make('checked_by')
-                    ->label('Checked By')
-                    ->required(),
-
-                TextInput::make('approved_by')
-                    ->label('Approved By')
-                    ->required(),
-            ])
-                ->columns(2)
-                ->columnSpanFull(),
-        ];
-    }
-
-    protected function getSignatoryData(): array
-    {
-        return [
-            'prepared_by' => $this->prepared_by,
-            'checked_by' => $this->checked_by,
-            'approved_by' => $this->approved_by,
-        ];
-    }
-
-    protected function loadSignatories(): void
-    {
-        $signatory = PayrollSignatory::default();
-
-        $this->prepared_by = $signatory->prepared_by;
-        $this->checked_by = $signatory->checked_by;
-        $this->approved_by = $signatory->approved_by;
-    }
-
-    protected function downloadExcel(): StreamedResponse
-    {
-        $headers = app(PayrollCalculator::class)->summaryHeaders();
-        $rows = $this->summaryRows;
-        $period = $this->selectedPeriod?->title ?? 'payroll';
-        $filename = 'payroll-summary-'.str($period)->slug().'.xls';
-
-        return response()->streamDownload(function () use ($headers, $rows): void {
-            echo CompanyExportHeader::excelHtml(count($headers));
-            echo CompanyExportHeader::exportTitleHtml('Salaries & Wages - Summary', count($headers));
-            echo '<table '.CompanyExportHeader::tableAttributes().'><thead><tr>';
-
-            foreach ($headers as $label) {
-                echo '<th '.CompanyExportHeader::thStyle().'>'.e($label).'</th>';
-            }
-
-            echo '</tr></thead><tbody>';
-
-            foreach ($rows as $row) {
-                echo '<tr>';
-
-                foreach (array_keys($headers) as $key) {
-                    echo '<td '.CompanyExportHeader::tdStyle().'>'.e((string) ($row[$key] ?? '')).'</td>';
-                }
-
-                echo '</tr>';
-            }
-
-            echo '</tbody></table>';
-            echo '<br><table '.CompanyExportHeader::tableAttributes().'>';
-            echo '<tr><th '.CompanyExportHeader::thStyle().'>Prepared by</th><th '.CompanyExportHeader::thStyle().'>Checked by</th><th '.CompanyExportHeader::thStyle().'>Approved by</th></tr>';
-            echo '<tr><td '.CompanyExportHeader::tdStyle().'>'.e($this->prepared_by).'</td><td '.CompanyExportHeader::tdStyle().'>'.e($this->checked_by).'</td><td '.CompanyExportHeader::tdStyle().'>'.e($this->approved_by).'</td></tr>';
-            echo '</table>';
-            echo CompanyExportHeader::generatedAtHtml();
-        }, $filename, [
-            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
-        ]);
-    }
 }

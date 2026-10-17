@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Dtr;
+use App\Models\Employee;
 use App\Models\PayrollPeriod;
+use App\Models\User;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\Imports\DtrImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +17,105 @@ use Tests\TestCase;
 class DtrImportServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_hr_import_credits_employee_home_branch_and_preserves_source_station(): void
+    {
+        [$station, $period] = $this->importContext();
+        $home = Branch::query()->create([
+            'branch_name' => 'Main Office', 'branch_address' => 'Office',
+            'mobile_no' => '09123456789', 'employee_id' => 0, 'no_of_shifts' => 1,
+            'reg_sched_start' => '08:00:00', 'reg_sched_end' => '18:00:00',
+            'is_24hrs' => false, 'has_broken_time' => false,
+        ]);
+        $employee = Employee::query()->create([
+            'uid' => '1001', 'firstname' => 'Cross', 'lastname' => 'Station',
+            'branch_id' => $home->id, 'fingerprint_id' => '12345',
+            'employment_type' => 'Permanent', 'rate_type' => 'daily', 'daily_rate' => 500,
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($station, $period, ['Fingerprint ID' => '12345']),
+        ], 'Cross-station HR import');
+
+        $this->assertSame(1, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'employee_id' => $employee->id,
+            'branch_id' => $home->id,
+            'source_branch_id' => $station->id,
+        ]);
+    }
+
+    public function test_hr_file_without_branch_ids_routes_each_fingerprint_to_its_home_branch(): void
+    {
+        [$firstBranch, $period] = $this->importContext();
+        $secondBranch = Branch::query()->create([
+            'branch_name' => 'Other Branch', 'branch_address' => 'Other',
+            'mobile_no' => '09123456789', 'employee_id' => 0, 'no_of_shifts' => 1,
+            'reg_sched_start' => '08:00:00', 'reg_sched_end' => '18:00:00',
+            'is_24hrs' => false, 'has_broken_time' => false,
+        ]);
+        $firstEmployee = Employee::query()->create([
+            'uid' => '1001', 'firstname' => 'First', 'lastname' => 'Employee',
+            'branch_id' => $firstBranch->id, 'fingerprint_id' => '12345',
+            'employment_type' => 'Permanent', 'rate_type' => 'daily', 'daily_rate' => 500,
+        ]);
+        $secondEmployee = Employee::query()->create([
+            'uid' => '1002', 'firstname' => 'Second', 'lastname' => 'Employee',
+            'branch_id' => $secondBranch->id, 'fingerprint_id' => '67890',
+            'employment_type' => 'Permanent', 'rate_type' => 'daily', 'daily_rate' => 500,
+        ]);
+        $firstRow = $this->row($firstBranch, $period, ['Fingerprint ID' => '12345']);
+        $secondRow = $this->row($secondBranch, $period, ['Fingerprint ID' => '67890']);
+        unset($firstRow['Branch ID'], $secondRow['Branch ID']);
+
+        $result = app(DtrImportService::class)->importRows([$firstRow, $secondRow], 'Branch-free HR import');
+
+        $this->assertSame(2, $result['successful']);
+        $this->assertDatabaseHas('dtrs', [
+            'employee_id' => $firstEmployee->id, 'branch_id' => $firstBranch->id,
+            'source_branch_id' => null,
+        ]);
+        $this->assertDatabaseHas('dtrs', [
+            'employee_id' => $secondEmployee->id, 'branch_id' => $secondBranch->id,
+            'source_branch_id' => null,
+        ]);
+    }
+
+    public function test_hr_file_without_branch_rejects_unmatched_fingerprint_without_saving(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $row = $this->row($branch, $period);
+        unset($row['Branch ID']);
+
+        $result = app(DtrImportService::class)->importRows([$row], 'Unmatched branch-free import');
+
+        $this->assertSame(0, $result['successful']);
+        $this->assertSame(1, $result['failed']);
+        $this->assertStringContainsString('does not match an active employee', $result['errors'][0]['message']);
+        $this->assertDatabaseCount('dtrs', 0);
+    }
+
+    public function test_hr_import_endpoint_accepts_a_file_row_without_branch_id(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $employee = Employee::query()->create([
+            'uid' => '1003', 'firstname' => 'Route', 'lastname' => 'Employee',
+            'branch_id' => $branch->id, 'fingerprint_id' => '34567',
+            'employment_type' => 'Permanent', 'rate_type' => 'daily', 'daily_rate' => 500,
+        ]);
+        $row = $this->row($branch, $period, ['Fingerprint ID' => '34567']);
+        unset($row['Branch ID']);
+        $this->actingAs(User::factory()->create(['role' => 'hr']));
+
+        $this->postJson(route('hr_tools.import.dtr'), [
+            'import_name' => 'HR route branch-free file', 'rows' => [$row],
+        ])->assertSuccessful()->assertJsonPath('successful', 1);
+        $this->assertDatabaseHas('dtrs', [
+            'employee_id' => $employee->id,
+            'branch_id' => $branch->id,
+            'source_branch_id' => null,
+        ]);
+    }
 
     public function test_forgot_to_punch_accepts_its_four_naturally_empty_fields(): void
     {

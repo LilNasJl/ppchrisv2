@@ -17,7 +17,7 @@
     <section class="panel">
       <div class="drop" id="drop">
         <strong>Drop D.T.R CSV or Excel file</strong>
-        <span>Use the file exported from D.T.R Viewer</span>
+        <span>Use the file exported from D.T.R Viewer. The employee's home branch is resolved from the fingerprint ID.</span>
         <input id="file" type="file" accept=".csv,.xlsx,.xls">
       </div>
       <div class="field" id="scopeField" style="display:none">
@@ -52,7 +52,6 @@ const params=new URLSearchParams(location.search);
 const endpoint=params.get('endpoint')||'/hr-tools/import/dtr';
 const csrf=params.get('csrf')||'';
 const forcedPeriodId=params.get('period_id')||'';
-const forcedBranchId=params.get('branch_id')||'';
 const scopeLabel=params.get('scope_label')||'';
 let rows=[];
 let fallbackBatch=genBatchId();
@@ -92,7 +91,7 @@ async function loadFile(file){
 }
 
 function renderPreview(){
-  const preferred=['#','Batch ID','Period ID','Branch ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End'];
+  const preferred=['#','Batch ID','Period ID','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Day Part','Day Count','Schedule Start','Schedule End'];
   const keys=Object.keys(rows[0]||{});
   const cols=[...preferred.filter(c=>keys.includes(c)),...keys.filter(c=>!preferred.includes(c))];
   el('head').innerHTML=cols.length?'<tr>'+cols.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr>':'';
@@ -129,7 +128,7 @@ async function postRows(chunk,importName){
   const res=await fetch(endpoint,{
     method:'POST',
     headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':csrf},
-    body:JSON.stringify({rows:applyScope(chunk),import_name:importName,batch_id:fallbackBatch,period_id:forcedPeriodId,branch_id:forcedBranchId})
+    body:JSON.stringify({rows:applyScope(chunk),import_name:importName,batch_id:fallbackBatch,period_id:forcedPeriodId})
   });
   const json=await res.json().catch(()=>({message:'Invalid server response.'}));
   if(!res.ok)throw new Error(json.message||'Import request failed.');
@@ -137,11 +136,10 @@ async function postRows(chunk,importName){
 }
 
 function applyScope(chunk){
-  if(!forcedPeriodId&&!forcedBranchId)return chunk;
+  if(!forcedPeriodId)return chunk;
   return chunk.map(row=>({
     ...row,
     ...(forcedPeriodId?{'payroll_period_id':forcedPeriodId,'Period ID':forcedPeriodId}:{}),
-    ...(forcedBranchId?{'branch_id':forcedBranchId,'Branch ID':forcedBranchId}:{}),
   }));
 }
 function detectBatch(data){

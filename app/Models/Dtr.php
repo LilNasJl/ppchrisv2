@@ -7,6 +7,8 @@ use App\Services\DtrDayPartService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class Dtr extends Model
@@ -19,6 +21,8 @@ class Dtr extends Model
         'on_field_dtr_submission_id',
         'payroll_period_id',
         'branch_id',
+        'employee_id',
+        'source_branch_id',
         'fingerprint_id',
         'batch_id',
         'import_name',
@@ -108,7 +112,7 @@ class Dtr extends Model
 
     public function isPayrollPeriodLocked(bool $checkOriginal = false): bool
     {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('payroll_periods')) {
+        if (! Schema::hasTable('payroll_periods')) {
             return false;
         }
 
@@ -122,9 +126,9 @@ class Dtr extends Model
         }
 
         $dates = array_values(array_unique(array_filter([
-            filled($this->date_in) ? \Illuminate\Support\Carbon::parse($this->date_in)->toDateString() : null,
+            filled($this->date_in) ? Carbon::parse($this->date_in)->toDateString() : null,
             $checkOriginal && filled($this->getOriginal('date_in'))
-                ? \Illuminate\Support\Carbon::parse($this->getOriginal('date_in'))->toDateString()
+                ? Carbon::parse($this->getOriginal('date_in'))->toDateString()
                 : null,
         ])));
 
@@ -187,6 +191,11 @@ class Dtr extends Model
     public function branch()
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function sourceBranch()
+    {
+        return $this->belongsTo(Branch::class, 'source_branch_id');
     }
 
     public function employee()

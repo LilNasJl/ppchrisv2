@@ -25,6 +25,13 @@ use Illuminate\Validation\ValidationException;
 
 class DtrImportService
 {
+    protected ?Collection $activeImportEmployees = null;
+
+    protected function activeImportEmployees(): Collection
+    {
+        return $this->activeImportEmployees ??= Employee::query()->activeEmployment()->get();
+    }
+
     /**
      * @param  array<int, array<string, mixed>>  $rows
      * @return array{total:int, successful:int, failed:int, skipped:int, already_existing:int, invalid:int, batch_id:string, message:string, summary:array<string, int>, errors:array<int, array<string, mixed>>}
@@ -283,7 +290,7 @@ class DtrImportService
         $validator = Validator::make($data, [
             'batch_id' => ['required', 'string', 'max:191'],
             'payroll_period_id' => ['required', 'integer'],
-            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
             'fingerprint_id' => ['required', 'integer'],
             'date_in' => ['required', 'date'],
             'time_in' => [$isAbsence ? 'nullable' : 'required', 'date_format:H:i:s'],
@@ -299,7 +306,6 @@ class DtrImportService
         ], [
             'batch_id.required' => 'Batch ID is required.',
             'payroll_period_id.required' => 'Period ID is required.',
-            'branch_id.required' => 'Branch ID is required.',
             'branch_id.exists' => 'Branch ID does not exist in the system.',
             'fingerprint_id.required' => 'Fingerprint ID is required.',
             'date_in.required' => 'Date In is required or has an invalid date format.',
@@ -313,6 +319,15 @@ class DtrImportService
 
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->errors()->toArray());
+        }
+
+        $data['source_branch_id'] = $data['branch_id'];
+        $data['branch_id'] = $this->getImportedBranchId($data);
+
+        if (blank($data['branch_id'])) {
+            throw ValidationException::withMessages([
+                'fingerprint_id' => 'This fingerprint ID does not match an active employee with a branch. A legacy file must provide a valid Branch ID.',
+            ]);
         }
 
         if ($isAbsence) {
@@ -389,7 +404,7 @@ class DtrImportService
 
         $record = new Dtr;
 
-        $record->forceFill([
+        $record->forceFill($this->filterAttributesForTable('dtrs', [
             'batch_id' => $data['batch_id'],
             'payroll_period_id' => $data['payroll_period_id'],
             'branch_id' => $data['branch_id'],
@@ -402,7 +417,7 @@ class DtrImportService
             'schedule_start' => $data['schedule_start'],
             'schedule_end' => $data['schedule_end'],
             ...$metadata,
-        ])->save();
+        ]))->save();
 
         app(AutomaticAbsenceService::class)->supersede($record);
 
@@ -410,6 +425,25 @@ class DtrImportService
             'id' => $record->id,
             'batch_id' => $record->batch_id,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    protected function filterAttributesForTable(string $table, array $attributes): array
+    {
+        static $tableColumns = [];
+
+        if (! isset($tableColumns[$table])) {
+            $tableColumns[$table] = Schema::hasTable($table) ? Schema::getColumnListing($table) : [];
+        }
+
+        if ($tableColumns[$table] === []) {
+            return $attributes;
+        }
+
+        return array_intersect_key($attributes, array_flip($tableColumns[$table]));
     }
 
     /**
@@ -428,7 +462,6 @@ class DtrImportService
         $requiredColumns = [
             'Batch ID' => ['batch_id', 'batch id', 'batch'],
             'Period ID' => ['payroll_period_id', 'period id', 'period_id', 'payroll period id'],
-            'Branch ID' => ['branch_id', 'branch id'],
             'Fingerprint ID' => ['fingerprint_id', 'fingerprint id', 'uid', 'employee_id', 'employee_uid', 'user id'],
             'Date In' => ['date_in', 'date in'],
             'Time In' => ['time_in', 'time in'],
@@ -493,11 +526,7 @@ class DtrImportService
 
     protected function getAbsenceEmployee(array $data): ?Employee
     {
-        $identity = ltrim((string) $data['fingerprint_id'], '0') ?: '0';
-        $matches = Employee::query()->activeEmployment()->where('branch_id', $data['branch_id'])->get()
-            ->filter(fn (Employee $e): bool => (ltrim((string) ($e->fingerprint_id ?: $e->uid), '0') ?: '0') === $identity);
-
-        return $matches->count() === 1 ? $matches->first() : null;
+        return $this->getEmployee($data);
     }
 
     /**
@@ -546,6 +575,8 @@ class DtrImportService
         return [
             'is_imported' => 1,
             'import_name' => $this->normalizeNullableString($importName),
+            'employee_id' => $this->getEmployee($data)?->id,
+            'source_branch_id' => $data['source_branch_id'] ?? null,
             'source_session_id' => $data['source_session_id'] ?? null,
             'source_filename' => $data['source_filename'] ?? null,
             'source_file_hash' => $data['source_file_hash'] ?? null,
@@ -620,27 +651,31 @@ class DtrImportService
      */
     protected function getEmployee(array $data): ?Employee
     {
-        if ($this->isAbsenceRow($data)) {
-            return $this->getAbsenceEmployee($data);
-        }
         $fingerprintId = $data['fingerprint_id'] ?? null;
 
         if (blank($fingerprintId)) {
             return null;
         }
 
-        $fingerprintId = (string) $fingerprintId;
-        $paddedUid = is_numeric($fingerprintId)
-            ? str_pad((string) ((int) $fingerprintId), 4, '0', STR_PAD_LEFT)
-            : $fingerprintId;
+        $identity = $this->canonicalEmployeeIdentity($fingerprintId);
+        $matches = $this->activeImportEmployees()
+            ->filter(fn (Employee $employee): bool => $this->canonicalEmployeeIdentity($employee->fingerprint_id ?: $employee->uid) === $identity)
+            ->values();
 
-        return Employee::query()
-            ->activeEmployment()
-            ->where(fn ($query) => $query
-                ->where('fingerprint_id', $fingerprintId)
-                ->orWhere('uid', $fingerprintId)
-                ->orWhere('uid', $paddedUid))
-            ->first();
+        if ($matches->count() > 1) {
+            throw ValidationException::withMessages([
+                'fingerprint_id' => 'This fingerprint ID belongs to multiple active employees. Resolve the duplicate identity before importing.',
+            ]);
+        }
+
+        return $matches->first();
+    }
+
+    protected function canonicalEmployeeIdentity(mixed $value): string
+    {
+        $value = trim((string) $value);
+
+        return ctype_digit($value) ? (ltrim($value, '0') ?: '0') : mb_strtolower($value);
     }
 
     /**
@@ -648,7 +683,7 @@ class DtrImportService
      */
     protected function getImportedBranchId(array $data): mixed
     {
-        return $data['branch_id'] ?? $this->getEmployee($data)?->branch_id;
+        return $this->getEmployee($data)?->branch_id ?? $data['branch_id'] ?? null;
     }
 
     /**

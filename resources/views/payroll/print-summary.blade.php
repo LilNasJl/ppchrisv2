@@ -241,30 +241,93 @@
                     @endforeach
                 </tr>
             </thead>
+            @php
+                $departmentRows = $rows->where('group_type', 'department')->values();
+                $branchRows = $rows->where('group_type', 'branch')->values();
+                $hasBothTypes = $departmentRows->isNotEmpty() && $branchRows->isNotEmpty();
+            @endphp
             <tbody>
-                @forelse ($rows as $row)
-                    <tr>
-                        @foreach (array_keys($headers) as $key)
-                            <td @class(['numeric' => ! in_array($key, ['number', 'branch'], true)])>
-                                @if (in_array($key, ['number', 'branch', 'workers'], true))
-                                    {{ $row[$key] ?? '' }}
-                                @else
-                                    {{ $money($row[$key] ?? 0) }}
-                                @endif
-                            </td>
-                        @endforeach
-                    </tr>
-                @empty
+                @if ($rows->isEmpty())
                     <tr>
                         <td colspan="{{ count($headers) }}" class="empty-state">No payroll summary available.</td>
                     </tr>
-                @endforelse
+                @elseif ($hasBothTypes)
+                    <tr>
+                        <td colspan="{{ count($headers) }}" style="background: #eef2ff; font-weight: 800; letter-spacing: 0.04em;">
+                            DEPARTMENT
+                        </td>
+                    </tr>
+                    @foreach ($departmentRows as $row)
+                        <tr>
+                            @foreach (array_keys($headers) as $key)
+                                <td @class(['numeric' => ! in_array($key, ['number', 'branch'], true)])>
+                                    @if (in_array($key, ['number', 'branch', 'workers'], true))
+                                        {{ $row[$key] ?? '' }}
+                                    @else
+                                        {{ $money($row[$key] ?? 0) }}
+                                    @endif
+                                </td>
+                            @endforeach
+                        </tr>
+                    @endforeach
+                    <tr style="background: #f8fafc; font-weight: 700;">
+                        <td colspan="2">DEPARTMENTS SUBTOTAL</td>
+                        <td class="numeric">{{ $departmentRows->sum('workers') }}</td>
+                        <td class="numeric">{{ $money($departmentRows->sum('gross_pay')) }}</td>
+                        <td class="numeric">{{ $money($departmentRows->sum('total_deductions')) }}</td>
+                        <td class="numeric">{{ $money($departmentRows->sum('net_pay')) }}</td>
+                        <td class="numeric">{{ $money($departmentRows->sum('previous_net_pay')) }}</td>
+                        <td class="numeric">{{ $money($departmentRows->sum('variance')) }}</td>
+                    </tr>
+
+                    <tr>
+                        <td colspan="{{ count($headers) }}" style="background: #f0fdf4; font-weight: 800; letter-spacing: 0.04em;">
+                            BRANCH
+                        </td>
+                    </tr>
+                    @foreach ($branchRows as $row)
+                        <tr>
+                            @foreach (array_keys($headers) as $key)
+                                <td @class(['numeric' => ! in_array($key, ['number', 'branch'], true)])>
+                                    @if (in_array($key, ['number', 'branch', 'workers'], true))
+                                        {{ $row[$key] ?? '' }}
+                                    @else
+                                        {{ $money($row[$key] ?? 0) }}
+                                    @endif
+                                </td>
+                            @endforeach
+                        </tr>
+                    @endforeach
+                    <tr style="background: #f8fafc; font-weight: 700;">
+                        <td colspan="2">BRANCHES SUBTOTAL</td>
+                        <td class="numeric">{{ $branchRows->sum('workers') }}</td>
+                        <td class="numeric">{{ $money($branchRows->sum('gross_pay')) }}</td>
+                        <td class="numeric">{{ $money($branchRows->sum('total_deductions')) }}</td>
+                        <td class="numeric">{{ $money($branchRows->sum('net_pay')) }}</td>
+                        <td class="numeric">{{ $money($branchRows->sum('previous_net_pay')) }}</td>
+                        <td class="numeric">{{ $money($branchRows->sum('variance')) }}</td>
+                    </tr>
+                @else
+                    @foreach ($rows as $row)
+                        <tr>
+                            @foreach (array_keys($headers) as $key)
+                                <td @class(['numeric' => ! in_array($key, ['number', 'branch'], true)])>
+                                    @if (in_array($key, ['number', 'branch', 'workers'], true))
+                                        {{ $row[$key] ?? '' }}
+                                    @else
+                                        {{ $money($row[$key] ?? 0) }}
+                                    @endif
+                                </td>
+                            @endforeach
+                        </tr>
+                    @endforeach
+                @endif
             </tbody>
 
             @if ($rows->isNotEmpty())
                 <tfoot>
                     <tr>
-                        <td colspan="2">TOTAL</td>
+                        <td colspan="2">GRAND TOTAL</td>
                         <td class="numeric">{{ $rows->sum('workers') }}</td>
                         <td class="numeric">{{ $money($rows->sum('gross_pay')) }}</td>
                         <td class="numeric">{{ $money($rows->sum('total_deductions')) }}</td>

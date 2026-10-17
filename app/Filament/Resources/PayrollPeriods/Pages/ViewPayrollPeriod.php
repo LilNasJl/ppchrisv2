@@ -4,7 +4,7 @@ namespace App\Filament\Resources\PayrollPeriods\Pages;
 
 use App\Filament\Pages\Payroll;
 use App\Filament\Pages\PayrollByBranch;
-use App\Filament\Pages\PayrollSummary;
+use App\Filament\Pages\PayrollProcessingSummary;
 use App\Filament\Resources\PayrollPeriods\PayrollPeriodResource;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -31,7 +31,7 @@ class ViewPayrollPeriod extends ViewRecord
                 ->url(fn (): string => Payroll::getUrl(['periodId' => $this->record->publicKey()])),
 
             Action::make('open_branch')
-                ->label('Payroll By Branch')
+                ->label('Payroll Branch/Department')
                 ->icon('heroicon-o-building-storefront')
                 ->color('info')
                 ->url(fn (): string => PayrollByBranch::getUrl(['periodId' => $this->record->publicKey()])),
@@ -40,7 +40,7 @@ class ViewPayrollPeriod extends ViewRecord
                 ->label('Payroll Summary')
                 ->icon('heroicon-o-chart-bar')
                 ->color('success')
-                ->url(fn (): string => PayrollSummary::getUrl(['periodId' => $this->record->publicKey()])),
+                ->url(fn (): string => PayrollProcessingSummary::getUrl(['periodId' => $this->record->publicKey()])),
 
             EditAction::make()
                 ->visible(fn (): bool => ! (bool) $this->record->is_locked),

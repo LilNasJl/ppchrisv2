@@ -26,6 +26,7 @@ class EmployeeManagementBranchTable extends TableWidget
             ->query(fn (): Builder => Branch::query()
                 ->withCount([
                     'employees as employee_accounts_count' => fn (Builder $query): Builder => $query
+                        ->activeEmployment()
                         ->whereHas('user', fn (Builder $userQuery): Builder => $userQuery
                             ->where('role', 'employee')),
                 ])

@@ -11,7 +11,6 @@ use App\Models\PayrollPeriodBranchExclusion;
 use App\Models\PayrollPeriodEmployeeExclusion;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Pages\Page;
@@ -204,7 +203,7 @@ class Payroll extends Page implements HasForms
         $period = $this->selectedPeriod();
 
         return $period
-            ? PayrollSummary::getUrl(['periodId' => $period->publicKey()])
+            ? PayrollProcessingSummary::getUrl(['periodId' => $period->publicKey()])
             : null;
     }
 

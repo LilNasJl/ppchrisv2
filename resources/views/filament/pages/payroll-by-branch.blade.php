@@ -445,7 +445,7 @@
                 <span class="pbb-eyebrow">WORKFORCE RECORDS</span>
                 <div class="pbb-title-row">
                     <h2 class="pbb-title">
-                        {{ $selectedBranch?->branch_name ?: 'Branch Payroll' }}
+                        {{ $this->selectedScopeName() }}
                     </h2>
                 </div>
                 <p class="pbb-subtitle">
@@ -507,8 +507,16 @@
         </header>
 
         {{-- Compact Filter, Branch Stepper, Column Preset & Totals Bar --}}
-        <section class="pbb-control-card" aria-label="Branch Payroll Controls">
+        <section class="pbb-control-card" aria-label="Payroll Generator Controls">
             <div class="pbb-selectors-group">
+                <div class="pbb-field">
+                    <label class="pbb-label" for="pbb-scope-select">Generate By</label>
+                    <select id="pbb-scope-select" wire:model.live="scope_type" class="pbb-select">
+                        <option value="branch">Branch</option>
+                        <option value="department">Department</option>
+                        <option value="all">All Branches</option>
+                    </select>
+                </div>
                 <div class="pbb-field">
                     <label class="pbb-label" for="pbb-period-select">Payroll Period</label>
                     <select id="pbb-period-select" wire:model.live="period_id" class="pbb-select">
@@ -520,6 +528,7 @@
                     </select>
                 </div>
 
+                @if ($this->scope_type === 'branch')
                 <div class="pbb-field" style="min-width: 15.5rem;">
                     <label class="pbb-label" for="pbb-branch-select">Branch / Station</label>
                     <div class="pbb-branch-stepper">
@@ -552,9 +561,19 @@
                         </button>
                     </div>
                 </div>
+                @elseif ($this->scope_type === 'department')
+                <div class="pbb-field" style="min-width: 15.5rem;">
+                    <label class="pbb-label" for="pbb-department-select">Department</label>
+                    <select id="pbb-department-select" wire:model.live="department_id" class="pbb-select">
+                        @foreach ($this->departmentOptions() as $id => $name)
+                            <option value="{{ $id }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                @endif
             </div>
 
-            <div class="pbb-totals-strip" aria-label="Branch Payroll Totals">
+            <div class="pbb-totals-strip" aria-label="Payroll Totals">
                 <div class="pbb-total-chip">
                     <span class="pbb-total-chip-label">Gross Pay</span>
                     <span class="pbb-total-chip-value">₱{{ number_format($metrics['gross_pay'], 2) }}</span>
@@ -564,7 +583,7 @@
                     <span class="pbb-total-chip-value">₱{{ number_format($metrics['total_deductions'], 2) }}</span>
                 </div>
                 <div class="pbb-total-chip net">
-                    <span class="pbb-total-chip-label">Branch Net Pay</span>
+                    <span class="pbb-total-chip-label">Net Pay</span>
                     <span class="pbb-total-chip-value">₱{{ number_format($metrics['net_pay'], 2) }}</span>
                 </div>
             </div>
@@ -576,7 +595,7 @@
 
             <div class="export-title">
                 <h2 style="font-size: 18px; margin-bottom: 4px;">
-                    {{ $selectedBranch?->branch_name ?: 'Branch Payroll' }}
+                    {{ $this->selectedScopeName() }}
                 </h2>
                 <p>
                     Payroll period: {{ $selectedPeriod?->title ?: '-' }}
@@ -586,7 +605,8 @@
             <div class="payroll-screen-table">
                 <livewire:payroll-detail-table
                     :period-id="(int) $this->period_id"
-                    :branch-id="filled($this->branch_id) ? (int) $this->branch_id : null"
+                    :branch-id="$this->scope_type === 'branch' && filled($this->branch_id) ? (int) $this->branch_id : null"
+                    :department-id="$this->scope_type === 'department' && filled($this->department_id) ? (int) $this->department_id : null"
                     :enable-search="true"
                     :initial-search="$this->payroll_search"
                     :initial-page="$this->payroll_page"
@@ -594,7 +614,7 @@
                     :initial-preset="$this->payroll_preset"
                     :show-column-presets="false"
                     :show-totals="true"
-                    :key="'branch-payroll-'.$this->period_id.'-'.$this->branch_id.'-'.$this->payroll_page"
+                    :key="'payroll-'.$this->period_id.'-'.$this->scope_type.'-'.$this->branch_id.'-'.$this->department_id.'-'.$this->payroll_page"
                 />
             </div>
             <div class="payroll-print-table">
