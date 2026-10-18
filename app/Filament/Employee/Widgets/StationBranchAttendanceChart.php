@@ -13,11 +13,11 @@ class StationBranchAttendanceChart extends ChartWidget
 {
     protected ?string $heading = 'Branch Attendance Statistics';
 
-    protected ?string $description = 'Approved overtime, undertime, late, and approved early overtime in minutes.';
+    protected ?string $description = 'Approved overtime, undertime, late, and approved early overtime in hours.';
 
-    protected int|string|array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 1;
 
-    protected ?string $maxHeight = '360px';
+    protected ?string $maxHeight = '420px';
 
     public static function canView(): bool
     {
@@ -83,8 +83,8 @@ class StationBranchAttendanceChart extends ChartWidget
             'scales' => [
                 'y' => [
                     'beginAtZero' => true,
-                    'ticks' => ['precision' => 0],
-                    'title' => ['display' => true, 'text' => 'Minutes'],
+                    'ticks' => ['precision' => 2],
+                    'title' => ['display' => true, 'text' => 'Hours'],
                 ],
             ],
             'plugins' => [
@@ -126,7 +126,7 @@ class StationBranchAttendanceChart extends ChartWidget
     {
         return [
             'label' => $label,
-            'data' => $branches->map(fn (Branch $branch): int => (int) ($totals->get($branch->id)?->{$field} ?? 0))->all(),
+            'data' => $branches->map(fn (Branch $branch): float => round(((float) ($totals->get($branch->id)?->{$field} ?? 0)) / 60, 2))->all(),
             'backgroundColor' => $color,
             'borderColor' => $color,
             'borderWidth' => 1,

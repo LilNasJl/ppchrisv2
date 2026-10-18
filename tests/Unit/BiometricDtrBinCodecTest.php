@@ -55,4 +55,17 @@ class BiometricDtrBinCodecTest extends TestCase
 
         (new BiometricDtrBinCodec)->decode(pack('n', 10).'short');
     }
+
+    public function test_it_rejects_trailing_data_and_zero_length_frames(): void
+    {
+        $codec = new BiometricDtrBinCodec;
+        foreach ([$codec->encode([['uid' => 12345]]).chr(255), pack('n', 0).'garbage'] as $binary) {
+            try {
+                $codec->decode($binary);
+                $this->fail('Malformed file accepted');
+            } catch (\RuntimeException $exception) {
+                $this->assertNotEmpty($exception->getMessage());
+            }
+        }
+    }
 }

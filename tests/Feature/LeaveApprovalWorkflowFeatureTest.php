@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\LeaveApprovalService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\PermissionRegistrar;
@@ -157,6 +158,7 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
             $table->string('name');
             $table->boolean('is_active')->default(true);
             $table->unsignedInteger('version')->default(1);
+            $table->json('device_ids')->nullable();
             foreach (['employee', 'branch', 'department', 'designation'] as $scope) {
                 $table->unsignedBigInteger($scope.'_id')->nullable()->index();
             }
@@ -662,6 +664,52 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $this->assertNull($updated->branch_id);
         $this->assertSame($department->id, $updated->department_id);
         $this->assertSame('0:0:'.$department->id.':0', $updated->active_scope_key);
+    }
+
+    public function test_workflow_device_assignments_are_saved_revised_and_validated_against_biometricsweb(): void
+    {
+        config(['biometrics.url' => 'https://biometrics.test', 'biometrics.secret' => str_repeat('s', 40)]);
+        Http::fake(['https://biometrics.test/api/hris/devices' => Http::response([
+            'data' => [
+                ['id' => 10, 'name' => 'Tagum'],
+                ['id' => 20, 'name' => 'Maco'],
+            ],
+        ])]);
+        \Illuminate\Support\Facades\Cache::forget('biometrics-device-list:'.hash('sha256', 'https://biometrics.test'));
+
+        $branch = Branch::create(['branch_name' => 'Tagum Station']);
+        [$admin] = $this->createEmployeeWithUser('HR Admin', 'admin', $branch);
+        $workflow = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Tagum review', 'is_active' => true, 'scope_type' => 'branch',
+            'scope_id' => $branch->id, 'levels' => [], 'device_ids' => [10, 20],
+        ], $admin);
+
+        $this->assertSame(['10', '20'], $workflow->fresh()->device_ids);
+
+        $updated = app(LeaveApprovalService::class)->saveWorkflow([
+            'name' => 'Tagum review', 'is_active' => true, 'scope_type' => 'branch',
+            'scope_id' => $branch->id, 'version' => $workflow->version,
+            'levels' => [], 'device_ids' => [20],
+        ], $admin, $workflow);
+
+        $this->assertSame(['20'], $updated->fresh()->device_ids);
+        $revision = \Illuminate\Support\Facades\DB::table('leave_workflow_revisions')
+            ->where('workflow_id', $workflow->id)->orderByDesc('version')->value('configuration');
+        $this->assertSame(['20'], json_decode($revision, true)['device_ids']);
+
+        try {
+            app(LeaveApprovalService::class)->saveWorkflow([
+                'name' => 'Tagum review', 'is_active' => true, 'scope_type' => 'branch',
+                'scope_id' => $branch->id, 'version' => $updated->version,
+                'levels' => [], 'device_ids' => [999],
+            ], $admin, $updated);
+            $this->fail('Unknown device was accepted.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('device_ids', $e->errors());
+        }
+
+        $this->assertSame(['20'], $workflow->fresh()->device_ids);
+        Http::assertSentCount(1);
     }
 
     public function test_workflow_configuration_rejects_hidden_second_scope(): void

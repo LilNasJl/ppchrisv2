@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
 use Override;
 use UnitEnum;
@@ -115,14 +116,19 @@ class Dtr extends Page implements HasForms
 
     public function reconcileUnsyncedIfAny(): void
     {
-        if ($this->periodId) {
-            app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($this->branchId, $this->periodId);
+        $periodId = $this->normalizeOptionalId($this->periodId, 'periodId');
+
+        if ($periodId !== null) {
+            $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
+            app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($branchId, $periodId);
         }
     }
 
     public function syncStationRecords(): void
     {
-        $count = app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($this->branchId, $this->periodId);
+        $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
+        $periodId = $this->normalizeOptionalId($this->periodId, 'periodId');
+        $count = app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($branchId, $periodId);
         $this->recordManualSyncRun($count);
 
         if ($count > 0) {
@@ -140,7 +146,27 @@ class Dtr extends Page implements HasForms
 
     public function unsyncedStationRecordCount(): int
     {
-        return app(DtrSynchronizationService::class)->countUnsyncedRecords($this->branchId, $this->periodId);
+        $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
+        $periodId = $this->normalizeOptionalId($this->periodId, 'periodId');
+
+        return app(DtrSynchronizationService::class)->countUnsyncedRecords($branchId, $periodId);
+    }
+
+    private function normalizeOptionalId(mixed $value, string $field): ?int
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        $id = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        if ($id === false) {
+            throw ValidationException::withMessages([
+                $field => 'The selected value is invalid.',
+            ]);
+        }
+
+        return $id;
     }
 
     public function resetFilters(): void

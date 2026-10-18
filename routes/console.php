@@ -1,13 +1,25 @@
 <?php
 
+use App\Jobs\ProcessBiometricsSync;
+use App\Models\BiometricsSyncRequest;
 use App\Models\Employee;
+use App\Models\User;
 use App\Services\DtrDailyAggregationService;
+use App\Services\DtrSynchronizationService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
 use App\Services\ProbationaryEmploymentPromotionService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+
+Artisan::command('biometrics:recover', function (): void {
+    BiometricsSyncRequest::query()
+        ->where(fn ($q) => $q->whereNotIn('status', ['success', 'failed'])->orWhere(fn ($q) => $q->whereNull('remote_acknowledged_at')->where('created_at', '>', now()->subDay())))
+        ->where(fn ($q) => $q->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', now()))
+        ->each(fn ($sync) => ProcessBiometricsSync::dispatch($sync->id));
+})->purpose('Recover and advance background biometrics device synchronizations');
+Schedule::command('biometrics:recover')->everyMinute()->withoutOverlapping(2);
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -57,7 +69,7 @@ Artisan::command('dtr:recalculate-daily {--period=}', function (DtrDailyAggregat
     $this->info("Recalculated {$groups} employee-day D.T.R group(s){$scope}.");
 })->purpose('Recalculate combined daily Regular attendance metrics');
 
-Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', function (\App\Services\DtrSynchronizationService $service): void {
+Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', function (DtrSynchronizationService $service): void {
     $branchId = filled($this->option('branch')) ? (int) $this->option('branch') : null;
     $periodId = filled($this->option('period')) ? (int) $this->option('period') : null;
     $includeLocked = (bool) $this->option('include-locked');
@@ -67,7 +79,7 @@ Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', 
 })->purpose('Reconcile and synchronize all station D.T.R records to the official HR D.T.R table');
 
 Artisan::command('auth:sync-masteradmin', function (): void {
-    $account = \App\Models\User::syncMasterAdminFromConfig();
+    $account = User::syncMasterAdminFromConfig();
 
     if (! $account) {
         $this->warn('Master admin credentials are not fully configured in auth config or environment.');
@@ -84,4 +96,3 @@ Schedule::command('employment:promote-eligible')
     ->hourly()
     ->timezone(config('app.timezone'))
     ->withoutOverlapping();
-

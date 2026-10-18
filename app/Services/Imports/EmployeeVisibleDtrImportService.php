@@ -231,16 +231,21 @@ class EmployeeVisibleDtrImportService extends DtrImportService
     {
         $data = parent::validateRow($row, $fallbackBatchId);
 
-        if (blank($data['source_branch_id'] ?? null)) {
+        $employee = $this->resolveEmployeeByFingerprint($data);
+        $sourceBranchId = $data['source_branch_id'] ?? null;
+        $recordBranchId = filled($sourceBranchId)
+            ? (int) $sourceBranchId
+            : (int) ($employee->branch_id ?? 0);
+
+        if ($recordBranchId < 1) {
             throw ValidationException::withMessages([
-                'branch_id' => 'An authorized station branch is required for this import.',
+                'fingerprint_id' => 'This fingerprint ID does not match an active employee with a branch.',
             ]);
         }
 
-        // The station-visible row belongs to the uploading station; the
-        // synchronized official row belongs to the employee's home branch.
-        $data['branch_id'] = $data['source_branch_id'];
-        $employee = $this->resolveEmployeeForSelectedBranch($data);
+        // A branch-specific legacy import remains attributed to its station.
+        // A branch-neutral import is grouped under each matched employee's HRIS branch.
+        $data['branch_id'] = $recordBranchId;
 
         $data['employee_id'] = $employee->getKey();
 
@@ -394,7 +399,8 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
         return EmployeeVisibleDtr::query()
             ->where('payroll_period_id', $data['payroll_period_id'])
-            ->where('branch_id', $this->getImportedBranchId($data))
+            ->when(filled($data['source_branch_id'] ?? null), fn (Builder $query): Builder => $query
+                ->where('branch_id', $data['branch_id']))
             ->tap(fn (Builder $query): Builder => $this->applyEmployeeIdentity($query, $data))
             ->whereBetween('date_in', [$rangeStart, $rangeEnd])
             ->get();
@@ -404,8 +410,10 @@ class EmployeeVisibleDtrImportService extends DtrImportService
     {
         $query = EmployeeVisibleDtr::query()
             ->where('payroll_period_id', $data['payroll_period_id'])
-            ->where('branch_id', $this->getImportedBranchId($data))
             ->whereNull('on_field_dtr_submission_id');
+        if (filled($data['source_branch_id'] ?? null)) {
+            $query->where('branch_id', $data['branch_id']);
+        }
         if (! $this->isAbsenceRow($data)) {
             $query->where(fn (Builder $q) => $q->whereNull('entry_source')->orWhere('entry_source', '!=', AutomaticAbsenceService::SOURCE));
         }
@@ -474,14 +482,13 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         return $query->where('fingerprint_id', (string) $data['fingerprint_id']);
     }
 
-    protected function resolveEmployeeForSelectedBranch(array $data): Employee
+    protected function resolveEmployeeByFingerprint(array $data): Employee
     {
-        $branchId = (int) ($data['branch_id'] ?? 0);
         $identity = $this->canonicalIdentity($data['fingerprint_id'] ?? null);
 
-        if ($branchId < 1 || $identity === '') {
+        if ($identity === '') {
             throw ValidationException::withMessages([
-                'fingerprint_id' => 'A valid branch and fingerprint ID are required to identify the employee.',
+                'fingerprint_id' => 'A valid fingerprint ID is required to identify the employee.',
             ]);
         }
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check PPCHRISV2 Biometrics Payroll syncs every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=ppchrisv2-biometrics-recover.service
+
+[Install]
+WantedBy=timers.target

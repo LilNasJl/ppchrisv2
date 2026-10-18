@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Pages\DtrManage;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\DtrChangeRequest;
@@ -271,7 +272,33 @@ class AutomaticAbsenceImportTest extends TestCase
         $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
         $this->assertEquals(300, $pay['absent']); // existing 3-hour Saturday payroll
         $this->assertEquals(0, $pay['halfday']);
+        $page = new DtrManage;
+        $page->employeeId = $this->employee->id;
+        $page->branchId = $this->branch->id;
+        $page->periodId = $this->period->id;
+        $summary = $page->getSummaryMetrics();
+        $this->assertSame(0.0, $summary['absent_days']);
+        $this->assertSame(3, $summary['saturday_absent_hours']);
+        $this->assertSame(0.0, $summary['total_days_work']);
         $this->assertSame(1, app($service)->importRows([$row], 'Repeated')['skipped']);
+    }
+
+    public function test_legacy_saturday_absence_with_missing_minutes_deducts_only_three_hours(): void
+    {
+        $this->employee->update(['monthly_rate' => 20800]);
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        $row = [...$this->absence('whole_day', '2026-10-10'),
+            'schedule_start' => '08:00:00', 'schedule_end' => '11:00:00'];
+        $this->assertSame(1, app(DtrImportService::class)->importRows([$row], 'Saturday')['successful']);
+        Dtr::query()->update(['absence_minutes' => 0]);
+
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(300, $pay['absent']);
+        $this->assertEquals(0, $pay['halfday']);
+
+        Dtr::query()->update(['absence_minutes' => 480]);
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(300, $pay['absent']);
     }
 
     #[DataProvider('services')]

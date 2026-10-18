@@ -30,6 +30,7 @@ return [
     */
 
     'connections' => [
+        'biometrics' => ['driver' => 'database', 'connection' => env('DB_QUEUE_CONNECTION'), 'table' => 'jobs', 'queue' => 'biometrics', 'retry_after' => 330, 'after_commit' => true],
 
         'sync' => [
             'driver' => 'sync',

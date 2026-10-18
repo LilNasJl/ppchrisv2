@@ -15,9 +15,14 @@ class DtrPreviewImportController extends Controller
 {
     public function __invoke(Request $request, EmployeeVisibleDtrImportService $importer): JsonResponse
     {
-        $employee = auth()->user()?->employee;
+        $user = $request->user();
+        $employee = $user?->employee;
 
-        abort_unless($employee instanceof Employee, 403, 'Unauthorized employee.');
+        abort_unless(
+            $employee instanceof Employee && StationManagementAccess::canAccessStationManagement($user),
+            403,
+            'Unauthorized station D.T.R import.',
+        );
 
         $validated = $request->validate([
             'rows' => ['required', 'array', 'min:1'],
@@ -25,10 +30,14 @@ class DtrPreviewImportController extends Controller
             'import_name' => ['required', 'string', 'max:191'],
             'batch_id' => ['nullable', 'string', 'max:191'],
             'period_id' => ['required', 'integer', 'exists:payroll_periods,id'],
-            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
         ]);
 
-        abort_unless(StationManagementAccess::canManageBranch($employee, (int) $validated['branch_id']), 403, 'Branch not assigned.');
+        $sourceBranchId = filled($validated['branch_id'] ?? null) ? (int) $validated['branch_id'] : null;
+
+        if ($sourceBranchId !== null) {
+            abort_unless(StationManagementAccess::canManageBranch($user, $sourceBranchId), 403, 'Branch not assigned.');
+        }
 
         $period = PayrollPeriod::query()->findOrFail($validated['period_id']);
 
@@ -50,11 +59,16 @@ class DtrPreviewImportController extends Controller
             return response()->json($result, 422);
         }
 
-        $rows = array_map(function (array $row) use ($validated): array {
+        $rows = array_map(function (array $row) use ($validated, $sourceBranchId): array {
             $row['payroll_period_id'] = $validated['period_id'];
             $row['Period ID'] = $validated['period_id'];
-            $row['branch_id'] = $validated['branch_id'];
-            $row['Branch ID'] = $validated['branch_id'];
+
+            if ($sourceBranchId !== null) {
+                $row['branch_id'] = $sourceBranchId;
+                $row['Branch ID'] = $sourceBranchId;
+            } else {
+                unset($row['branch_id'], $row['Branch ID'], $row['source_branch_id']);
+            }
 
             return $row;
         }, $validated['rows']);
@@ -74,7 +88,7 @@ class DtrPreviewImportController extends Controller
 
         SicRcDtrImport::query()->create([
             'imported_by_employee_id' => $employee->getKey(),
-            'branch_id' => (int) $validated['branch_id'],
+            'branch_id' => filled($validated['branch_id'] ?? null) ? (int) $validated['branch_id'] : null,
             'payroll_period_id' => (int) $validated['period_id'],
             'batch_id' => (string) ($result['batch_id'] ?? $validated['batch_id'] ?? ''),
             'import_name' => (string) $validated['import_name'],

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Filament\Pages\Dashboard;
+use App\Filament\Widgets\OverallDailyAttendanceSummaryChart;
+use App\Filament\Widgets\OvertimeLogHoursChart;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\PayrollPeriod;
@@ -53,6 +55,8 @@ class HrDashboardEnhancementTest extends TestCase
 
         $response->assertSuccessful();
         $response->assertSee('Dashboard: Employee Snapshot');
+        $response->assertSee('Shout Out Hall');
+        $response->assertSee('ppc-dashboard-shoutout');
         $response->assertSee('Attendance & Leave Overview');
     }
 
@@ -63,6 +67,8 @@ class HrDashboardEnhancementTest extends TestCase
         Livewire::test(Dashboard::class)
             ->assertSuccessful()
             ->assertSee('Dashboard: Employee Snapshot')
+            ->assertSee('Shout Out Hall')
+            ->assertSee('ppc-dashboard-shoutout')
             ->assertSee('Attendance & Leave Overview');
     }
 
@@ -99,12 +105,12 @@ class HrDashboardEnhancementTest extends TestCase
 
         $this->actingAs($this->user);
 
-        Livewire::test(\App\Filament\Widgets\OverallDailyAttendanceSummaryChart::class)
+        Livewire::test(OverallDailyAttendanceSummaryChart::class)
             ->set('filters.payroll_period_id', $period->id)
             ->set('filters.date', '2026-10-10')
             ->assertSet('filters.payroll_period_id', $period->id);
 
-        Livewire::test(\App\Filament\Widgets\OvertimeLogHoursChart::class)
+        Livewire::test(OvertimeLogHoursChart::class)
             ->set('filters.payroll_period_id', $period->id)
             ->assertSet('filters.payroll_period_id', $period->id);
     }

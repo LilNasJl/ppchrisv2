@@ -326,6 +326,12 @@ class Dtr extends Page implements HasForms, HasTable
                     ->color('gray')
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                TextColumn::make('absence_duration')
+                    ->label('Absence')
+                    ->getStateUsing(fn (DtrModel $record): int => app(DtrAttendanceUnitService::class)->recordAbsenceMinutes($record))
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? number_format($state / 60, 1).' hrs' : '-')
+                    ->alignCenter(),
+
                 TextColumn::make('late')
                     ->label('Late')
                     ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
@@ -675,6 +681,8 @@ class Dtr extends Page implements HasForms, HasTable
             'present_entries' => 0,
             'leave_entries' => 0,
             'absent_entries' => 0,
+            'absent_weekday_days' => 0.0,
+            'saturday_absent_hours' => 0,
             'total_late' => 0,
             'total_undertime' => 0,
             'total_credited_overtime' => 0,
@@ -705,8 +713,11 @@ class Dtr extends Page implements HasForms, HasTable
             'total_credited_work' => (int) $finalizedRecords->sum('credited_work_hrs'),
         ];
 
-        $overview['present_entries'] = app(DtrAttendanceUnitService::class)
-            ->attendanceDays($finalizedRecords);
+        $attendanceUnits = app(DtrAttendanceUnitService::class);
+        $overview['present_entries'] = $attendanceUnits->attendanceDays($finalizedRecords);
+        $absence = $attendanceUnits->absenceBreakdown($finalizedRecords);
+        $overview['absent_weekday_days'] = $absence['weekday_days'];
+        $overview['saturday_absent_hours'] = $absence['saturday_hours'];
 
         return $overview;
     }

@@ -160,16 +160,6 @@ class StationEmployees extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('importDtr')
-                ->label('Import D.T.R')
-                ->icon(Heroicon::ArrowUpTray)
-                ->visible(fn (): bool => ! (bool) $this->period?->is_locked)
-                ->disabled(fn (): bool => (bool) $this->period?->is_locked)
-                ->url(fn (): string => StationDtrImport::getUrl([
-                    'branchId' => $this->branch?->publicKey(),
-                    'periodId' => $this->period?->publicKey(),
-                ])),
-
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)

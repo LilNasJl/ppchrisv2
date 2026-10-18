@@ -70,6 +70,20 @@ class StationManagementAccess
     }
 
     /**
+     * @return array<int, string>
+     */
+    public static function getManagedBiometricsDeviceIds(User|Employee|null $user): array
+    {
+        return static::getActiveApproverWorkflows($user)
+            ->flatMap(fn (LeaveApprovalWorkflow $workflow): array => $workflow->device_ids ?? [])
+            ->map(fn ($id): string => (string) $id)
+            ->filter(fn (string $id): bool => $id !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Determine if the user or employee is authorized to access Station Management.
      * Access is dynamically determined strictly from active Approval Workflow assignments.
      */

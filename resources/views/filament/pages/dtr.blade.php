@@ -30,7 +30,7 @@
             border: 1px solid #3b82f6;
             background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
             color: #fff;
-            overflow: hidden;
+            overflow: visible;
         }
 
         .dtr-topbar::before {
@@ -74,6 +74,73 @@
             align-items: center;
             justify-content: flex-end;
             gap: 0.75rem;
+        }
+
+        .dtr-dropdown {
+            position: relative;
+        }
+
+        .dtr-dropdown-trigger {
+            list-style: none;
+        }
+
+        .dtr-dropdown-trigger::-webkit-details-marker {
+            display: none;
+        }
+
+        .dtr-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 0.45rem);
+            right: 0;
+            z-index: 60;
+            display: none;
+            min-width: 13rem;
+            padding: 0.35rem;
+            border: 1px solid rgb(203, 213, 225);
+            border-radius: 0.65rem;
+            background: #ffffff;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+        }
+
+        .dtr-dropdown[open] .dtr-dropdown-menu {
+            display: grid;
+            gap: 0.2rem;
+        }
+
+        .dtr-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.65rem 0.75rem;
+            border-radius: 0.4rem;
+            color: rgb(30, 41, 59);
+            font-size: 0.8rem;
+            font-weight: 600;
+            line-height: 1.25;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .dtr-dropdown-item:hover,
+        .dtr-dropdown-item:focus-visible {
+            background: rgb(239, 246, 255);
+            color: rgb(29, 78, 216);
+            outline: none;
+        }
+
+        .dark .dtr-dropdown-menu {
+            border-color: rgb(71, 85, 105);
+            background: rgb(15, 23, 42);
+        }
+
+        .dark .dtr-dropdown-item {
+            color: rgb(226, 232, 240);
+        }
+
+        .dark .dtr-dropdown-item:hover,
+        .dark .dtr-dropdown-item:focus-visible {
+            background: rgb(30, 41, 59);
+            color: #ffffff;
         }
 
         .dtr-btn {
@@ -880,12 +947,27 @@
             <div class="dtr-topbar-copy">
                 <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
                 <h2 class="dtr-title">Daily Time Record</h2>
-                <p class="dtr-subtitle">
-                    Live synchronized station and HR attendance records with instant payroll period, branch, and employee filters.
-                </p>
             </div>
 
             <div class="dtr-actions-row">
+                <details class="dtr-dropdown">
+                    <summary class="dtr-btn secondary dtr-dropdown-trigger">
+                        <span>DTR Action</span>
+                        <x-filament::icon icon="heroicon-m-chevron-down" class="dtr-btn-icon" />
+                    </summary>
+                    <div class="dtr-dropdown-menu">
+                        @if(\App\Filament\Pages\BiometricsSync::canAccess())
+                            <a href="{{ \App\Filament\Pages\BiometricsSync::getUrl() }}" class="dtr-dropdown-item">
+                                <x-filament::icon icon="heroicon-o-arrow-path" class="dtr-btn-icon" />
+                                <span>Sync Devices</span>
+                            </a>
+                        @endif
+                        <a href="{{ $this->dtrImporterUrl() }}" class="dtr-dropdown-item">
+                            <x-filament::icon icon="heroicon-o-arrow-up-tray" class="dtr-btn-icon" />
+                            <span>DTR Importer</span>
+                        </a>
+                    </div>
+                </details>
                 <a href="{{ $this->dtrChangeRequestsUrl() }}" class="dtr-btn">
                     <x-filament::icon icon="heroicon-o-document-text" class="dtr-btn-icon" />
                     <span>Change Requests</span>
@@ -900,11 +982,6 @@
                     @if ($this->dtrProofSubmissionCount() > 0)
                         <span class="dtr-badge">{{ $this->dtrProofSubmissionCount() }}</span>
                     @endif
-                </a>
-
-                <a href="{{ $this->dtrImporterUrl() }}" class="dtr-btn secondary">
-                    <x-filament::icon icon="heroicon-o-arrow-up-tray" class="dtr-btn-icon" />
-                    <span>DTR Importer</span>
                 </a>
             </div>
         </header>

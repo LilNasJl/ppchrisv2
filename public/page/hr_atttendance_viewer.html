@@ -735,7 +735,6 @@ function updateImportButton(){
   const ready=S.dtr.raw.length>0
     && !S.dtr.imported
     && !!selectedPeriodId()
-    && (!DTR_ONLY || !!selectedBranchId())
     && document.getElementById('dtr-import-name').value.trim().length>0;
   button.disabled=!ready;
 }
@@ -782,8 +781,8 @@ function importDtr(){
   const name=document.getElementById('dtr-import-name').value.trim();
   const periodId=selectedPeriodId();
   const branchId=selectedBranchId();
-  if(!periodId||(DTR_ONLY&&!branchId)){
-    showResult(false,'Import setup is incomplete',DTR_ONLY?'Station context is unavailable. Return to the station page and try again.':'Select a payroll period before importing.',0,0,0,[]);
+  if(!periodId){
+    showResult(false,'Import setup is incomplete','Select a payroll period before importing.',0,0,0,[]);
     return;
   }
   if(!name||!S.dtr.raw.length)return;
@@ -870,8 +869,8 @@ function getExportData(t,batchId){
   if(!data.length){alert('No records to export.');return null;}
   const periodId = selectedPeriodId();
   const branchId = selectedBranchId();
-  if(t==='dtr' && (!periodId || (DTR_ONLY && !branchId))){
-    alert(DTR_ONLY?'Station context is unavailable. Return to the station page and try again.':'Please select a payroll period before exporting D.T.R records.');
+  if(t==='dtr' && !periodId){
+    alert('Please select a payroll period before exporting D.T.R records.');
     return null;
   }
 

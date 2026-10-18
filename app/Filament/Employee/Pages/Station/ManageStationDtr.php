@@ -3,21 +3,23 @@
 namespace App\Filament\Employee\Pages\Station;
 
 use App\Models\Branch as BranchModel;
+use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\IconPosition;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 use UnitEnum;
 
 class ManageStationDtr extends Page implements HasTable
@@ -52,7 +54,23 @@ class ManageStationDtr extends Page implements HasTable
 
     public function getSubheading(): string
     {
-        return 'Select an assigned station branch to manage its employee attendance records.';
+        return 'Choose an assigned branch to manage employee attendance, or open the D.T.R importer from the page header.';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('syncDevices')
+                ->label('Sync Device')
+                ->icon(Heroicon::ArrowPath)
+                ->color('primary')
+                ->url(StationBiometricsSync::getUrl()),
+            Action::make('dtrImporter')
+                ->label('DTR Importer')
+                ->icon(Heroicon::ArrowUpTray)
+                ->color('primary')
+                ->url(StationDtrImport::getUrl()),
+        ];
     }
 
     public function getStationDtrStats(): array
@@ -60,7 +78,7 @@ class ManageStationDtr extends Page implements HasTable
         $branchIds = $this->assignedBranchIds();
         $branchesCount = count($branchIds);
 
-        $activeEmployeesCount = \App\Models\Employee::query()
+        $activeEmployeesCount = Employee::query()
             ->whereIn('branch_id', $branchIds)
             ->where(function (Builder $query): Builder {
                 return StationManagementAccess::scopeManagedEmployeesQuery(
@@ -111,12 +129,14 @@ class ManageStationDtr extends Page implements HasTable
                     ->badge()
                     ->color('info')
                     ->icon('heroicon-m-users')
-                    ->formatStateUsing(fn ($state) => $state . ' ' . \Illuminate\Support\Str::plural('staff', (int) $state)),
+                    ->formatStateUsing(fn ($state) => $state.' '.Str::plural('staff', (int) $state)),
             ])
             ->recordActions([
                 Action::make('viewEmployees')
                     ->label('Manage D.T.R')
                     ->icon(Heroicon::ArrowRight)
+                    ->iconPosition(IconPosition::After)
+                    ->button()
                     ->color('primary')
                     ->modalHeading(fn (BranchModel $record): string => 'Manage '.$record->branch_name.' Attendance')
                     ->modalDescription('Select an open payroll period to view this station branch\'s employees and D.T.R records.')

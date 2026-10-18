@@ -3,6 +3,7 @@
 namespace App\Filament\Employee\Pages\Station;
 
 use App\Filament\Employee\Widgets\StationBranchAttendanceChart;
+use App\Filament\Employee\Widgets\StationEmployeeAttendanceRankingTable;
 use App\Models\Employee;
 use App\Services\StationManagementAccess;
 use BackedEnum;
@@ -101,7 +102,13 @@ class StationOverview extends Page
     {
         return [
             StationBranchAttendanceChart::class,
+            StationEmployeeAttendanceRankingTable::class,
         ];
+    }
+
+    public function getFooterWidgetsColumns(): int | array
+    {
+        return 1;
     }
 
     protected function assignedBranchIds(): array

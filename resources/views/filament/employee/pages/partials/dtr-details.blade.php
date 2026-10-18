@@ -243,7 +243,10 @@
                 <span class="dtr-modal-item-label">Day Part & Count</span>
                 <span class="dtr-modal-item-value">
                     {{ app(\App\Services\DtrDayPartService::class)->label($resolvedDayPart) }}
-                    ({{ number_format($dayUnits, 1) }} d)
+                    ({{ number_format($dayUnits, 1) }} work d)
+                    @if ($record instanceof \App\Models\Dtr && ($absenceMinutes = $attendanceUnits->recordAbsenceMinutes($record)) > 0)
+                        &bull; {{ number_format($absenceMinutes / 60, 1) }} hrs absent
+                    @endif
                 </span>
             </div>
         </div>

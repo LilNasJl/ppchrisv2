@@ -1,0 +1,4 @@
+* * * * * cd /var/www/html/dinkings && /usr/bin/php artisan schedule:run >> /var/www/html/dinkings/storage/logs/scheduler.log 2>&1
+* * * * * cd /var/www/html/bdts && /usr/bin/php artisan schedule:run >> /tmp/bdts-scheduler.log 2>&1
+* * * * * cd /var/www/html/ppchrisv2 && /usr/bin/php artisan biometrics:recover >> storage/logs/biometrics-recover.log 2>&1
+* * * * * cd /var/www/html/ppchrisv2 && /usr/bin/flock -n /tmp/ppchrisv2-biometrics-queue.lock /usr/bin/php artisan queue:work biometrics --queue=biometrics --stop-when-empty --max-time=50 --tries=3 --timeout=240 >> storage/logs/biometrics-queue.log 2>&1

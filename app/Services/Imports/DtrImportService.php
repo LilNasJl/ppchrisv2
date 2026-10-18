@@ -45,7 +45,9 @@ class DtrImportService
             'successful' => 0,
             'failed' => 0,
             'skipped' => 0,
+            'skipped_rows' => [],
             'already_existing' => 0,
+            'conflicts' => 0,
             'invalid' => 0,
             'batch_id' => $fallbackBatchId,
             'message' => 'No rows were imported.',
@@ -127,6 +129,11 @@ class DtrImportService
                 ) {
                     $result['skipped']++;
                     $result['already_existing']++;
+                    $result['skipped_rows'][] = $validatedRow['row'];
+                    $reason = isset($seenSourceRowHashes[$sourceRowHash])
+                        ? 'Duplicate DTR session in this export; this row was skipped.'
+                        : 'This DTR session was already imported; this row was skipped.';
+                    $result['notices'][] = ['row' => $validatedRow['row'], 'message' => $reason];
 
                     continue;
                 }
@@ -136,6 +143,9 @@ class DtrImportService
                 if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
                     $result['skipped']++;
                     $result['already_existing']++;
+                    $result['conflicts']++;
+                    $result['skipped_rows'][] = $validatedRow['row'];
+                    $result['notices'][] = ['row' => $validatedRow['row'], 'message' => 'An existing DTR conflicts with this session. It was preserved; review incomplete or corrected entries before importing again.'];
 
                     if (filled($sourceRowHash)) {
                         $seenSourceRowHashes[$sourceRowHash] = true;
@@ -190,9 +200,11 @@ class DtrImportService
                             if (! empty($saved['skipped'])) {
                                 $result['skipped']++;
                                 $result['already_existing']++;
-                                if (! empty($saved['reason'])) {
-                                    $result['notices'][] = ['row' => $validatedRow['row'], 'message' => $saved['reason']];
-                                }
+                                $result['skipped_rows'][] = $validatedRow['row'];
+                                $result['notices'][] = [
+                                    'row' => $validatedRow['row'],
+                                    'message' => $saved['reason'] ?? 'An existing DTR was preserved; this row was skipped to prevent a duplicate.',
+                                ];
 
                                 continue;
                             }
@@ -966,14 +978,9 @@ class DtrImportService
     {
         $firstData = $validatedRows[0]['data'] ?? [];
         $periodId = (string) ($firstData['payroll_period_id'] ?? 'none');
-        $branchId = (string) ($this->getImportedBranchId($firstData) ?? 'none');
-        $lockKey = 'dtr-import-lock:'.static::class.':'.$periodId.':'.$branchId.':'.$fallbackBatchId;
+        $lockKey = 'dtr-import-period:'.$periodId;
 
-        try {
-            return Cache::lock($lockKey, 30)->block(10, $callback);
-        } catch (\Throwable) {
-            return $callback();
-        }
+        return Cache::lock($lockKey, 300)->block(10, $callback);
     }
 
     /**

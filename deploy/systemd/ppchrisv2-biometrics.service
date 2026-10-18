@@ -1,0 +1,14 @@
+[Unit]
+Description=PPCHRISV2 Biometrics Payroll sync worker
+After=network-online.target
+
+[Service]
+Type=simple
+User=joelyn
+WorkingDirectory=/var/www/html/ppchrisv2
+ExecStart=/usr/bin/php artisan queue:work biometrics --queue=biometrics --sleep=3 --tries=3 --timeout=240 --max-time=3600
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

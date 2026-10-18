@@ -602,14 +602,14 @@
         <section class="dtr-summary-strip" aria-label="Employee DTR Period Summary">
             <div class="dtr-stat-card theme-red">
                 <div class="dtr-stat-header">
-                    <span class="dtr-stat-label">Absent Days</span>
+                    <span class="dtr-stat-label">Absence</span>
                     <div class="dtr-stat-icon-wrapper">
                         <x-filament::icon icon="heroicon-o-no-symbol" class="w-3.5 h-3.5" />
                     </div>
                 </div>
                 <div>
-                    <div class="dtr-stat-value">{{ number_format($metrics['absent_days']) }} Days</div>
-                    <div class="dtr-stat-meta">Distinct dates marked absent</div>
+                    <div class="dtr-stat-value">{{ rtrim(rtrim(number_format((float) $metrics['absent_days'], 1), '0'), '.') }} Days</div>
+                    <div class="dtr-stat-meta">{{ number_format($metrics['saturday_absent_hours'] ?? 0) }} Saturday hrs absent</div>
                 </div>
             </div>
             {{-- Card 1: Total Days & Entries (Blue Theme) --}}

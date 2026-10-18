@@ -10,6 +10,62 @@ use Illuminate\Support\Str;
 class DtrAttendanceUnitService
 {
     /**
+     * Keep Saturday's three-hour absence separate from full weekday absence days.
+     * Multiple rows for one date/day-part are counted only once.
+     *
+     * @param  Collection<int, Dtr>  $records
+     * @return array{weekday_days:float,saturday_hours:int}
+     */
+    public function absenceBreakdown(Collection $records): array
+    {
+        $absenceRecords = $records
+            ->filter(fn (Dtr $record): bool => (bool) $record->is_absent
+                || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
+            ->reject(fn (Dtr $record): bool => filled($record->leave_id)
+                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE)
+            ->filter(fn (Dtr $record): bool => filled($record->date_in));
+
+        $weekdayDays = 0.0;
+        $saturdayHours = 0;
+        foreach ($absenceRecords->groupBy(fn (Dtr $record): string => $this->dutyDate($record)) as $date => $dateRecords) {
+            if (Carbon::parse($date)->isSaturday()) {
+                $saturdayHours += 3;
+
+                continue;
+            }
+
+            $parts = $dateRecords
+                ->map(fn (Dtr $record): string => app(DtrDayPartService::class)->normalize($record->day_part))
+                ->unique();
+            $weekdayDays += $parts->contains(DtrDayPartService::WHOLE_DAY)
+                ? 1.0
+                : min(1.0, $parts->count() * 0.5);
+        }
+
+        return ['weekday_days' => $weekdayDays, 'saturday_hours' => $saturdayHours];
+    }
+
+    public function recordAbsenceMinutes(Dtr $record): int
+    {
+        if (! ((bool) $record->is_absent || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
+            || filled($record->leave_id)
+            || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+            || blank($record->date_in)) {
+            return 0;
+        }
+
+        if (Carbon::parse($record->date_in)->isSaturday()) {
+            return 180;
+        }
+
+        return max(0, (int) ($record->absence_minutes
+            ?: app(DtrDayPartService::class)->absenceMinutes(
+                (string) $record->date_in,
+                $record->day_part,
+            )));
+    }
+
+    /**
      * Distinct dates with an effective absence, excluding leave-covered rows.
      *
      * @param  Collection<int, Dtr>  $records
@@ -138,9 +194,9 @@ class DtrAttendanceUnitService
                 DtrDayPartService::SOURCE_ABSENCE,
             ], true))
             ->reject(function (Dtr $record): bool {
-                $scheduleType = Str::lower((string) $record->schedule_type);
+                $scheduleType = Str::lower(trim((string) $record->schedule_type));
 
-                return in_array($scheduleType, ['leave', 'overtime', 'forgot to punch'], true);
+                return in_array($scheduleType, ['absent', 'leave', 'overtime', 'forgot to punch'], true);
             })
             ->filter(fn (Dtr $record): bool => filled($record->date_in))
             ->values();

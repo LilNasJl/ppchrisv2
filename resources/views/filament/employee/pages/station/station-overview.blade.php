@@ -258,6 +258,21 @@
             transform: translateX(2px);
         }
 
+        .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters-header {
+            display: none;
+        }
+
+        @media (min-width: 64rem) {
+            .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters-above-content-ctn .fi-ta-filters {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters .fi-sc-form {
+                grid-column: 1 / -1;
+                min-width: 0;
+            }
+        }
+
         @media (max-width: 640px) {
             .station-overview-kpis,
             .station-quick-nav-grid {

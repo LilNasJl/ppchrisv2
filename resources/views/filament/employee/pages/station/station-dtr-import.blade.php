@@ -43,7 +43,7 @@
             class="station-dtr-import-frame"
             data-period-options="{{ $payrollPeriodOptions }}"
             loading="eager"
-            title="Import Station D.T.R"
+            title="DTR Importer"
         ></iframe>
     </div>
 </x-filament-panels::page>

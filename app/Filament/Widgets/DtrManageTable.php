@@ -205,6 +205,12 @@ class DtrManageTable extends BaseWidget
                     ->color(fn (float $state): string => $state >= 1.0 ? 'success' : ($state > 0 ? 'info' : 'gray'))
                     ->alignCenter(),
 
+                TextColumn::make('absence_duration')
+                    ->label('ABSENCE')
+                    ->getStateUsing(fn (ModelsDtr $record): int => app(DtrAttendanceUnitService::class)->recordAbsenceMinutes($record))
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? number_format($state / 60, 1).' hrs' : '-')
+                    ->alignCenter(),
+
                 TextColumn::make('late')
                     ->label('LATE')
                     ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
@@ -1026,6 +1032,7 @@ class DtrManageTable extends BaseWidget
                 'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
                 'total_days_work' => 0,
                 'absent_days' => 0,
+                'saturday_absent_hours' => 0,
                 'late' => 0,
                 'undertime' => 0,
                 'credited_overtime' => 0,
@@ -1043,7 +1050,9 @@ class DtrManageTable extends BaseWidget
                 && ! in_array($record->schedule_type, ['Absent', 'Leave', 'Overtime'], true)
                 && filled($record->date_in))
             ->values();
-        $workDayUnits = app(DtrAttendanceUnitService::class)->attendanceDays($workRecords);
+        $attendanceUnits = app(DtrAttendanceUnitService::class);
+        $workDayUnits = $attendanceUnits->attendanceDays($workRecords);
+        $absence = $attendanceUnits->absenceBreakdown($finalizedRecords);
         $leaveDayCount = $finalizedRecords
             ->filter(fn (ModelsDtr $record): bool => filled($record->leave_id)
                 || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
@@ -1054,7 +1063,8 @@ class DtrManageTable extends BaseWidget
             'employee' => $this->getEmployee()?->full_name ?? 'No employee selected',
             'period' => $this->getSelectedPayrollPeriod()?->title ?? 'No payroll period selected',
             'total_days_work' => $workDayUnits + $leaveDayCount,
-            'absent_days' => app(DtrAttendanceUnitService::class)->absenceDays($finalizedRecords),
+            'absent_days' => $absence['weekday_days'],
+            'saturday_absent_hours' => $absence['saturday_hours'],
             'late' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
             'undertime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
             'credited_overtime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),

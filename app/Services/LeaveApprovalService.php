@@ -12,6 +12,7 @@ use App\Models\LeaveApprovalWorkflow;
 use App\Models\LeaveRequestApproval;
 use App\Models\PayrollPeriod;
 use App\Models\User;
+use App\Services\Biometrics\BiometricsClient;
 use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -281,12 +282,39 @@ class LeaveApprovalService
     public function saveWorkflow(array $data, User $actor, ?LeaveApprovalWorkflow $workflow = null): LeaveApprovalWorkflow
     {
         abort_unless(LeaveApprovalAccess::configure($actor), 403);
+        if (isset($data['device_ids']) && is_array($data['device_ids'])) {
+            $data['device_ids'] = array_map(
+                static fn ($deviceId) => is_int($deviceId) ? (string) $deviceId : $deviceId,
+                $data['device_ids'],
+            );
+        }
         validator($data, ['name' => 'required|string|max:150', 'levels' => 'present|array|max:20',
             'levels.*.label' => 'required|string|max:100', 'levels.*.approver_employee_id' => 'required|integer',
             'is_active' => 'required|boolean', 'scope_type' => 'required|in:company,employee,designation,branch,department',
-            'scope_id' => 'required_unless:scope_type,company|nullable|integer'])->validate();
+            'scope_id' => 'required_unless:scope_type,company|nullable|integer',
+            'device_ids' => 'sometimes|array|max:100', 'device_ids.*' => 'required|string|max:64|distinct'])->validate();
 
-        return DB::transaction(function () use ($data, $actor, $workflow): LeaveApprovalWorkflow {
+        $deviceIds = null;
+        if (array_key_exists('device_ids', $data)) {
+            $deviceIds = array_values(array_map('trim', $data['device_ids']));
+            if (in_array('', $deviceIds, true)) {
+                throw ValidationException::withMessages(['device_ids' => 'Select valid biometrics devices.']);
+            }
+            if ($deviceIds !== []) {
+                try {
+                    $availableIds = collect(app(BiometricsClient::class)->cachedDevices())
+                        ->pluck('id')->map(fn ($id): string => (string) $id)->all();
+                } catch (\Throwable $e) {
+                    report($e);
+                    throw ValidationException::withMessages(['device_ids' => 'Unable to load biometrics devices. Try saving again when BiometricsWeb is available.']);
+                }
+                if (array_diff($deviceIds, $availableIds) !== []) {
+                    throw ValidationException::withMessages(['device_ids' => 'Select only devices available from BiometricsWeb.']);
+                }
+            }
+        }
+
+        return DB::transaction(function () use ($data, $actor, $workflow, $deviceIds): LeaveApprovalWorkflow {
             $workflow = $workflow ? LeaveApprovalWorkflow::lockForUpdate()->findOrFail($workflow->id) : new LeaveApprovalWorkflow;
             if ($workflow->exists && $workflow->isCompanyDefault()) {
                 throw ValidationException::withMessages(['name' => 'The company default workflow cannot be edited.']);
@@ -295,6 +323,9 @@ class LeaveApprovalService
                 throw ValidationException::withMessages(['name' => 'This workflow changed. Reopen it before saving.']);
             }
             $attributes = Arr::only($data, ['name', 'is_active']);
+            if ($deviceIds !== null) {
+                $attributes['device_ids'] = $deviceIds;
+            }
             $scopeType = $data['scope_type'];
             $scopeId = $data['scope_id'] ?? null;
             if ($scopeType === 'company' && filled($scopeId)) {

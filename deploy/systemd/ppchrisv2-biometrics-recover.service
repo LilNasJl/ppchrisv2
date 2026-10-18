@@ -1,0 +1,9 @@
+[Unit]
+Description=Recover pending PPCHRISV2 Biometrics Payroll syncs
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=joelyn
+WorkingDirectory=/var/www/html/ppchrisv2
+ExecStart=/usr/bin/php artisan biometrics:recover

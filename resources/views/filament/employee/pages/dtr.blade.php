@@ -815,7 +815,7 @@
                         <div class="dtr-stat-value">{{ $this->formatDayUnits($overview['present_entries']) }} Days</div>
                         <div class="dtr-stat-meta" style="margin-top: 0.2rem;">
                             <x-filament::icon icon="heroicon-m-check-circle" class="w-3 h-3 text-blue-600 dark:text-blue-400" />
-                            <span>{{ number_format($overview['total_entries']) }} entries &bull; Leave: {{ $overview['leave_entries'] }} &bull; Absent: {{ $overview['absent_entries'] }}</span>
+                            <span>{{ number_format($overview['total_entries']) }} entries &bull; Leave: {{ $overview['leave_entries'] }} &bull; Absent: {{ $this->formatDayUnits($overview['absent_weekday_days']) }} days + {{ number_format($overview['saturday_absent_hours']) }} Saturday hrs</span>
                         </div>
                     </div>
                 </div>

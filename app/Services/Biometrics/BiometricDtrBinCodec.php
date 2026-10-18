@@ -57,12 +57,15 @@ class BiometricDtrBinCodec
         $offset = 0;
         $binaryLength = strlen($binary);
 
-        while ($offset + 2 <= $binaryLength) {
+        while ($offset < $binaryLength) {
+            if ($binaryLength - $offset < 2) {
+                throw new RuntimeException('The biometric BIN file contains a truncated header.');
+            }
             $length = unpack('nlength', substr($binary, $offset, 2))['length'];
             $offset += 2;
 
             if ($length === 0) {
-                break;
+                throw new RuntimeException('The biometric BIN file contains an empty record.');
             }
 
             if ($offset + $length > $binaryLength) {

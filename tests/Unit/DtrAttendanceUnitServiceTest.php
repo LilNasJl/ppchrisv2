@@ -49,6 +49,42 @@ class DtrAttendanceUnitServiceTest extends TestCase
         $this->assertSame(0.5, $this->service()->dailyRatePayUnits($records));
     }
 
+    public function test_overtime_only_and_legacy_absence_never_add_work_days(): void
+    {
+        $overtime = $this->record(' OVERTIME ');
+        $absence = $this->record('Absent');
+
+        $this->assertSame(0.0, $this->service()->recordAttendanceUnits($overtime));
+        $this->assertSame(0.0, $this->service()->attendanceDays(collect([$overtime, $absence])));
+        $this->assertSame(0.0, $this->service()->dailyRatePayUnits(collect([$overtime, $absence])));
+    }
+
+    public function test_saturday_absence_is_three_hours_not_one_absent_day(): void
+    {
+        $saturday = (new Dtr)->forceFill([
+            'date_in' => '2026-10-10',
+            'schedule_type' => 'Absent',
+            'is_absent' => true,
+            'day_part' => 'whole_day',
+            'absence_minutes' => 180,
+        ]);
+        $weekday = (new Dtr)->forceFill([
+            'date_in' => '2026-10-12',
+            'schedule_type' => 'Absent',
+            'is_absent' => true,
+            'day_part' => 'whole_day',
+            'absence_minutes' => 480,
+        ]);
+
+        $this->assertSame(
+            ['weekday_days' => 1.0, 'saturday_hours' => 3],
+            $this->service()->absenceBreakdown(collect([$saturday, clone $saturday, $weekday])),
+        );
+        $this->assertSame(180, $this->service()->recordAbsenceMinutes($saturday));
+        $this->assertSame(480, $this->service()->recordAbsenceMinutes($weekday));
+        $this->assertSame(0.0, $this->service()->attendanceDays(collect([$saturday, $weekday])));
+    }
+
     public function test_non_broken_daily_rate_entries_keep_existing_entry_based_behavior(): void
     {
         $records = collect([

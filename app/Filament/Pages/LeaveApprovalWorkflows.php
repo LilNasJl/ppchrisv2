@@ -11,6 +11,7 @@ use App\Models\Employee;
 use App\Models\LeaveApprovalWorkflow;
 use App\Services\LeaveApprovalAccess;
 use App\Services\LeaveApprovalService;
+use App\Services\Biometrics\BiometricsClient;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -21,6 +22,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Pages\Page;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -110,6 +112,7 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                                 'version' => $record->version,
                                 'scope_type' => $scope ?: 'branch',
                                 'scope_id' => $scope ? $record->{$scope.'_id'} : null,
+                                'device_ids' => $record->device_ids ?? [],
                                 'levels' => $record->levels->map(fn ($level): array => [
                                     'label' => $level->label,
                                     'approver_employee_id' => $level->approver_employee_id,
@@ -117,7 +120,10 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                             ];
                         })
                         ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Save Workflow')
-                        ->action(fn ($record, array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record)),
+                        ->action(function ($record, array $data): void {
+                            app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user(), $record);
+                            Notification::make()->title('Workflow updated successfully')->success()->send();
+                        }),
                     Action::make('revisions')->label('History')->icon(Heroicon::Clock)->color('gray')->modalSubmitAction(false)
                         ->modalContent(fn ($record) => view('filament.leave.workflow-revisions', ['revisions' => DB::table('leave_workflow_revisions')->where('workflow_id', $record->id)->orderByDesc('version')->get()])),
                     Action::make('delete')->label('Delete')->icon(Heroicon::Trash)->color('danger')
@@ -144,7 +150,10 @@ class LeaveApprovalWorkflows extends Page implements HasTable
         return [
             Action::make('create')->label('New Workflow')->icon(Heroicon::Plus)->schema($this->formFields())
                 ->modalWidth(Width::FourExtraLarge)->modalSubmitActionLabel('Create Workflow')
-                ->action(fn (array $data) => app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user())),
+                ->action(function (array $data): void {
+                    app(LeaveApprovalService::class)->saveWorkflow($data, auth()->user());
+                    Notification::make()->title('Workflow created successfully')->success()->send();
+                }),
             Action::make('preview')->label('Check Employee Route')->icon(Heroicon::MagnifyingGlass)->color('gray')
                 ->modalSubmitAction(false)->schema([
                     Select::make('employee_id')->label('Employee')->options(fn () => Employee::activeEmployment()->orderBy('lastname')->get()->mapWithKeys(fn ($e) => [$e->id => $e->full_name]))->searchable()->live(),
@@ -186,6 +195,13 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                     ->required(fn (Get $get): bool => $get('scope_type') !== 'company')
                     ->searchable()->preload(),
             ])->columns(2),
+            Section::make('Biometrics Devices')->description('Approvers in this workflow can synchronize D.T.R from the selected devices.')
+                ->schema([
+                    Select::make('device_ids')->label('Devices')
+                        ->multiple()->searchable()->preload()
+                        ->options(fn (): array => $this->deviceOptions())
+                        ->helperText('Select one or more device names. Leave empty to grant no device sync access.'),
+                ]),
             Repeater::make('levels')->label('Preliminary Approval Levels')->defaultItems(0)->maxItems(20)
                 ->addActionLabel('Add Approval Level')->reorderableWithButtons()->collapsible()
                 ->itemLabel(fn (array $state) => $state['label'] ?? 'Approval Level')->schema([
@@ -194,5 +210,20 @@ class LeaveApprovalWorkflows extends Page implements HasTable
                 ])->columns(2),
             View::make('filament.leave.final-step'),
         ];
+    }
+
+    private function deviceOptions(): array
+    {
+        try {
+            return collect(app(BiometricsClient::class)->cachedDevices())
+                ->filter(fn ($device): bool => is_array($device) && isset($device['id'], $device['name']))
+                ->sortBy('name')
+                ->mapWithKeys(fn (array $device): array => [(string) $device['id'] => (string) $device['name']])
+                ->all();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
     }
 }

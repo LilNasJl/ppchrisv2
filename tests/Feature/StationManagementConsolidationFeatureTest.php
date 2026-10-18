@@ -6,6 +6,7 @@ use App\Filament\Auth\EmployeeLogin;
 use App\Filament\Employee\Pages\Station\ManageStationDtr;
 use App\Filament\Employee\Pages\Station\StationEmployees;
 use App\Filament\Employee\Widgets\StationBranchAttendanceChart;
+use App\Filament\Employee\Widgets\StationEmployeeAttendanceRankingTable;
 use App\Filament\Pages\StationManagers;
 use App\Models\Branch;
 use App\Models\Employee;
@@ -247,6 +248,8 @@ class StationManagementConsolidationFeatureTest extends TestCase
             $table->date('date_out')->nullable();
             $table->time('time_out')->nullable();
             $table->string('schedule_type')->nullable();
+            $table->unsignedBigInteger('leave_id')->nullable();
+            $table->boolean('is_absent')->default(false);
             $table->boolean('is_imported')->default(false);
             $table->integer('credited_overtime')->default(0);
             $table->integer('undertime')->default(0);
@@ -384,14 +387,122 @@ class StationManagementConsolidationFeatureTest extends TestCase
         $this->assertNotEmpty($data['datasets']);
         $this->assertEquals(['Tagum Station'], $data['labels']);
 
-        // Approved Overtime: 90 - 30 = 60
-        $this->assertEquals([60], $data['datasets'][0]['data']);
-        // Undertime: 15
-        $this->assertEquals([15], $data['datasets'][1]['data']);
-        // Late: 10
-        $this->assertEquals([10], $data['datasets'][2]['data']);
-        // Approved Early Overtime: 30
-        $this->assertEquals([30], $data['datasets'][3]['data']);
+        // Metrics are converted from stored minutes to decimal hours.
+        $this->assertEquals([1.0], $data['datasets'][0]['data']);
+        $this->assertEquals([0.25], $data['datasets'][1]['data']);
+        $this->assertEquals([0.17], $data['datasets'][2]['data']);
+        $this->assertEquals([0.5], $data['datasets'][3]['data']);
+    }
+
+    public function test_station_employee_attendance_ranking_table_shows_exception_hours_and_counts_days_once(): void
+    {
+        [, $managerUser, $branch, $period] = $this->setupUsers();
+        $regularEmployee = User::query()->where('username', 'PF0001')->firstOrFail()->employee;
+
+        EmployeeVisibleDtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $branch->id,
+            'employee_id' => $managerUser->employee->id,
+            'date_in' => '2026-09-02',
+            'time_in' => '08:10:00',
+            'date_out' => '2026-09-02',
+            'time_out' => '16:45:00',
+            'schedule_type' => 'Regular',
+            'late' => 10,
+            'undertime' => 15,
+        ]);
+        // Multiple DTR segments on one day count as one late/undertime day.
+        EmployeeVisibleDtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $branch->id,
+            'employee_id' => $managerUser->employee->id,
+            'date_in' => '2026-09-02',
+            'time_in' => '10:00:00',
+            'date_out' => '2026-09-02',
+            'time_out' => '12:00:00',
+            'schedule_type' => 'Regular',
+            'late' => 20,
+            'undertime' => 25,
+        ]);
+        EmployeeVisibleDtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $branch->id,
+            'employee_id' => $managerUser->employee->id,
+            'date_in' => '2026-09-03',
+            'schedule_type' => 'Absent',
+            'is_absent' => true,
+        ]);
+        EmployeeVisibleDtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $branch->id,
+            'employee_id' => $managerUser->employee->id,
+            'date_in' => '2026-09-05',
+            'schedule_type' => 'Absent',
+            'is_absent' => true,
+        ]);
+        foreach (['2026-09-02', '2026-09-04'] as $date) {
+            EmployeeVisibleDtr::query()->create([
+                'payroll_period_id' => $period->id,
+                'branch_id' => $branch->id,
+                'employee_id' => $regularEmployee->id,
+                'date_in' => $date,
+                'time_in' => '08:15:00',
+                'date_out' => $date,
+                'time_out' => '17:00:00',
+                'schedule_type' => 'Regular',
+                'late' => 15,
+            ]);
+        }
+
+        $otherBranch = Branch::query()->create([
+            'branch_name' => 'Unassigned Station',
+            'employee_id' => 0,
+            'no_of_shifts' => 1,
+        ]);
+        EmployeeVisibleDtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $otherBranch->id,
+            'employee_id' => $regularEmployee->id,
+            'date_in' => '2026-09-05',
+            'time_in' => '08:30:00',
+            'date_out' => '2026-09-05',
+            'time_out' => '17:00:00',
+            'schedule_type' => 'Regular',
+            'late' => 30,
+        ]);
+
+        $this->actingAs($managerUser, 'web');
+        $component = Livewire::test(StationEmployeeAttendanceRankingTable::class)
+            ->assertSuccessful()
+            ->assertTableFilterVisible('branch_id')
+            ->assertTableFilterVisible('payroll_period_id')
+            ->assertTableColumnExists('employee.full_name')
+            ->assertTableColumnExists('branch.branch_name')
+            ->assertTableColumnExists('late_hours')
+            ->assertTableColumnExists('undertime_hours')
+            ->assertTableColumnExists('absent_days')
+            ->assertTableColumnExists('saturday_absent_hours')
+            ->filterTable('branch_id', $branch->id)
+            ->filterTable('payroll_period_id', $period->id);
+
+        $records = $component->instance()->getTableRecords();
+        $records = method_exists($records, 'getCollection') ? $records->getCollection() : collect($records);
+
+        $this->assertSame(
+            [
+                'Manager, Camille · Tagum Station · 0.50 late hrs / 0.67 undertime hrs / 1 weekday absent / 3 Saturday hrs',
+                'Dela Cruz, Juan · Tagum Station · 0.50 late hrs / 0.00 undertime hrs / 0 weekday absent / 0 Saturday hrs',
+            ],
+            $records->map(fn (EmployeeVisibleDtr $record): string => sprintf(
+                '%s · %s · %.2f late hrs / %.2f undertime hrs / %d weekday absent / %d Saturday hrs',
+                $record->employee->full_name,
+                $record->branch->branch_name,
+                $record->late_hours,
+                $record->undertime_hours,
+                $record->absent_days,
+                $record->saturday_absent_hours,
+            ))->all(),
+        );
     }
 
     public function test_manual_dtr_download_and_submit_actions_are_removed_from_station_pages(): void

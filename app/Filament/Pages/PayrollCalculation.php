@@ -261,7 +261,6 @@ class PayrollCalculation extends Page implements HasForms
         $halfMonthDays = $settings->value('regular_half_month_days');
         $workHours = $settings->divisor('work_hours_per_day');
         $lateGrace = (int) round($settings->value('late_grace_minutes'));
-        $halfDay = $settings->value('half_day_work_day_value');
         $overtimeMultiplier = $settings->value('overtime_rate_multiplier');
         $holidayOvertimePremium = $settings->value('holiday_overtime_premium_rate');
         $unworkedHolidayPolicy = $settings->enabled('unworked_regular_holiday_pay_enabled') ? 'enabled' : 'disabled';
@@ -270,10 +269,10 @@ class PayrollCalculation extends Page implements HasForms
             ['name' => 'Rate per day', 'formula' => "Monthly employee: Monthly Rate / {$daysPerMonth}. Daily employee: Employee Daily Rate or D.T.R daily-rate snapshot."],
             ['name' => 'Rate per hour', 'formula' => "Rate Per Day / {$workHours}."],
             ['name' => 'Late grace', 'formula' => "Daily Regular attendance arriving within {$lateGrace} minute(s) of schedule start has no late deduction."],
-            ['name' => 'Monthly employee days worked', 'formula' => "{$halfMonthDays} - Absence Days - (Approved Half-Day Count x {$halfDay})."],
+            ['name' => 'Monthly employee days worked', 'formula' => "{$halfMonthDays} - (Uncovered absence and unpaid-leave minutes / ({$workHours} x 60)). Saturday absence contributes 180 minutes, not one full day."],
             ['name' => 'Daily employee days worked', 'formula' => 'Count payable D.T.R entries, excluding absences and overtime-only rows, then deduct approved half-days.'],
             ['name' => 'Base pay', 'formula' => "Monthly salary x {$halfMonthDays} / {$daysPerMonth}; daily employees: Daily Rate x Days Worked. Round completed monetary lines only."],
-            ['name' => 'Saturday (read-only)', 'formula' => 'Existing three-hour Saturday schedule counts as 0.50 attendance day.'],
+            ['name' => 'Saturday (read-only)', 'formula' => 'Worked three-hour Saturday counts as 0.50 attendance day; Saturday absence deducts only three hours for a monthly employee. Overtime-only rows add no workday.'],
             ['name' => 'Shift 3 (read-only)', 'formula' => '10% of eligible imported Shift 3 regular worked pay, excluding overtime.'],
             ['name' => 'Overtime amount', 'formula' => "Credited Overtime Minutes / 60 x Rate Per Hour x {$overtimeMultiplier}."],
             ['name' => 'Holiday premium', 'formula' => "Regular credited holiday hours use the holiday premium multiplier. Credited overtime minutes on a holiday always use {$holidayOvertimePremium}%."],
