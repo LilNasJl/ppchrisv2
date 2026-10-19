@@ -4,7 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
-use App\Models\PayrollPeriodEmployeeExclusion;
+use App\Services\PayrollRosterExclusionService;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -15,7 +15,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 class PayrollRosterTable extends TableWidget
 {
@@ -92,23 +91,7 @@ class PayrollRosterTable extends TableWidget
                     ->modalHeading('Payroll roster exemptions')
                     ->modalSubmitActionLabel('Save')
                     ->action(function (PayrollPeriod $record, array $data): void {
-                        $employeeIds = collect($data['employee_ids'] ?? [])
-                            ->map(fn ($id): int => (int) $id)
-                            ->filter()
-                            ->unique()
-                            ->values();
-
-                        DB::transaction(function () use ($record, $employeeIds): void {
-                            PayrollPeriodEmployeeExclusion::query()
-                                ->where('payroll_period_id', $record->id)
-                                ->whereNotIn('employee_id', $employeeIds)
-                                ->delete();
-
-                            $employeeIds->each(fn (int $employeeId) => PayrollPeriodEmployeeExclusion::firstOrCreate([
-                                'payroll_period_id' => $record->id,
-                                'employee_id' => $employeeId,
-                            ]));
-                        });
+                        app(PayrollRosterExclusionService::class)->replaceEmployees($record, $data['employee_ids'] ?? []);
 
                         Notification::make()
                             ->title('Payroll roster updated')

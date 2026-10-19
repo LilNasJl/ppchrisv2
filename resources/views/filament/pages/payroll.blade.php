@@ -450,6 +450,16 @@
                     </x-slot>
 
                     <x-filament::dropdown.list>
+                        @if ($this->payrollRosterUrl())
+                            <x-filament::dropdown.list.item
+                                :href="$this->payrollRosterUrl()"
+                                tag="a"
+                                icon="heroicon-o-clipboard-document-list"
+                            >
+                                Payroll Roster
+                            </x-filament::dropdown.list.item>
+                        @endif
+
                         <x-filament::dropdown.list.item
                             :href="$this->managePayrollPeriodsUrl()"
                             tag="a"

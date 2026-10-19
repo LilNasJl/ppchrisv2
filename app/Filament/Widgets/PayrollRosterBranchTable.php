@@ -4,7 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Branch;
 use App\Models\PayrollPeriod;
-use App\Models\PayrollPeriodBranchExclusion;
+use App\Services\PayrollRosterExclusionService;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -15,7 +15,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 class PayrollRosterBranchTable extends TableWidget
 {
@@ -92,23 +91,7 @@ class PayrollRosterBranchTable extends TableWidget
                     ->modalHeading('Branch payroll roster exemptions')
                     ->modalSubmitActionLabel('Save')
                     ->action(function (PayrollPeriod $record, array $data): void {
-                        $branchIds = collect($data['branch_ids'] ?? [])
-                            ->map(fn ($id): int => (int) $id)
-                            ->filter()
-                            ->unique()
-                            ->values();
-
-                        DB::transaction(function () use ($record, $branchIds): void {
-                            PayrollPeriodBranchExclusion::query()
-                                ->where('payroll_period_id', $record->id)
-                                ->whereNotIn('branch_id', $branchIds)
-                                ->delete();
-
-                            $branchIds->each(fn (int $branchId) => PayrollPeriodBranchExclusion::firstOrCreate([
-                                'payroll_period_id' => $record->id,
-                                'branch_id' => $branchId,
-                            ]));
-                        });
+                        app(PayrollRosterExclusionService::class)->replaceBranches($record, $data['branch_ids'] ?? []);
 
                         Notification::make()
                             ->title('Branch payroll roster updated')

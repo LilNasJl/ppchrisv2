@@ -223,7 +223,7 @@ class Payroll extends Page implements HasForms
     {
         $period = $this->selectedPeriod();
 
-        return $period
+        return $period && PayrollRoster::canAccess()
             ? PayrollRoster::getUrl(['periodId' => $period->publicKey()])
             : null;
     }

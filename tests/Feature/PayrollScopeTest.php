@@ -5,13 +5,16 @@ namespace Tests\Feature;
 use App\Filament\Pages\PayrollProcessingSummary;
 use App\Models\Branch;
 use App\Models\Department;
+use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSnapshot;
 use App\Models\PayrollSummaryScope;
 use App\Models\User;
 use App\Services\PayrollCalculator;
+use App\Services\PayrollRosterExclusionService;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -82,7 +85,14 @@ class PayrollScopeTest extends TestCase
         $this->get('/hr/payroll?periodId='.$period->publicKey())
             ->assertSuccessful()
             ->assertSee('Payroll Branch/Department')
+            ->assertSee('Payroll Roster')
+            ->assertDontSee('Branch Exclusions')
+            ->assertSee('/hr/payroll-roster?periodId='.$period->publicKey(), false)
             ->assertSee('/hr/payroll-processing-summary');
+        $this->get('/hr/payroll-roster?periodId='.$period->publicKey())
+            ->assertSuccessful()
+            ->assertSee('Branch Exemption')
+            ->assertSee('Employee Exemption');
         $this->get('/hr/payroll-by-branch?scope=department&departmentId='.$operations->id)
             ->assertSuccessful();
         $this->get('/hr/payroll-summary?periodId='.$period->publicKey())
@@ -135,6 +145,96 @@ class PayrollScopeTest extends TestCase
             ->where('payroll_period_id', $period->id)->firstOrFail()->included_ids);
         $this->get(route('hr_tools.payroll_summary.print', ['period_id' => $period->id]))
             ->assertSuccessful()->assertSee('DEPARTMENTS');
+    }
+
+    public function test_branch_exclusion_is_period_scoped_and_filters_open_payroll(): void
+    {
+        [$period, $main, $station] = $this->snapshotScenario();
+        $period->update(['is_locked' => false]);
+        $otherPeriod = PayrollPeriod::query()->create([
+            'title' => 'Nov 1 - 15, 2026', 'date_start' => '2026-11-01',
+            'date_end' => '2026-11-15', 'date_payout' => '2026-11-20',
+            'is_locked' => false,
+        ]);
+
+        $mainEmployee = $this->rosterEmployee($main, '8101');
+        $stationEmployee = $this->rosterEmployee($station, '8102');
+        $calculator = app(PayrollCalculator::class);
+        $exclusions = app(PayrollRosterExclusionService::class);
+
+        $this->assertEqualsCanonicalizing(
+            [$mainEmployee->id, $stationEmployee->id],
+            $calculator->includedEmployeeIds($period)->all()
+        );
+
+        $exclusions->replaceBranches($period, [(string) $station->id]);
+
+        $this->assertSame([$station->id], $calculator->excludedBranchIds($period));
+        $this->assertSame([$mainEmployee->id], $calculator->includedEmployeeIds($period)->all());
+        $this->assertArrayNotHasKey($station->id, $calculator->branchOptionsForPeriod($period));
+        $this->assertEqualsCanonicalizing(
+            [$mainEmployee->id, $stationEmployee->id],
+            $calculator->includedEmployeeIds($otherPeriod)->all()
+        );
+
+        $exclusions->replaceBranches($period, []);
+        $this->assertSame([], $calculator->excludedBranchIds($period));
+    }
+
+    public function test_locked_or_invalid_branch_exclusions_do_not_change_saved_payroll(): void
+    {
+        [$period, $main, $station] = $this->snapshotScenario();
+        $period->update(['is_locked' => false]);
+        $exclusions = app(PayrollRosterExclusionService::class);
+
+        $exclusions->replaceBranches($period, [$station->id]);
+
+        try {
+            $exclusions->replaceBranches($period, [999999]);
+            $this->fail('An unknown branch should be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('branch_ids', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('payroll_period_branch_exclusions', [
+            'payroll_period_id' => $period->id, 'branch_id' => $station->id,
+        ]);
+
+        $period->update(['is_locked' => true]);
+        $snapshotCount = PayrollSnapshot::query()->where('payroll_period_id', $period->id)->count();
+
+        try {
+            $exclusions->replaceBranches($period, [$main->id]);
+            $this->fail('A locked period should reject roster changes.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('branch_ids', $exception->errors());
+        }
+
+        $this->assertSame([$station->id], app(PayrollCalculator::class)->excludedBranchIds($period));
+        $this->assertSame($snapshotCount, PayrollSnapshot::query()->where('payroll_period_id', $period->id)->count());
+        $this->assertSame(300.0, (float) app(PayrollCalculator::class)->rows($period)->sum('net_pay'));
+    }
+
+    public function test_employee_roster_exclusions_also_reject_locked_period_changes(): void
+    {
+        [$period, $main] = $this->snapshotScenario();
+        $period->update(['is_locked' => false]);
+        $employee = $this->rosterEmployee($main, '8103');
+        $exclusions = app(PayrollRosterExclusionService::class);
+
+        $exclusions->replaceEmployees($period, [(string) $employee->id]);
+        $period->update(['is_locked' => true]);
+
+        try {
+            $exclusions->replaceEmployees($period, []);
+            $this->fail('A locked period should reject employee roster changes.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('employee_ids', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('payroll_period_employee_exclusions', [
+            'payroll_period_id' => $period->id, 'employee_id' => $employee->id,
+        ]);
     }
 
     public function test_simultaneous_branch_and_department_selection_prioritizes_department_and_prevents_duplicates(): void
@@ -404,6 +504,23 @@ class PayrollScopeTest extends TestCase
             'no_of_shifts' => 1, 'reg_sched_start' => '08:00:00',
             'reg_sched_end' => '18:00:00', 'is_24hrs' => false,
             'has_broken_time' => false,
+        ]);
+    }
+
+    private function rosterEmployee(Branch $branch, string $uid): Employee
+    {
+        $user = User::factory()->create(['username' => 'PF'.$uid, 'role' => 'employee']);
+
+        return Employee::query()->create([
+            'user_id' => $user->id,
+            'uid' => $uid,
+            'firstname' => 'Roster',
+            'lastname' => $uid,
+            'branch_id' => $branch->id,
+            'hired_date' => '2026-01-01',
+            'employment_type' => 'Permanent',
+            'rate_type' => 'monthly',
+            'monthly_rate' => 26000,
         ]);
     }
 }
