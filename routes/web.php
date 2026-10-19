@@ -11,6 +11,7 @@ use App\Http\Controllers\Hr\PayrollSummaryPrintController;
 use App\Http\Controllers\Hr\ReportPrintController;
 use App\Http\Controllers\Hr\ThirteenthMonthPayPrintController;
 use App\Http\Controllers\PayrollPayslipPrintController;
+use App\Http\Controllers\PortalLoginController;
 use App\Http\Controllers\SicRc\DtrPreviewImportController;
 use App\Http\Controllers\SicRc\EmployeeVisibleDtrExportController;
 use App\Http\Controllers\SicRc\EmployeeVisibleDtrPrintController;
@@ -168,3 +169,11 @@ Route::middleware(['web', 'auth'])
     });
 
 Route::view('/', 'landing')->name('landing');
+Route::post('/', PortalLoginController::class)->name('landing.login');
+
+// Safe legacy login redirects to unified landing page
+Route::match(['get', 'post'], '/hr/login', fn () => redirect()->route('landing'))->name('filament.hr.auth.login');
+Route::match(['get', 'post'], '/employee/login', fn () => redirect()->route('landing'))->name('filament.employee.auth.login');
+Route::match(['get', 'post'], '/kpi/login', fn () => redirect()->route('landing'))->name('filament.kpi.auth.login');
+Route::match(['get', 'post'], '/login', fn () => redirect()->route('landing'))->name('login');
+

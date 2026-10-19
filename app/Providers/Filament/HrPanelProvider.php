@@ -39,7 +39,6 @@ class HrPanelProvider extends PanelProvider
             ->favicon(asset('ppclogo.png').'?v=20260724')
             ->maxContentWidth(Width::Full)
             ->databaseNotifications()
-            ->login(Login::class)
             ->sidebarCollapsibleOnDesktop()
             ->navigationGroups([
                 NavigationGroup::make('Employees Relation & Performance Mngt'),
@@ -88,7 +87,7 @@ class HrPanelProvider extends PanelProvider
             ->resourceEditPageRedirect('index')
             ->resourceCreatePageRedirect('index')
             ->authMiddleware([
-                Authenticate::class,
+                \App\Http\Middleware\FilamentAuthenticate::class,
             ]);
     }
 }

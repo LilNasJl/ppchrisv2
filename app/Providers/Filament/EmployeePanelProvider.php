@@ -37,7 +37,6 @@ class EmployeePanelProvider extends PanelProvider
             ->maxContentWidth(Width::Full)
             ->databaseNotifications()
             ->favicon(asset('ppclogo.png').'?v=20260724')
-            ->login(EmployeeLogin::class)
             ->navigationGroups([
                 NavigationGroup::make('My Workspace'),
                 NavigationGroup::make('Station Management'),
@@ -65,7 +64,7 @@ class EmployeePanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->authMiddleware([
-                Authenticate::class,
+                \App\Http\Middleware\FilamentAuthenticate::class,
             ]);
     }
 }

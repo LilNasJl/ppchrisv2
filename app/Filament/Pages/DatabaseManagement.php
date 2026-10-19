@@ -172,7 +172,7 @@ class DatabaseManagement extends Page
         request()->session()->regenerateToken();
 
         return redirect()
-            ->to('/hr/login')
+            ->to(route('landing'))
             ->with('status', 'The full-system backup was restored successfully. Sign in using an account contained in the restored backup.');
     }
 

@@ -2,16 +2,21 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class PortalRoutingTest extends TestCase
 {
-    public function test_landing_page_links_to_hr_and_employee_portals(): void
+    use RefreshDatabase;
+    public function test_landing_page_has_one_login_form_for_both_portals(): void
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('href="'.route('filament.hr.auth.login').'"', false)
-            ->assertSee('href="'.route('filament.employee.auth.login').'"', false)
+            ->assertSee('action="'.route('landing.login').'"', false)
+            ->assertSee('name="username"', false)
+            ->assertSee('name="password"', false)
+            ->assertDontSee('href="'.route('filament.hr.auth.login').'"', false)
+            ->assertDontSee('href="'.route('filament.employee.auth.login').'"', false)
             ->assertDontSee('href="'.route('filament.kpi.auth.login').'"', false);
     }
 
@@ -28,18 +33,37 @@ class PortalRoutingTest extends TestCase
             ->assertRedirect(route('filament.employee.auth.login'));
     }
 
-    public function test_portal_login_pages_render_correctly(): void
+    public function test_portal_login_routes_redirect_to_landing_page(): void
     {
         $this->get(route('filament.hr.auth.login'))
-            ->assertOk()
-            ->assertSee('HRIS Portal');
+            ->assertRedirect(route('landing'));
 
         $this->get(route('filament.employee.auth.login'))
-            ->assertOk()
-            ->assertSee('HRIS: SELF SERVICE')
-            ->assertSee('autocapitalize="characters"', false)
-            ->assertSee('text-transform: uppercase;', false);
+            ->assertRedirect(route('landing'));
 
-        $this->get(route('filament.kpi.auth.login'))->assertOk();
+        $this->get(route('filament.kpi.auth.login'))
+            ->assertRedirect(route('landing'));
+    }
+
+    public function test_unauthenticated_panel_access_redirects_to_landing(): void
+    {
+        $this->get('/hr')->assertRedirect(route('landing'));
+        $this->get('/employee')->assertRedirect(route('landing'));
+        $this->get('/kpi')->assertRedirect(route('landing'));
+    }
+
+    public function test_logging_out_from_hr_and_employee_redirects_to_landing(): void
+    {
+        $hrUser = \App\Models\User::factory()->create(['role' => 'hr']);
+        $this->actingAs($hrUser, 'web')
+            ->post('/hr/logout')
+            ->assertRedirect(route('landing'));
+        $this->assertGuest('web');
+
+        $empUser = \App\Models\User::factory()->create(['role' => 'employee']);
+        $this->actingAs($empUser, 'web')
+            ->post('/employee/logout')
+            ->assertRedirect(route('landing'));
+        $this->assertGuest('web');
     }
 }

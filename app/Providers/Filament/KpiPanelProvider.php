@@ -30,7 +30,6 @@ class KpiPanelProvider extends PanelProvider
             ->darkMode(isForced: true)
             ->globalSearch(false)
             ->favicon(asset('ppclogo.png').'?v=20260727')
-            ->login(KpiLogin::class)
             ->sidebarCollapsibleOnDesktop()
             ->colors([
                 'primary' => Color::Blue,
@@ -52,7 +51,7 @@ class KpiPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->authMiddleware([
-                Authenticate::class,
+                \App\Http\Middleware\FilamentAuthenticate::class,
             ]);
     }
 }
