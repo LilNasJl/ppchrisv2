@@ -621,49 +621,26 @@ trait ManagesEmployeeDetailsForm
                                 ->schema([
                                     TextInput::make('gsis')
                                         ->label('GSIS BP #')
-                                        ->mask('99999999999')
-                                        ->placeholder('e.g., 20012345678')
-                                        ->maxLength(11),
+                                        ->maxLength(20),
 
                                     TextInput::make('philhealth')
                                         ->label('PhilHealth ID #')
-                                        ->mask('99-999999999-9')
-                                        ->placeholder('e.g., 01-234567890-1')
-                                        ->regex('/^\d{2}-\d{9}-\d{1}$/')
-                                        ->validationMessages([
-                                            'regex' => 'The PhilHealth number must follow the 00-000000000-0 format.',
-                                        ]),
+                                        ->maxLength(20),
 
                                     TextInput::make('pagibig')
                                         ->label('Pag-IBIG MID #')
-                                        ->mask('9999-9999-9999')
-                                        ->placeholder('e.g., 1234-5678-9012')
-                                        ->regex('/^\d{4}-\d{4}-\d{4}$/')
-                                        ->validationMessages([
-                                            'regex' => 'The Pag-IBIG number must be exactly 12 digits (0000-0000-0000).',
-                                        ]),
+                                        ->maxLength(20),
 
                                     TextInput::make('tin')
                                         ->label('TIN #')
-                                        ->mask('999-999-999')
-                                        ->placeholder('e.g., 000-000-000')
-                                        ->regex('/^\d{3}-\d{3}-\d{3}$/')
-                                        ->validationMessages([
-                                            'regex' => 'The TIN format must be 000-000-000.',
-                                        ]),
+                                        ->maxLength(20),
 
                                     TextInput::make('sss')
                                         ->label('SSS #')
-                                        ->mask('99-9999999-9')
-                                        ->placeholder('e.g., 33-1234567-8')
-                                        ->regex('/^\d{2}-\d{7}-\d{1}$/')
-                                        ->validationMessages([
-                                            'regex' => 'The SSS number must follow the 00-0000000-0 format.',
-                                        ]),
+                                        ->maxLength(20),
 
                                     TextInput::make('bank_id_no')
                                         ->label('Bank ID No.')
-                                        ->placeholder('e.g., 1234567890')
                                         ->maxLength(191),
                                 ])
                                 ->columns([
