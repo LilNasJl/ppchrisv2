@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Filament\Employee\Pages\Station\StationBiometricsSync;
+use App\Filament\Employee\Pages\Station\StationBiometricsSyncDetails;
 use App\Filament\Pages\BiometricsSync;
+use App\Filament\Pages\BiometricsSyncDetails;
 use App\Filament\Pages\DtrManage;
 use App\Models\BiometricsSyncRequest;
 use App\Models\Branch;
@@ -173,10 +175,9 @@ class BiometricsSyncTest extends TestCase
         $this->assertDatabaseHas('dtrs', ['fingerprint_id' => '12345', 'branch_id' => Employee::first()->branch_id]);
 
         $master = User::where('username', 'masteradmin')->firstOrFail();
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $second->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $second->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->call('selectDetailTab', 'entries')
             ->call('loadExportDtrEntries')
             ->assertSet('exportDtrRows.0.import_skipped', true)
@@ -340,10 +341,9 @@ class BiometricsSyncTest extends TestCase
         $this->assertStringContainsString('no active HRIS employee matches', $sync->fresh()->message);
         $this->assertDatabaseCount('dtrs', 0);
         $master = User::where('username', 'masteradmin')->firstOrFail();
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->assertSee('No eligible D.T.R. records were imported.')
             ->call('selectDetailTab', 'entries')
             ->call('loadExportDtrEntries')
@@ -372,10 +372,9 @@ class BiometricsSyncTest extends TestCase
         $this->assertDatabaseHas('dtrs', ['fingerprint_id' => '12345']);
 
         $master = User::where('username', 'masteradmin')->firstOrFail();
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->call('selectDetailTab', 'entries')
             ->call('loadExportDtrEntries')
             ->assertSet('exportDtrRows.0.import_row', null)
@@ -407,10 +406,9 @@ class BiometricsSyncTest extends TestCase
         ]);
         $master = User::where('username', 'masteradmin')->firstOrFail();
 
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->assertSee('Loading original DTR fields')
             ->call('loadArchivedRows')
             ->assertSet('archiveLookupFailed', false)
@@ -430,6 +428,13 @@ class BiometricsSyncTest extends TestCase
         ]), range(0, 26));
         $rows[0]['time_out'] = '';
         $rows[0]['day_part'] = 'provisional';
+        $rows[0]['late'] = 4;
+        $rows[0]['undertime'] = 30;
+        $rows[0]['overtime'] = 60;
+        $rows[0]['early'] = 15;
+        $rows[0]['ot_status'] = 'Approved';
+        $rows[1]['late'] = 0;
+        $rows[1]['ot_status'] = 'Rejected';
         $this->fakeServer($rows);
         $sync = $this->createSync();
         $binary = (new BiometricDtrBinCodec)->encode($rows);
@@ -444,10 +449,9 @@ class BiometricsSyncTest extends TestCase
         ]);
         $master = User::where('username', 'masteradmin')->firstOrFail();
 
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->assertSee('DTR Entries (27)')
             ->call('selectDetailTab', 'entries')
             ->assertSee('Loading and verifying the archived device export')
@@ -457,6 +461,13 @@ class BiometricsSyncTest extends TestCase
             ->assertSet('exportDtrRows.0.import_row', null)
             ->assertSet('exportDtrRows.1.import_row', 1)
             ->assertSee('bio-dtr-table-scroll')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--schedule" style="padding:.7rem;white-space:nowrap">Regular</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--late" style="padding:.7rem;white-space:nowrap">4</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--undertime" style="padding:.7rem;white-space:nowrap">30</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--overtime" style="padding:.7rem;white-space:nowrap">60</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--approved" style="padding:.7rem;white-space:nowrap">Approved</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--muted" style="padding:.7rem;white-space:nowrap">0</td>')
+            ->assertSeeHtml('<td class="bio-dtr-value bio-dtr-value--rejected" style="padding:.7rem;white-space:nowrap">Rejected</td>')
             ->assertSee('Employee 0')
             ->assertSee('Deferred')
             ->assertSee('Employee 1')
@@ -501,10 +512,9 @@ class BiometricsSyncTest extends TestCase
         ]);
         $master = User::where('username', 'masteradmin')->firstOrFail();
 
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->call('selectDetailTab', 'entries')
             ->call('loadExportDtrEntries')
             ->assertSet('exportDtrLoaded', true)
@@ -532,10 +542,9 @@ class BiometricsSyncTest extends TestCase
         ]);
         $master = User::where('username', 'masteradmin')->firstOrFail();
 
-        Livewire::actingAs($master)
-            ->test(BiometricsSync::class)
-            ->set('device', '1')
-            ->call('openDetails', $sync->id)
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->call('selectDetailTab', 'entries')
             ->call('loadExportDtrEntries')
             ->assertSet('exportDtrLoaded', false)
@@ -544,7 +553,7 @@ class BiometricsSyncTest extends TestCase
             ->assertDontSee('Showing 1–2 of 2');
     }
 
-    public function test_history_details_open_in_a_modal_and_show_every_row_issue(): void
+    public function test_history_details_open_on_a_dedicated_page_and_return_to_the_selected_device(): void
     {
         $this->fakeServer([$this->row()]);
         $sync = $this->createSync();
@@ -560,16 +569,27 @@ class BiometricsSyncTest extends TestCase
         ]);
         $master = User::where('username', 'masteradmin')->firstOrFail();
 
-        Livewire::actingAs($master)
+        $history = Livewire::actingAs($master)
             ->test(BiometricsSync::class)
             ->set('device', '1')
             ->assertSee('View details')
-            ->assertDontSee('Issue 101')
-            ->call('openDetails', $sync->id)
+            ->assertDontSee('Issue 101');
+
+        $history->assertSee(BiometricsSyncDetails::getUrl(['device' => '1', 'syncId' => $sync->id]));
+
+        $this->actingAs($master)
+            ->get(BiometricsSyncDetails::getUrl(['device' => '1', 'syncId' => $sync->id]))
+            ->assertOk()
+            ->assertSee('Return to device');
+
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
             ->assertSee('Synchronization details')
             ->assertSee('Issue 101')
-            ->call('closeDetails')
-            ->assertDontSee('Issue 101');
+            ->assertSee('Return to device')
+            ->assertSeeHtml(BiometricsSync::getUrl(['device' => '1']))
+            ->assertDontSee('aria-modal="true"');
     }
 
     public function test_locked_period_and_bad_checksum_prevent_import(): void
@@ -688,7 +708,20 @@ class BiometricsSyncTest extends TestCase
             ->assertDontSee('SIC Beta')
             ->assertDontSee($otherSync->id);
 
-        $page->call('openDetails', $otherSync->id)->assertNotFound();
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $ownSync->id])
+            ->actingAs($approver)
+            ->test(StationBiometricsSyncDetails::class)
+            ->assertSee('Return to device')
+            ->assertSeeHtml(StationBiometricsSync::getUrl(['device' => '1']));
+
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $otherSync->id])
+            ->actingAs($approver)
+            ->test(StationBiometricsSyncDetails::class)
+            ->assertNotFound();
+
+        $this->actingAs($approver)
+            ->get(StationBiometricsSyncDetails::getUrl(['device' => '1', 'syncId' => $otherSync->id]))
+            ->assertNotFound();
     }
 
     public function test_hr_device_command_blocks_employee_panel_until_remote_completion_is_acknowledged(): void
@@ -764,7 +797,12 @@ class BiometricsSyncTest extends TestCase
 
         $master = User::where('username', 'masteradmin')->firstOrFail();
         Livewire::actingAs($master)->test(BiometricsSync::class)->set('device', '1')
-            ->assertSee('Sync Employee')->call('openDetails', $sync->id)->assertSee('Test Employee')->assertSee('123456')
+            ->assertSee('Sync Employee')->assertSee('View details');
+
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
+            ->assertSee('Test Employee')->assertSee('123456')
             ->set('employeeSearch', 'not-found')->assertSee('No device employees match this search.');
     }
 

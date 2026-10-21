@@ -1,8 +1,9 @@
 <x-filament-panels::page>
     @php
-        $devices = $this->devices();
+        $isDetailsPage = $this instanceof \App\Filament\Pages\BiometricsSyncDetails;
+        $devices = $isDetailsPage ? [] : $this->devices();
         $selected = collect($devices)->first(fn($d) => (string)$d['id'] === $this->device);
-        $history = $this->device ? $this->history() : collect();
+        $history = ! $isDetailsPage && $this->device ? $this->history() : collect();
     @endphp
 
     <style>
@@ -209,6 +210,16 @@
             box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.6), 0 0 16px -2px rgba(59, 130, 246, 0.25);
         }
 
+        .bio-card.is-offline:hover {
+            border-color: #ef4444;
+            box-shadow: 0 10px 22px -4px rgba(220, 38, 38, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .bio-card.is-offline:hover {
+            border-color: #f87171;
+            box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.6), 0 0 16px -2px rgba(239, 68, 68, 0.3);
+        }
+
         .bio-card::before {
             content: "";
             position: absolute;
@@ -225,12 +236,16 @@
         }
 
         .bio-card.is-offline::before {
-            background: #64748b;
+            background: #ef4444;
         }
 
         .bio-card:hover::before {
             height: 3px;
             background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .bio-card.is-offline:hover::before {
+            background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
         }
 
         /* Card Header */
@@ -273,6 +288,11 @@
             background: #2563eb;
             color: #ffffff;
             border-color: #2563eb;
+        }
+
+        .bio-card.is-offline:hover .bio-device-icon-wrap {
+            background: #dc2626;
+            border-color: #dc2626;
         }
 
         .bio-device-icon {
@@ -342,15 +362,15 @@
         }
 
         .bio-status-badge.status-offline {
-            background: rgba(100, 116, 139, 0.12);
-            color: #64748b;
-            border: 1px solid rgba(100, 116, 139, 0.25);
+            background: rgba(220, 38, 38, 0.1);
+            color: #b91c1c;
+            border: 1px solid rgba(220, 38, 38, 0.28);
         }
 
         .dark .bio-status-badge.status-offline {
-            background: rgba(51, 65, 85, 0.5);
-            color: #94a3b8;
-            border-color: rgba(100, 116, 139, 0.3);
+            background: rgba(239, 68, 68, 0.16);
+            color: #fca5a5;
+            border-color: rgba(248, 113, 113, 0.36);
         }
 
         .bio-status-dot {
@@ -367,7 +387,7 @@
         }
 
         .status-offline .bio-status-dot {
-            background: #94a3b8;
+            background: #ef4444;
         }
 
         /* Firmware Tag */
@@ -566,6 +586,14 @@
 
         .bio-card:hover .bio-footer-arrow {
             transform: translateX(3px);
+        }
+
+        .bio-card.is-offline:hover .bio-card-footer {
+            color: #dc2626;
+        }
+
+        .dark .bio-card.is-offline:hover .bio-card-footer {
+            color: #fca5a5;
         }
 
         /* Empty State Card */
@@ -939,6 +967,44 @@
             background: #1e293b;
         }
 
+        .bio-dtr-table .bio-dtr-value {
+            font-variant-numeric: tabular-nums;
+            color: #e2e8f0;
+        }
+
+        .bio-dtr-table th[class^="bio-dtr-heading--"] { color: #94a3b8; }
+
+        .bio-dtr-table .bio-dtr-heading--schedule,
+        .bio-dtr-table .bio-dtr-value--schedule { color: #93c5fd; }
+
+        .bio-dtr-table .bio-dtr-heading--shift,
+        .bio-dtr-table .bio-dtr-value--shift { color: #c4b5fd; }
+
+        .bio-dtr-table .bio-dtr-heading--late,
+        .bio-dtr-table .bio-dtr-value--late,
+        .bio-dtr-table .bio-dtr-value--pending { color: #fbbf24; }
+
+        .bio-dtr-table .bio-dtr-heading--undertime,
+        .bio-dtr-table .bio-dtr-value--undertime,
+        .bio-dtr-table .bio-dtr-value--rejected { color: #fb7185; }
+
+        .bio-dtr-table .bio-dtr-heading--overtime,
+        .bio-dtr-table .bio-dtr-value--overtime { color: #67e8f9; }
+
+        .bio-dtr-table .bio-dtr-heading--station,
+        .bio-dtr-table .bio-dtr-value--station { color: #5eead4; }
+
+        .bio-dtr-table .bio-dtr-value--approved { color: #4ade80; }
+
+        .bio-dtr-table .bio-dtr-value--late,
+        .bio-dtr-table .bio-dtr-value--undertime,
+        .bio-dtr-table .bio-dtr-value--overtime,
+        .bio-dtr-table .bio-dtr-value--approved,
+        .bio-dtr-table .bio-dtr-value--pending,
+        .bio-dtr-table .bio-dtr-value--rejected { font-weight: 700; }
+
+        .bio-dtr-table .bio-dtr-value--muted { color: #94a3b8; font-weight: 400; }
+
         @media (max-width: 640px) {
             .bio-dtr-table-scroll {
                 max-height: 54vh;
@@ -1170,8 +1236,53 @@
             border-color: #3b82f6;
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
         }
+
+        .bio-detail-page .bio-modal-dialog {
+            width: 100%;
+            max-height: none;
+            overflow: visible;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .bio-detail-page .bio-modal-header {
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+            border: 1px solid #3b82f6;
+            border-radius: 12px;
+            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            padding: 1rem 1.35rem;
+        }
+
+        .bio-detail-page .bio-modal-eyebrow {
+            border: 0;
+            background: transparent;
+            color: #d9f722;
+            padding: 0;
+        }
+
+        .bio-detail-page .bio-modal-body {
+            overflow: visible;
+            padding: 0;
+        }
+
+        .bio-detail-page .bio-modal-tabs-bar {
+            margin-bottom: 1rem;
+            border: 1px solid #334155;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 640px) {
+            .bio-detail-page .bio-header-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 
+    @unless($isDetailsPage)
     <div wire:poll.10s class="bio-workspace">
         {{-- Reference Header from Image 2 --}}
         <header class="bio-header-banner">
@@ -1421,10 +1532,10 @@
                                 </td>
                                 <td style="max-width:320px;overflow-wrap:anywhere">
                                     <div class="text-slate-700 dark:text-slate-300">{{ \Illuminate\Support\Str::limit((string) $sync->message, 150) }}</div>
-                                    <button type="button" wire:click="openDetails('{{ $sync->id }}')" class="bio-details-btn">
+                                    <a href="{{ $this->detailsUrl((string) $sync->id) }}" class="bio-details-btn">
                                         <x-filament::icon icon="heroicon-m-document-magnifying-glass" class="w-3.5 h-3.5" />
                                         <span>View details</span>
-                                    </button>
+                                    </a>
                                 </td>
                                 @foreach([$sync->received_at,$sync->executed_at,$sync->completed_at] as $time)
                                     <td class="font-mono text-xs text-slate-600 dark:text-slate-400">{{ $time?->format('M d H:i:s') ?? '—' }}</td>
@@ -1442,9 +1553,10 @@
             </div>
         @endif
     </div>
+    @endunless
 
-    {{-- Details Modal --}}
-    @if($detailSync = $this->detailSync())
+    {{-- Synchronization details page --}}
+    @if($isDetailsPage && ($detailSync = $this->detailSync()))
         @php
             $detailResult = $detailSync->result ?? [];
             $detailErrors = $detailResult['errors'] ?? [];
@@ -1467,8 +1579,7 @@
             $isFailed = $detailSync->status === 'failed';
             $isSuccess = $detailSync->status === 'success';
         @endphp
-        <div role="dialog" aria-modal="true" aria-labelledby="sync-detail-title" wire:keydown.escape.window="closeDetails" class="bio-modal-backdrop">
-            <div aria-hidden="true" wire:click="closeDetails" class="bio-modal-overlay"></div>
+        <div wire:poll.10s class="bio-detail-page">
             <div class="bio-modal-dialog">
                 <div class="bio-modal-header">
                     <div class="bio-modal-header-left">
@@ -1487,9 +1598,10 @@
                             </div>
                         </div>
                     </div>
-                    <button type="button" wire:click="closeDetails" aria-label="Close synchronization details" class="bio-modal-close-btn">
-                        <x-filament::icon icon="heroicon-m-x-mark" class="w-4 h-4" />
-                    </button>
+                    <a href="{{ $this->detailsReturnUrl() }}" class="bio-header-btn">
+                        <x-filament::icon icon="heroicon-m-arrow-left" class="h-4 w-4" />
+                        <span>Return to device</span>
+                    </a>
                 </div>
 
                 @if($detailSync->sync_type === 'employee')
@@ -1779,12 +1891,39 @@
                                 </div>
                             @else
                                 <p style="margin:.25rem 0 .75rem;color:#94a3b8;font-size:.8rem">Device Day Count is the original export value. In HRIS, a Saturday absence is 3 hours; an overtime-only row adds 0 workdays.</p>
+                                @php
+                                    $dtrColumns = [
+                                        ['field' => 'uid', 'label' => 'Fingerprint ID', 'tone' => 'identity'],
+                                        ['field' => 'name', 'label' => 'Name', 'tone' => 'identity'],
+                                        ['field' => 'date_in', 'label' => 'Date In', 'tone' => 'date'],
+                                        ['field' => 'time_in', 'label' => 'Time In', 'tone' => 'clock'],
+                                        ['field' => 'date_out', 'label' => 'Date Out', 'tone' => 'date'],
+                                        ['field' => 'time_out', 'label' => 'Time Out', 'tone' => 'clock'],
+                                        ['field' => 'sched', 'label' => 'Schedule Type', 'tone' => 'schedule'],
+                                        ['field' => 'sched_start', 'label' => 'Schedule Start', 'tone' => 'schedule'],
+                                        ['field' => 'sched_end', 'label' => 'Schedule End', 'tone' => 'schedule'],
+                                        ['field' => 'day_part', 'label' => 'Day Part', 'tone' => 'shift'],
+                                        ['field' => 'day_count', 'label' => 'Device Day Count', 'tone' => 'shift'],
+                                        ['field' => 'late', 'label' => 'Late', 'tone' => 'late'],
+                                        ['field' => 'undertime', 'label' => 'Undertime', 'tone' => 'undertime'],
+                                        ['field' => 'overtime', 'label' => 'Overtime', 'tone' => 'overtime'],
+                                        ['field' => 'early', 'label' => 'Early Clock In', 'tone' => 'overtime'],
+                                        ['field' => 'ot_status', 'label' => 'OT Status', 'tone' => 'status'],
+                                        ['field' => 'branch', 'label' => 'Source Station', 'tone' => 'station'],
+                                        ['field' => 'branch_id', 'label' => 'Device Code', 'tone' => 'station'],
+                                        ['field' => 'session_id', 'label' => 'Session ID', 'tone' => 'identity'],
+                                    ];
+                                @endphp
                                 <div class="bio-dtr-table-scroll" aria-label="Scrollable DTR entries table">
-                                    <table style="width:100%;min-width:2100px;text-align:left;border-collapse:collapse;font-size:.85rem">
+                                    <table class="bio-dtr-table" style="width:100%;min-width:2100px;text-align:left;border-collapse:collapse;font-size:.85rem">
                                         <thead style="background:#1e293b"><tr>
-                                            @foreach(['#','Row Check','Fingerprint ID','Name','Date In','Time In','Date Out','Time Out','Schedule Type','Schedule Start','Schedule End','Day Part','Device Day Count','Late','Undertime','Overtime','Early Clock In','OT Status','Source Station','Device Code','Session ID','Finding'] as $heading)
+                                            @foreach(['#','Row Check'] as $heading)
                                                 <th scope="col" style="padding:.7rem;white-space:nowrap;font-size:0.6875rem;font-weight:700;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #334155">{{ $heading }}</th>
                                             @endforeach
+                                            @foreach($dtrColumns as $column)
+                                                <th scope="col" class="bio-dtr-heading--{{ $column['tone'] }}" style="padding:.7rem;white-space:nowrap;font-size:0.6875rem;font-weight:700;text-transform:uppercase;border-bottom:1px solid #334155">{{ $column['label'] }}</th>
+                                            @endforeach
+                                            <th scope="col" style="padding:.7rem;white-space:nowrap;font-size:0.6875rem;font-weight:700;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #334155">Finding</th>
                                         </tr></thead>
                                         <tbody>
                                             @foreach($this->exportDtrRows as $entry)
@@ -1803,8 +1942,27 @@
                                                 <tr style="border-top:1px solid #1e293b">
                                                     <td style="padding:.7rem;color:#cbd5e1">{{ $entry['source_row'] }}</td>
                                                     <td style="padding:.7rem;white-space:nowrap"><span style="display:inline-flex;padding:.2rem .55rem;border:1px solid {{ $outcomeColor }};border-radius:999px;background:{{ $outcomeBackground }};color:{{ $outcomeColor }};font-size:.72rem;font-weight:700">{{ $outcome }}</span></td>
-                                                    @foreach(['uid','name','date_in','time_in','date_out','time_out','sched','sched_start','sched_end','day_part','day_count','late','undertime','overtime','early','ot_status','branch','branch_id','session_id'] as $field)
-                                                        <td style="padding:.7rem;white-space:nowrap;color:#f1f5f9">{{ filled($row[$field] ?? null) ? $row[$field] : '—' }}</td>
+                                                    @foreach($dtrColumns as $column)
+                                                        @php
+                                                            $field = $column['field'];
+                                                            $value = $row[$field] ?? null;
+                                                            $tone = $column['tone'];
+                                                            if (! filled($value) || (in_array($field, ['late', 'undertime', 'overtime', 'early', 'day_count'], true) && is_numeric($value) && (float) $value === 0.0)) {
+                                                                $tone = 'muted';
+                                                            } elseif ($field === 'sched') {
+                                                                $schedule = strtolower(trim((string) $value));
+                                                                $tone = str_contains($schedule, 'absent') || str_contains($schedule, 'forgot') ? 'undertime' : (str_contains($schedule, 'overtime') ? 'overtime' : 'schedule');
+                                                            } elseif ($field === 'ot_status') {
+                                                                $status = strtolower(trim((string) $value));
+                                                                $tone = match (true) {
+                                                                    str_contains($status, 'reject'), str_contains($status, 'denied'), str_contains($status, 'disapprov'), str_contains($status, 'unapprov'), str_contains($status, 'not approv') => 'rejected',
+                                                                    str_contains($status, 'pend'), str_contains($status, 'request') => 'pending',
+                                                                    str_contains($status, 'approv') => 'approved',
+                                                                    default => 'muted',
+                                                                };
+                                                            }
+                                                        @endphp
+                                                        <td class="bio-dtr-value bio-dtr-value--{{ $tone }}" style="padding:.7rem;white-space:nowrap">{{ filled($value) ? $value : '—' }}</td>
                                                     @endforeach
                                                     <td style="padding:.7rem;min-width:260px;max-width:400px;overflow-wrap:anywhere">
                                                         @foreach($findings as $finding)
@@ -1863,12 +2021,6 @@
 
                 @endif
 
-                <div class="bio-modal-footer">
-                    <span style="font-size:0.75rem;color:#64748b;font-family:ui-monospace,SFMono-Regular,monospace">
-                        Press <kbd style="padding:0.15rem 0.4rem;border-radius:0.25rem;background:#1e293b;border:1px solid #334155;color:#94a3b8">Esc</kbd> or click overlay to close
-                    </span>
-                    <x-filament::button color="gray" wire:click="closeDetails">Close</x-filament::button>
-                </div>
             </div>
         </div>
     @endif

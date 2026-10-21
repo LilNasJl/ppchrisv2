@@ -32,4 +32,9 @@ class StationBiometricsSync extends \App\Filament\Pages\BiometricsSync
     {
         return ManageStationDtr::getUrl();
     }
+
+    public function detailsUrl(string $syncId): string
+    {
+        return StationBiometricsSyncDetails::getUrl(['device' => $this->device, 'syncId' => $syncId]);
+    }
 }

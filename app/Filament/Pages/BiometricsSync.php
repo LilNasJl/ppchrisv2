@@ -133,6 +133,11 @@ class BiometricsSync extends Page
         return Dtr::getUrl();
     }
 
+    public function detailsUrl(string $syncId): string
+    {
+        return BiometricsSyncDetails::getUrl(['device' => $this->device, 'syncId' => $syncId]);
+    }
+
     public function openSync(): void
     {
         $this->authorizeSelectedDevice();
@@ -219,33 +224,6 @@ class BiometricsSync extends Page
             ->when(! $this->canSyncEmployees(), fn ($query) => $query
                 ->where('sync_type', 'payroll')
                 ->where('requested_by', auth()->id()));
-    }
-
-    public function openDetails(string $syncId): void
-    {
-        $this->authorizeSelectedDevice();
-        abort_unless($this->visibleHistoryQuery($this->device)->whereKey($syncId)->exists(), 404);
-
-        $this->showSyncModal = false;
-        $this->showEmployeeSyncModal = false;
-        $this->detailSyncId = $syncId;
-        $this->archivedRowDetails = [];
-        $this->archiveLookupAttempted = false;
-        $this->archiveLookupFailed = false;
-        $this->detailTab = 'overview';
-        $this->employeeSearch = '';
-        $this->resetExportDtrEntries();
-    }
-
-    public function closeDetails(): void
-    {
-        $this->detailSyncId = null;
-        $this->archivedRowDetails = [];
-        $this->archiveLookupAttempted = false;
-        $this->archiveLookupFailed = false;
-        $this->detailTab = 'overview';
-        $this->employeeSearch = '';
-        $this->resetExportDtrEntries();
     }
 
     public function selectDetailTab(string $tab): void
