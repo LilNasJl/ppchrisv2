@@ -23,8 +23,8 @@
             --lr-bg-card: #0f172a;
             --lr-bg-subtle: #1e293b;
             --lr-bg-muted: rgba(30, 41, 59, 0.65);
-            --lr-border: #1e293b;
-            --lr-border-strong: #334155;
+            --lr-border: #334155;
+            --lr-border-strong: rgba(71, 85, 105, 0.8);
             --lr-text-main: #f8fafc;
             --lr-text-secondary: #e2e8f0;
             --lr-text-muted: #94a3b8;
@@ -248,6 +248,162 @@
             font-size: 0.7rem;
             color: var(--lr-text-muted);
             line-height: 1.25;
+        }
+
+        /* 2.5 Unified Leave Details Hero Card & Balances */
+        .leave-review .summary-hero {
+            position: relative;
+            background: var(--lr-bg-card);
+            border: 1px solid var(--lr-border-strong);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+        }
+
+        .leave-review .summary-hero-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.75rem 1.1rem;
+            background: var(--lr-bg-subtle);
+            border-bottom: 1px solid var(--lr-border-strong);
+        }
+
+        .leave-review .summary-hero-header .title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .leave-review .summary-hero-header .title-wrap svg {
+            width: 1.1rem;
+            height: 1.1rem;
+            color: var(--lr-accent-blue);
+        }
+
+        .leave-review .summary-hero-header h3 {
+            font-size: 0.82rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--lr-text-secondary);
+        }
+
+        .leave-review .summary-hero-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.85rem;
+            padding: 1.1rem;
+        }
+
+        @media (max-width: 600px) {
+            .leave-review .summary-hero-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        .leave-review .summary-metric {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            padding: 0.85rem 1rem;
+            border-radius: 0.65rem;
+            background: var(--lr-bg-subtle);
+            border: 1px solid var(--lr-border);
+            transition: all 0.15s ease;
+        }
+
+        .leave-review .summary-metric-label {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.67rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--lr-text-muted);
+        }
+
+        .leave-review .summary-metric-label svg {
+            width: 0.82rem;
+            height: 0.82rem;
+            color: var(--lr-accent-blue);
+            flex-shrink: 0;
+        }
+
+        .leave-review .summary-metric-value {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--lr-text-main);
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .leave-review .summary-metric-sub {
+            font-size: 0.72rem;
+            color: var(--lr-text-muted);
+            line-height: 1.3;
+        }
+
+        .leave-review .summary-sub-banner {
+            margin: 0 1.1rem 1.1rem;
+            padding: 0.6rem 0.9rem;
+            border-radius: 0.55rem;
+            background: var(--lr-accent-blue-soft);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: var(--lr-accent-blue);
+        }
+
+        .leave-review .summary-sub-banner svg {
+            width: 0.95rem;
+            height: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        /* Leave Balances Grid (Sidebar) */
+        .leave-review .balances-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+        }
+
+        .leave-review .balance-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 0.9rem 0.6rem;
+            border-radius: 0.65rem;
+            background: var(--lr-bg-subtle);
+            border: 1px solid var(--lr-border);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+
+        .leave-review .balance-number {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--lr-accent-blue);
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+
+        .leave-review .balance-label {
+            font-size: 0.67rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--lr-text-muted);
+            margin-top: 0.35rem;
         }
 
         /* 3. Two-Column Section Layout */
@@ -537,6 +693,169 @@
             .leave-review .details-grid {
                 grid-template-columns: minmax(0, 1fr);
             }
+        }
+
+        /* 6. Approval Route Preview Card */
+        .workflow-preview-card {
+            position: relative;
+            padding: 0.85rem 1.1rem;
+            border-radius: 0.75rem;
+            border: 1.5px solid #93c5fd;
+            background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+            box-shadow: 0 1px 3px 0 rgba(37, 99, 235, 0.08);
+            margin-bottom: 0.75rem;
+            overflow: hidden;
+        }
+
+        .dark .workflow-preview-card {
+            border: 1.5px solid rgba(96, 165, 250, 0.5);
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.35) 0%, rgba(15, 23, 42, 0.85) 100%);
+            box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.25);
+        }
+
+        .workflow-preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .workflow-preview-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.74rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #1e40af;
+        }
+
+        .dark .workflow-preview-title {
+            color: #93c5fd;
+        }
+
+        .workflow-preview-title svg {
+            width: 1rem;
+            height: 1rem;
+            color: #2563eb;
+        }
+
+        .dark .workflow-preview-title svg {
+            color: #60a5fa;
+        }
+
+        .workflow-preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.18rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .dark .workflow-preview-badge {
+            background: rgba(30, 58, 138, 0.55);
+            color: #bfdbfe;
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+
+        .workflow-preview-steps {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 0.65rem;
+        }
+
+        .workflow-preview-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 0.55rem;
+            font-size: 0.76rem;
+            font-weight: 700;
+            background: #ffffff;
+            color: #1e3a8a;
+            border: 1.5px solid #93c5fd;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+            transition: all 0.15s ease;
+        }
+
+        .dark .workflow-preview-step {
+            background: rgba(15, 23, 42, 0.85);
+            color: #f8fafc;
+            border-color: rgba(96, 165, 250, 0.45);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .workflow-preview-step.is-skipped {
+            background: #fefce8;
+            color: #92400e;
+            border-color: #fde047;
+        }
+
+        .dark .workflow-preview-step.is-skipped {
+            background: rgba(69, 26, 3, 0.6);
+            color: #fef08a;
+            border-color: rgba(234, 179, 8, 0.55);
+        }
+
+        .workflow-preview-step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 9999px;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 0.68rem;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .workflow-preview-step.is-skipped .workflow-preview-step-num {
+            background: #d97706;
+            color: #ffffff;
+        }
+
+        .workflow-preview-step-label {
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+
+        .workflow-preview-step-approver {
+            font-weight: 600;
+            color: #334155;
+            padding-inline-start: 0.15rem;
+        }
+
+        .dark .workflow-preview-step-approver {
+            color: #cbd5e1;
+        }
+
+        .workflow-preview-arrow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #3b82f6;
+            flex-shrink: 0;
+        }
+
+        .dark .workflow-preview-arrow {
+            color: #60a5fa;
+        }
+
+        .workflow-preview-arrow svg {
+            width: 0.95rem;
+            height: 0.95rem;
         }
     </style>
 @endonce

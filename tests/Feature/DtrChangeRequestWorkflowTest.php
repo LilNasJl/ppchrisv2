@@ -488,6 +488,36 @@ class DtrChangeRequestWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::TYPE_FORGOT_TO_PUNCH, $request->request_type);
     }
 
+    public function test_submit_missing_dtr_entries_populates_schedule_times_from_branch(): void
+    {
+        [$employee, $period] = $this->context();
+
+        \Illuminate\Support\Facades\Storage::disk('local')->put('proof.png', 'test image content');
+
+        $changeRequest = app(DtrChangeRequestService::class)->submitMissingDtrEntries($employee, [
+            'payroll_period_id' => $period->id,
+            'entries' => [
+                [
+                    'date_in' => '2026-08-20',
+                    'time_in' => '08:00',
+                    'date_out' => '2026-08-20',
+                    'time_out' => '17:00',
+                    'schedule_type' => 'Regular',
+                    'schedule_start' => null,
+                    'schedule_end' => null,
+                ],
+            ],
+            'explanation' => 'Forgot to punch during field assignment.',
+            'attachment_path' => 'proof.png',
+        ]);
+
+        $this->assertNotNull($changeRequest);
+        $entries = $changeRequest->proposed_values['entries'] ?? [];
+        $this->assertCount(1, $entries);
+        $this->assertEquals('08:00:00', $entries[0]['schedule_start']);
+        $this->assertEquals('18:00:00', $entries[0]['schedule_end']);
+    }
+
     private function context(): array
     {
         $branch = $this->branch('Test Branch');

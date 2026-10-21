@@ -5,9 +5,12 @@ namespace App\Filament\Employee\Pages;
 use App\Models\Leave;
 use App\Models\LeaveRequestApproval;
 use App\Services\LeaveApprovalAccess;
+use App\Services\LeaveApprovalService;
 use App\Services\StationManagementAccess;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -261,10 +264,163 @@ class LeaveApprovals extends Page implements HasTable
                     ->label('Review')
                     ->icon(Heroicon::Eye)
                     ->color('primary')
-                    ->url(fn (Leave $record) => ViewLeaveApproval::getUrl(['leaveId' => $record->publicKey()])),
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->modalWidth('5xl')
+                    ->modalHeading('Leave Request Details')
+                    ->modalContent(fn (?Leave $record) => $record ? view('filament.employee.pages.partials.leave-request-details', [
+                        'leave' => $record,
+                    ]) : null)
+                    ->extraModalFooterActions(fn (?Leave $record): array => $record ? array_values(array_filter([
+                        $this->canActOnLeave($record)
+                            ? Action::make('approveFromModal')
+                                ->label('Approve')
+                                ->icon(Heroicon::CheckCircle)
+                                ->color('success')
+                                ->modalHeading('Approve Leave Request')
+                                ->modalSubmitActionLabel('Confirm Approval')
+                                ->schema([
+                                    Textarea::make('remarks')
+                                        ->label('Remarks (Optional)')
+                                        ->placeholder('Add any notes or remarks for this approval...')
+                                        ->rows(3)
+                                        ->maxLength(2000),
+                                ])
+                                ->action(fn (array $data) => $this->approveLeave($record, $data))
+                                ->cancelParentActions()
+                            : null,
+
+                        $this->canActOnLeave($record)
+                            ? Action::make('rejectFromModal')
+                                ->label('Reject')
+                                ->icon(Heroicon::XCircle)
+                                ->color('danger')
+                                ->modalHeading('Reject Leave Request')
+                                ->modalSubmitActionLabel('Confirm Rejection')
+                                ->schema([
+                                    Textarea::make('remarks')
+                                        ->label('Reason for Rejection')
+                                        ->placeholder('State the reason for rejecting this leave request...')
+                                        ->rows(3)
+                                        ->maxLength(2000)
+                                        ->required(),
+                                ])
+                                ->action(fn (array $data) => $this->rejectLeave($record, $data))
+                                ->cancelParentActions()
+                            : null,
+                    ])) : []),
+
+                Action::make('approve')
+                    ->label('Approve')
+                    ->icon(Heroicon::CheckCircle)
+                    ->color('success')
+                    ->visible(fn (Leave $record): bool => $this->canActOnLeave($record))
+                    ->modalHeading('Approve Leave Request')
+                    ->modalSubmitActionLabel('Confirm Approval')
+                    ->schema([
+                        Textarea::make('remarks')
+                            ->label('Remarks (Optional)')
+                            ->placeholder('Add any notes or remarks for this approval...')
+                            ->rows(3)
+                            ->maxLength(2000),
+                    ])
+                    ->action(fn (Leave $record, array $data) => $this->approveLeave($record, $data)),
+
+                Action::make('reject')
+                    ->label('Reject')
+                    ->icon(Heroicon::XCircle)
+                    ->color('danger')
+                    ->visible(fn (Leave $record): bool => $this->canActOnLeave($record))
+                    ->modalHeading('Reject Leave Request')
+                    ->modalSubmitActionLabel('Confirm Rejection')
+                    ->schema([
+                        Textarea::make('remarks')
+                            ->label('Reason for Rejection')
+                            ->placeholder('State the reason for rejecting this leave request...')
+                            ->rows(3)
+                            ->maxLength(2000)
+                            ->required(),
+                    ])
+                    ->action(fn (Leave $record, array $data) => $this->rejectLeave($record, $data)),
             ])
             ->emptyStateHeading('No leave requests in this queue')
             ->emptyStateDescription('There are no leave requests under this category awaiting your review.')
             ->emptyStateIcon(Heroicon::ClipboardDocumentCheck);
+    }
+
+    protected function canActOnLeave(?Leave $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        $user = auth()->user();
+        if (! $user || $user->role !== 'employee' || ! $user->employee) {
+            return false;
+        }
+
+        if ($record->status !== 'Pending' || (int) $record->employee_id === (int) $user->employee->id) {
+            return false;
+        }
+
+        return $record->approvalSteps()
+            ->where('status', 'Pending')
+            ->where('is_hr', false)
+            ->where('approver_employee_id', $user->employee->id)
+            ->exists();
+    }
+
+    protected function approveLeave(Leave $record, array $data): void
+    {
+        $user = auth()->user();
+        $step = $record->approvalSteps()
+            ->where('status', 'Pending')
+            ->where('is_hr', false)
+            ->where('approver_employee_id', $user->employee?->id)
+            ->first();
+
+        if (! $step) {
+            Notification::make()
+                ->title('Unable to approve leave')
+                ->body('No pending approval step found for your account.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        try {
+            app(LeaveApprovalService::class)->decide($record, (int) $step->id, $user, true, $data['remarks'] ?? null);
+            Notification::make()->title('Leave approval recorded')->success()->send();
+        } catch (\RuntimeException $exception) {
+            Notification::make()->title('Unable to process request')->body($exception->getMessage())->danger()->send();
+        }
+    }
+
+    protected function rejectLeave(Leave $record, array $data): void
+    {
+        $user = auth()->user();
+        $step = $record->approvalSteps()
+            ->where('status', 'Pending')
+            ->where('is_hr', false)
+            ->where('approver_employee_id', $user->employee?->id)
+            ->first();
+
+        if (! $step) {
+            Notification::make()
+                ->title('Unable to reject leave')
+                ->body('No pending approval step found for your account.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        try {
+            app(LeaveApprovalService::class)->decide($record, (int) $step->id, $user, false, $data['remarks']);
+            Notification::make()->title('Leave request rejected')->success()->send();
+        } catch (\RuntimeException $exception) {
+            Notification::make()->title('Unable to process request')->body($exception->getMessage())->danger()->send();
+        }
     }
 }

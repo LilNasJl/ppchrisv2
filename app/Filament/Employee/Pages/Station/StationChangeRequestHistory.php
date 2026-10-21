@@ -136,7 +136,9 @@ class StationChangeRequestHistory extends Page implements HasTable
                 TextColumn::make('request_type_label')
                     ->label('Request Type')
                     ->badge()
-                    ->color('info'),
+                    ->icon(fn (DtrChangeRequest $record): string => $record->request_type_icon)
+                    ->color(fn (DtrChangeRequest $record): string => $record->request_type_color)
+                    ->description(fn (DtrChangeRequest $record): ?string => $record->overtime_summary_description),
 
                 TextColumn::make('display_status')
                     ->label('Status')

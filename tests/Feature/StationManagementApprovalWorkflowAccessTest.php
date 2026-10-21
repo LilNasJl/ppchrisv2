@@ -1215,4 +1215,52 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         $this->assertSame($empA->id, (int) $crFresh->approvals_history[0]['actor_id']);
         $this->assertSame('Approved', $crFresh->approvals_history[0]['action']);
     }
+
+    public function test_leave_approvals_page_review_action_is_modal_and_approver_can_decide(): void
+    {
+        [$userA, $empA] = $this->makeEmployee('Alice', 'SIC', $this->tagum);
+        [$staffUser, $staffEmp] = $this->makeEmployee('Sam', 'Staff', $this->tagum);
+
+        $this->makeBranchWorkflow($this->tagum, [
+            ['label' => 'SIC', 'employee' => $empA],
+        ]);
+
+        $leaveService = app(LeaveApprovalService::class);
+        $leave = $leaveService->submit($staffEmp, [
+            'leave_type' => 'Vacation Leave',
+            'leave_from' => '2026-10-15',
+            'leave_to' => '2026-10-15',
+            'reason' => 'Family event',
+        ], $staffUser);
+
+        $this->actingAs($userA);
+
+        $page = new LeaveApprovals();
+        $table = $page->table(new \Filament\Tables\Table($page));
+
+        $actions = $table->getRecordActions();
+        $reviewAction = collect($actions)->first(fn ($a) => $a->getName() === 'review');
+        $this->assertNotNull($reviewAction);
+
+        // Review action should open a modal with view content, NOT a page redirect URL
+        $this->assertNull($reviewAction->getUrl());
+        $this->assertNotNull($reviewAction->record($leave)->getModalContent());
+
+        // Approver can act on this leave
+        $reflection = new \ReflectionClass($page);
+        $canActMethod = $reflection->getMethod('canActOnLeave');
+        $canActMethod->setAccessible(true);
+        $this->assertTrue($canActMethod->invoke($page, $leave));
+
+        // Approving via page action
+        $approveMethod = $reflection->getMethod('approveLeave');
+        $approveMethod->setAccessible(true);
+        $approveMethod->invoke($page, $leave, ['remarks' => 'Looks good to me']);
+
+        $leave->refresh();
+        $step1 = $leave->approvalSteps()->where('sequence', 1)->first();
+        $this->assertSame('Approved', $step1->status);
+        $this->assertSame('Looks good to me', $step1->remarks);
+        $this->assertSame('hr', $leave->approval_phase);
+    }
 }

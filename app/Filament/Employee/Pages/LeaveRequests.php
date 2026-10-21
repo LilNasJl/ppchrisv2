@@ -13,6 +13,7 @@ use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -22,6 +23,8 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
@@ -245,6 +248,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
             Action::make('newLeaveRequest')
                 ->label('New Leave Request')
                 ->icon(Heroicon::Plus)
+                ->modalWidth('2xl')
                 ->schema($this->leaveRequestSchema())
                 ->fillForm(fn (): array => $this->defaultLeaveRequestData())
                 ->modalHeading('New Leave Request')
@@ -287,82 +291,120 @@ class LeaveRequests extends Page implements HasForms, HasTable
         return [
             View::make('filament.leave.workflow-preview')
                 ->viewData(fn (): array => ['employee' => $this->employee()]),
+
+            Hidden::make('is_half_day')
+                ->default(false)
+                ->dehydrated(true),
+
             Section::make()
+                ->compact()
                 ->schema([
-                    Select::make('leave_type')
-                        ->label('Leave Type')
-                        ->options(fn (Get $get): array => (bool) $get('is_half_day')
-                            ? [Leave::HALF_DAY_LEAVE => Leave::HALF_DAY_LEAVE]
-                            : $this->leaveTypeOptions())
-                        ->disabled(fn (Get $get): bool => (bool) $get('is_half_day'))
-                        ->dehydrated(true)
-                        ->required(),
+                    Grid::make([
+                        'default' => 1,
+                        'sm' => 2,
+                    ])
+                        ->schema([
+                            Select::make('leave_type')
+                                ->label('Leave Type')
+                                ->placeholder('Select leave type...')
+                                ->options($this->leaveTypeOptions())
+                                ->live()
+                                ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                    $isHalfDay = ($state === Leave::HALF_DAY_LEAVE);
+                                    $set('is_half_day', $isHalfDay);
+                                    if ($isHalfDay) {
+                                        $set('half_day_period', $get('half_day_period') ?: DtrDayPartService::MORNING);
+                                        if (filled($get('leave_from'))) {
+                                            $set('leave_to', $get('leave_from'));
+                                        }
+                                    } else {
+                                        $set('half_day_period', null);
+                                        $set('half_day_schedule', null);
+                                    }
+                                })
+                                ->columnSpan([
+                                    'default' => 1,
+                                    'sm' => fn (Get $get): int => $get('leave_type') === Leave::HALF_DAY_LEAVE ? 1 : 2,
+                                ])
+                                ->required(),
 
-                    Select::make('pay_treatment')
-                        ->label('Requested Pay Treatment')
-                        ->options(Leave::payTreatmentOptions())
-                        ->default(Leave::PAID)
-                        ->required()
-                        ->helperText('HR confirms the final pay treatment during approval.'),
+                            Select::make('half_day_period')
+                                ->label('Half Day Period')
+                                ->options(app(DtrDayPartService::class)->dayPartOptions())
+                                ->default(DtrDayPartService::MORNING)
+                                ->visible(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE)
+                                ->required(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE)
+                                ->columnSpan([
+                                    'default' => 1,
+                                    'sm' => 1,
+                                ])
+                                ->dehydrated(true),
 
-                    Toggle::make('is_half_day')
-                        ->label('Half Day')
-                        ->live()
-                        ->afterStateUpdated(function (Set $set, bool $state): void {
-                            $set('leave_type', $state ? Leave::HALF_DAY_LEAVE : null);
-                            $set('half_day_period', $state ? DtrDayPartService::MORNING : null);
-                        }),
+                            Select::make('half_day_schedule')
+                                ->label('Daily Rate Schedule')
+                                ->options(fn (): array => app(LeaveScheduleOptionService::class)->optionsForEmployee($this->employee()->loadMissing('branch')))
+                                ->visible(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE
+                                    && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
+                                ->required(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE
+                                    && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
+                                ->searchable()
+                                ->preload()
+                                ->columnSpanFull()
+                                ->dehydrated(true),
 
-                    Select::make('half_day_period')
-                        ->label('Half Day Period')
-                        ->options(app(DtrDayPartService::class)->dayPartOptions())
-                        ->visible(fn (Get $get): bool => (bool) $get('is_half_day'))
-                        ->required(fn (Get $get): bool => (bool) $get('is_half_day'))
-                        ->dehydrated(true),
+                            DatePicker::make('leave_from')
+                                ->label('Leave From')
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                    if ($get('leave_type') === Leave::HALF_DAY_LEAVE && filled($state)) {
+                                        $set('leave_to', $state);
+                                    }
+                                })
+                                ->rules([
+                                    fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                                        if ($get('leave_type') !== Leave::HALF_DAY_LEAVE || blank($value)) {
+                                            return;
+                                        }
 
-                    Select::make('half_day_schedule')
-                        ->label('Daily Rate Schedule')
-                        ->options(fn (): array => app(LeaveScheduleOptionService::class)->optionsForEmployee($this->employee()->loadMissing('branch')))
-                        ->visible(fn (Get $get): bool => (bool) $get('is_half_day')
-                            && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
-                        ->required(fn (Get $get): bool => (bool) $get('is_half_day')
-                            && app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee()))
-                        ->searchable()
-                        ->preload()
-                        ->dehydrated(true),
+                                        if (Carbon::parse($value)->isSaturday()) {
+                                            $fail('Saturday does not allow half-day leave. Use whole-day leave.');
+                                        }
+                                    },
+                                ])
+                                ->columnSpan([
+                                    'default' => 1,
+                                    'sm' => 1,
+                                ]),
 
-                    DatePicker::make('leave_from')
-                        ->label('Leave From')
-                        ->required()
-                        ->rules([
-                            fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
-                                if (! (bool) $get('is_half_day') || blank($value)) {
-                                    return;
-                                }
+                            DatePicker::make('leave_to')
+                                ->label('Leave To')
+                                ->required()
+                                ->default(fn (Get $get): ?string => $get('leave_from'))
+                                ->disabled(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE)
+                                ->dehydrated(true)
+                                ->helperText(fn (Get $get): ?string => $get('leave_type') === Leave::HALF_DAY_LEAVE ? 'Same as Leave From for half-day leave.' : null)
+                                ->rules([
+                                    fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
+                                        if ($get('leave_type') !== Leave::HALF_DAY_LEAVE) {
+                                            return;
+                                        }
 
-                                if (Carbon::parse($value)->isSaturday()) {
-                                    $fail('Saturday does not allow half-day leave. Use whole-day leave.');
-                                }
-                            },
-                        ]),
-
-                    DatePicker::make('leave_to')
-                        ->label('Leave To')
-                        ->required()
-                        ->rules([
-                            fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
-                                if (! (bool) $get('is_half_day')) {
-                                    return;
-                                }
-
-                                if ($value !== $get('leave_from')) {
-                                    $fail('For half-day leave, Leave From and Leave To must be the same date.');
-                                }
-                            },
+                                        if ($value !== $get('leave_from')) {
+                                            $fail('For half-day leave, Leave From and Leave To must be the same date.');
+                                        }
+                                    },
+                                ])
+                                ->columnSpan([
+                                    'default' => 1,
+                                    'sm' => 1,
+                                ]),
                         ]),
 
                     Textarea::make('reason')
-                        ->rows(4)
+                        ->label('Reason')
+                        ->placeholder('State the reason for this leave request...')
+                        ->rows(3)
                         ->columnSpanFull()
                         ->required(),
 
@@ -383,19 +425,23 @@ class LeaveRequests extends Page implements HasForms, HasTable
                         ->downloadable()
                         ->openable()
                         ->columnSpanFull(),
-                ])
-                ->columns(2),
+                ]),
         ];
     }
 
     protected function createLeave(array $data): void
     {
-        if ((bool) ($data['is_half_day'] ?? false)) {
+        $data['pay_treatment'] = Leave::PAID;
+        $isHalfDay = ($data['leave_type'] ?? null) === Leave::HALF_DAY_LEAVE || (bool) ($data['is_half_day'] ?? false);
+        $data['is_half_day'] = $isHalfDay;
+
+        if ($isHalfDay) {
             $data['leave_type'] = Leave::HALF_DAY_LEAVE;
             $data['half_day_period'] = app(DtrDayPartService::class)->normalize($data['half_day_period'] ?? DtrDayPartService::MORNING);
             $data['half_day_schedule'] = app(LeaveScheduleOptionService::class)->isDailyRateEmployee($this->employee())
                 ? app(LeaveScheduleOptionService::class)->normalizeScheduleKey($data['half_day_schedule'] ?? null)
                 : null;
+            $data['leave_to'] = $data['leave_from'];
 
             if ($data['leave_from'] !== $data['leave_to']) {
                 Notification::make()
@@ -446,6 +492,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
             'Paternity Leave' => 'Paternity Leave',
             'Important/Personal Matter' => 'Important/Personal Matter',
             Leave::BIRTHDAY_LEAVE => Leave::BIRTHDAY_LEAVE,
+            Leave::HALF_DAY_LEAVE => 'Half Day Leave',
         ];
     }
 

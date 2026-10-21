@@ -880,4 +880,97 @@ class LeaveApprovalWorkflowFeatureTest extends TestCase
         $updated->delete();
         $this->assertDatabaseMissing('leave_approval_workflows', ['id' => $custom->id]);
     }
+
+    public function test_leave_request_defaults_to_paid_and_approves_as_paid_automatically(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Main Branch', 'reg_sched_start' => '08:00:00', 'reg_sched_end' => '17:00:00']);
+        [$empUser, $employee] = $this->createEmployeeWithUser('Jane Doe', 'employee', $branch);
+        [$hrUser] = $this->createEmployeeWithUser('HR Admin', 'hr', $branch);
+
+        $period = PayrollPeriod::create([
+            'title' => 'Sep 01 - Sep 15, 2026',
+            'date_start' => '2026-09-01',
+            'date_end' => '2026-09-15',
+            'is_locked' => false,
+        ]);
+
+        $service = app(LeaveApprovalService::class);
+
+        // Submit without pay_treatment
+        $leave = $service->submit($employee, [
+            'leave_type' => 'Sick Leave',
+            'leave_from' => '2026-09-08',
+            'leave_to' => '2026-09-08',
+            'reason' => 'Fever and rest',
+        ], $empUser);
+
+        $this->assertSame(Leave::PAID, $leave->pay_treatment);
+        $this->assertTrue($leave->isPaid());
+
+        // HR approves without explicit pay_treatment
+        $service->decideHr($leave, $hrUser, true, $period, 'Approved by HR');
+
+        $leave->refresh();
+        $this->assertSame('Approved', $leave->status);
+        $this->assertSame(Leave::PAID, $leave->pay_treatment);
+        $this->assertTrue($leave->isPaid());
+
+        // Employee credits deducted
+        $employee->refresh();
+        $this->assertEquals(4, $employee->leave_credits);
+
+        // DTR records created with paid work_hrs
+        $dtr = Dtr::where('leave_id', $leave->id)->first();
+        $this->assertNotNull($dtr);
+        $this->assertGreaterThan(0, $dtr->work_hrs);
+        $this->assertGreaterThan(0, $dtr->credited_work_hrs);
+    }
+
+    public function test_half_day_leave_with_half_day_leave_type_submits_and_approves_properly(): void
+    {
+        $branch = Branch::create(['branch_name' => 'Main Branch', 'reg_sched_start' => '08:00:00', 'reg_sched_end' => '17:00:00']);
+        [$empUser, $employee] = $this->createEmployeeWithUser('Jane Halfday', 'employee', $branch);
+        [$hrUser] = $this->createEmployeeWithUser('HR Admin', 'hr', $branch);
+
+        $period = PayrollPeriod::create([
+            'title' => 'Sep 01 - Sep 15, 2026',
+            'date_start' => '2026-09-01',
+            'date_end' => '2026-09-15',
+            'is_locked' => false,
+        ]);
+
+        $service = app(LeaveApprovalService::class);
+
+        // Submit half-day leave using Leave::HALF_DAY_LEAVE
+        $leave = $service->submit($employee, [
+            'leave_type' => Leave::HALF_DAY_LEAVE,
+            'is_half_day' => true,
+            'half_day_period' => 'morning',
+            'leave_from' => '2026-09-08',
+            'leave_to' => '2026-09-08',
+            'reason' => 'Doctor appointment morning',
+        ], $empUser);
+
+        $this->assertSame(Leave::HALF_DAY_LEAVE, $leave->leave_type);
+        $this->assertTrue((bool) $leave->is_half_day);
+        $this->assertSame('morning', $leave->half_day_period);
+        $this->assertSame(0.5, (float) $leave->getRequestedLeaveDays());
+        $this->assertSame(Leave::PAID, $leave->pay_treatment);
+
+        // HR approves
+        $service->decideHr($leave, $hrUser, true, $period, 'Approved half-day');
+
+        $leave->refresh();
+        $this->assertSame('Approved', $leave->status);
+        $this->assertEquals(0.5, (float) $leave->deducted_leave_credits);
+
+        // Employee credits deducted by 0.5 (from 5 to 4.5)
+        $employee->refresh();
+        $this->assertEquals(4.5, (float) $employee->leave_credits);
+
+        // DTR records half-day hours
+        $dtr = Dtr::where('leave_id', $leave->id)->first();
+        $this->assertNotNull($dtr);
+        $this->assertGreaterThan(0, $dtr->work_hrs);
+    }
 }

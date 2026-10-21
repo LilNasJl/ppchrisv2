@@ -329,6 +329,16 @@ class OnFieldDtrService
             $rawSchedStart = trim((string) ($entry['schedule_start'] ?? ''));
             $rawSchedEnd = trim((string) ($entry['schedule_end'] ?? ''));
 
+            if ($rawSchedType !== '' && ($rawSchedStart === '' || $rawSchedEnd === '')) {
+                [$bStart, $bEnd] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $rawSchedType, formatForInput: false);
+                if ($rawSchedStart === '' && filled($bStart)) {
+                    $rawSchedStart = (string) $bStart;
+                }
+                if ($rawSchedEnd === '' && filled($bEnd)) {
+                    $rawSchedEnd = (string) $bEnd;
+                }
+            }
+
             if ($hasEntriesArray || $rawSchedType !== '' || $rawSchedStart !== '' || $rawSchedEnd !== '') {
                 if ($rawSchedType === '') {
                     throw ValidationException::withMessages([

@@ -17,6 +17,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -215,6 +216,19 @@ class StationProofSubmissions extends Page implements HasTable
                                         ->required()
                                         ->live()
                                         ->afterStateUpdated(function ($state, Set $set, Get $get): void {
+                                            if (blank($state)) {
+                                                return;
+                                            }
+                                            $start = $get('schedule_start');
+                                            $end = $get('schedule_end');
+                                            if (filled($start) && filled($end)) {
+                                                try {
+                                                    if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                        $set('date_out', Carbon::parse($state)->addDay()->toDateString());
+                                                        return;
+                                                    }
+                                                } catch (\Throwable) {}
+                                            }
                                             if (blank($get('date_out'))) {
                                                 $set('date_out', $state);
                                             }
@@ -250,38 +264,53 @@ class StationProofSubmissions extends Page implements HasTable
                                         ->default('Regular')
                                         ->required()
                                         ->live()
-                                        ->afterStateUpdated(function ($state, Set $set): void {
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get): void {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch;
-                                            [$start, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $state, formatForInput: false);
-                                            if (filled($start)) {
-                                                $set('schedule_start', $start);
-                                            }
-                                            if (filled($end)) {
-                                                $set('schedule_end', $end);
+                                            [$start, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $state, formatForInput: true);
+                                            $set('schedule_start', $start ?? '');
+                                            $set('schedule_end', $end ?? '');
+
+                                            $dateIn = $get('date_in');
+                                            if (filled($dateIn) && filled($start) && filled($end)) {
+                                                try {
+                                                    if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                        $set('date_out', Carbon::parse($dateIn)->addDay()->toDateString());
+                                                    } else {
+                                                        $set('date_out', Carbon::parse($dateIn)->toDateString());
+                                                    }
+                                                } catch (\Throwable) {}
                                             }
                                         }),
 
-                                    TimePicker::make('schedule_start')
+                                    TextInput::make('schedule_start')
                                         ->label('Sched Start')
+                                        ->placeholder('Auto-populated from schedule')
+                                        ->readOnly()
+                                        ->dehydrated(true)
+                                        ->extraInputAttributes(['tabindex' => '-1'])
                                         ->required()
                                         ->default(function (): string {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch;
-                                            [$start] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, 'Regular', formatForInput: false);
+                                            [$start] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, 'Regular', formatForInput: true);
 
-                                            return $start ?: '08:00:00';
+                                            return $start ?: '08:00 AM';
                                         }),
 
-                                    TimePicker::make('schedule_end')
+                                    TextInput::make('schedule_end')
                                         ->label('Sched End')
+                                        ->placeholder('Auto-populated from schedule')
+                                        ->readOnly()
+                                        ->dehydrated(true)
+                                        ->extraInputAttributes(['tabindex' => '-1'])
                                         ->required()
                                         ->default(function (): string {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch;
-                                            [, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, 'Regular', formatForInput: false);
+                                            [, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, 'Regular', formatForInput: true);
 
-                                            return $end ?: '17:00:00';
+                                            return $end ?: '05:00 PM';
                                         }),
                                 ])
                                 ->columns(2)

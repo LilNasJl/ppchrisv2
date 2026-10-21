@@ -723,14 +723,24 @@ class DtrChangeRequestService
                     }
                 }
 
+                $entrySchedStart = filled($entry['schedule_start'] ?? null) ? Carbon::parse($entry['schedule_start'])->format('H:i:s') : null;
+                $entrySchedEnd = filled($entry['schedule_end'] ?? null) ? Carbon::parse($entry['schedule_end'])->format('H:i:s') : null;
+
+                if (! $entrySchedStart || ! $entrySchedEnd) {
+                    $branch = $employee->branch ?? ($employee->branch_id ? Branch::find($employee->branch_id) : null);
+                    [$bStart, $bEnd] = $this->resolveBranchScheduleTimes($branch, $entry['schedule_type'] ?? 'Regular');
+                    $entrySchedStart = $entrySchedStart ?: $bStart;
+                    $entrySchedEnd = $entrySchedEnd ?: $bEnd;
+                }
+
                 $validatedEntries[] = [
                     'date_in' => $dateIn->toDateString(),
                     'time_in' => Carbon::parse($timeInStr)->format('H:i:s'),
                     'date_out' => $dateOut->toDateString(),
                     'time_out' => Carbon::parse($timeOutStr)->format('H:i:s'),
                     'schedule_type' => $entry['schedule_type'] ?? 'Regular',
-                    'schedule_start' => filled($entry['schedule_start'] ?? null) ? Carbon::parse($entry['schedule_start'])->format('H:i:s') : null,
-                    'schedule_end' => filled($entry['schedule_end'] ?? null) ? Carbon::parse($entry['schedule_end'])->format('H:i:s') : null,
+                    'schedule_start' => $entrySchedStart,
+                    'schedule_end' => $entrySchedEnd,
                     'comment' => trim((string) ($entry['comment'] ?? '')) ?: null,
                 ];
             }

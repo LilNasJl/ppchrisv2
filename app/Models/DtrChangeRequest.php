@@ -291,6 +291,58 @@ class DtrChangeRequest extends Model
         };
     }
 
+    public function getOvertimeSummaryDescriptionAttribute(): ?string
+    {
+        if (! $this->is_overtime_type) {
+            return null;
+        }
+
+        $orig = $this->original_values ?? [];
+        $scope = $this->overtime_request_scope;
+
+        $earlyMins = isset($orig['early_clock_in'])
+            ? max(0, (int) $orig['early_clock_in'])
+            : max(0, (int) ($this->targetDtrRecord()?->early_clock_in ?? 0));
+
+        $otMins = isset($orig['overtime'])
+            ? max(0, (int) $orig['overtime'])
+            : max(0, (int) ($this->targetDtrRecord()?->overtime ?? 0));
+
+        $formatMins = function (int $mins): string {
+            $hrs = round($mins / 60, 1);
+            return "{$mins}m ({$hrs}h)";
+        };
+
+        return match ($scope) {
+            self::OT_SCOPE_OVERTIME_ONLY => 'Target: ' . ($otMins > 0 ? $formatMins($otMins) : '0m') . ' Overtime',
+            self::OT_SCOPE_EARLY_ONLY => 'Target: ' . ($earlyMins > 0 ? $formatMins($earlyMins) : '0m') . ' Early Clock In',
+            default => 'Targets: Early ' . ($earlyMins > 0 ? "{$earlyMins}m" : '0m') . ' + OT ' . ($otMins > 0 ? $formatMins($otMins) : '0m'),
+        };
+    }
+
+    public function getRequestTypeColorAttribute(): string
+    {
+        return match ($this->request_type) {
+            self::TYPE_OVERTIME_APPROVAL => 'warning',
+            self::TYPE_DELETE_TIME_ENTRY => 'danger',
+            self::TYPE_TIME_DISCREPANCY, self::TYPE_MISSING_DTR_ENTRIES => 'purple',
+            self::TYPE_FORGOT_TO_PUNCH => 'info',
+            default => 'info',
+        };
+    }
+
+    public function getRequestTypeIconAttribute(): string
+    {
+        return match ($this->request_type) {
+            self::TYPE_OVERTIME_APPROVAL => 'heroicon-m-clock',
+            self::TYPE_DELETE_TIME_ENTRY => 'heroicon-m-trash',
+            self::TYPE_MISSING_DTR_ENTRIES => 'heroicon-m-plus-circle',
+            self::TYPE_FORGOT_TO_PUNCH => 'heroicon-m-finger-print',
+            self::TYPE_TIME_DISCREPANCY => 'heroicon-m-arrows-right-left',
+            default => 'heroicon-m-tag',
+        };
+    }
+
     public function getAttachmentUrlAttribute(): ?string
     {
         if (blank($this->attachment_path)) {

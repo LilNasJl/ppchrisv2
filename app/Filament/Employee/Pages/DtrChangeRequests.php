@@ -254,14 +254,9 @@ class DtrChangeRequests extends Page implements HasTable
                 TextColumn::make('request_type_label')
                     ->label('Request Type')
                     ->badge()
-                    ->color(fn (DtrChangeRequest $record): string => match ($record->request_type) {
-                        DtrChangeRequest::TYPE_OVERTIME_APPROVAL => 'warning',
-                        DtrChangeRequest::TYPE_FORGOT_TO_PUNCH => 'info',
-                        DtrChangeRequest::TYPE_TIME_DISCREPANCY => 'purple',
-                        DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES => 'purple',
-                        DtrChangeRequest::TYPE_DELETE_TIME_ENTRY => 'danger',
-                        default => 'info',
-                    })
+                    ->icon(fn (DtrChangeRequest $record): string => $record->request_type_icon)
+                    ->color(fn (DtrChangeRequest $record): string => $record->request_type_color)
+                    ->description(fn (DtrChangeRequest $record): ?string => $record->overtime_summary_description)
                     ->wrap(),
 
                 TextColumn::make('display_status')
@@ -450,6 +445,19 @@ class DtrChangeRequests extends Page implements HasTable
                                         ->required()
                                         ->live()
                                         ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                            if (blank($state)) {
+                                                return;
+                                            }
+                                            $start = $get('schedule_start');
+                                            $end = $get('schedule_end');
+                                            if (filled($start) && filled($end)) {
+                                                try {
+                                                    if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                        $set('date_out', Carbon::parse($state)->addDay()->toDateString());
+                                                        return;
+                                                    }
+                                                } catch (\Throwable) {}
+                                            }
                                             if (blank($get('date_out'))) {
                                                 $set('date_out', $state);
                                             }
@@ -484,21 +492,31 @@ class DtrChangeRequests extends Page implements HasTable
                                         ->default('Regular')
                                         ->required()
                                         ->live()
-                                        ->afterStateUpdated(function ($state, Set $set) {
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch ?? ($employee?->branch_id ? Branch::find($employee->branch_id) : null);
                                             [$start, $end] = app(DtrChangeRequestService::class)->resolveBranchScheduleTimes($branch, $state, formatForInput: true);
-                                            if (filled($start)) {
-                                                $set('schedule_start', $start);
-                                            }
-                                            if (filled($end)) {
-                                                $set('schedule_end', $end);
+                                            $set('schedule_start', $start ?? '');
+                                            $set('schedule_end', $end ?? '');
+
+                                            $dateIn = $get('date_in');
+                                            if (filled($dateIn) && filled($start) && filled($end)) {
+                                                try {
+                                                    if (Carbon::parse($end)->lessThanOrEqualTo(Carbon::parse($start))) {
+                                                        $set('date_out', Carbon::parse($dateIn)->addDay()->toDateString());
+                                                    } else {
+                                                        $set('date_out', Carbon::parse($dateIn)->toDateString());
+                                                    }
+                                                } catch (\Throwable) {}
                                             }
                                         }),
 
                                     TextInput::make('schedule_start')
-                                        ->label('Schedule Start (Optional)')
-                                        ->placeholder('e.g. 08:00 AM')
+                                        ->label('Schedule Start')
+                                        ->placeholder('Auto-populated from schedule')
+                                        ->readOnly()
+                                        ->dehydrated(true)
+                                        ->extraInputAttributes(['tabindex' => '-1'])
                                         ->default(function () {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch ?? ($employee?->branch_id ? Branch::find($employee->branch_id) : null);
@@ -507,8 +525,11 @@ class DtrChangeRequests extends Page implements HasTable
                                         }),
 
                                     TextInput::make('schedule_end')
-                                        ->label('Schedule End (Optional)')
-                                        ->placeholder('e.g. 05:00 PM')
+                                        ->label('Schedule End')
+                                        ->placeholder('Auto-populated from schedule')
+                                        ->readOnly()
+                                        ->dehydrated(true)
+                                        ->extraInputAttributes(['tabindex' => '-1'])
                                         ->default(function () {
                                             $employee = auth()->user()?->employee;
                                             $branch = $employee?->branch ?? ($employee?->branch_id ? Branch::find($employee->branch_id) : null);
