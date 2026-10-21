@@ -966,6 +966,12 @@
                             <x-filament::icon icon="heroicon-o-arrow-up-tray" class="dtr-btn-icon" />
                             <span>DTR Importer</span>
                         </a>
+                        @if(\App\Filament\Pages\SaturdayWfhPolicy::canAccess())
+                            <a href="{{ \App\Filament\Pages\SaturdayWfhPolicy::getUrl() }}" class="dtr-dropdown-item">
+                                <x-filament::icon icon="heroicon-o-calendar-days" class="dtr-btn-icon" />
+                                <span>Saturday WFH Policy</span>
+                            </a>
+                        @endif
                     </div>
                 </details>
                 <a href="{{ $this->dtrChangeRequestsUrl() }}" class="dtr-btn">

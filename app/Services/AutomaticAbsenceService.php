@@ -68,6 +68,9 @@ class AutomaticAbsenceService
         if ($date->isSaturday() && ($data['schedule_start'] !== '08:00:00' || $data['schedule_end'] !== '11:00:00')) {
             return 'Saturday absence requires the regular 08:00-11:00 workday.';
         }
+        if ($date->isSaturday() && app(SaturdayWfhPolicyService::class)->isApprovedWfh($employee, $data['date_in'])) {
+            return 'Saturday WFH is assigned to this employee; a biometric punch is not required.';
+        }
         if (! $employee->hired_date || $date->lt($employee->hired_date->startOfDay())) {
             return 'Employment coverage is not confirmed for this date.';
         }
