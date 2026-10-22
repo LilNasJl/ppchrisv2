@@ -14,6 +14,7 @@ use App\Services\DtrEntryConflictService;
 use App\Services\DtrOvertimeTransferService;
 use App\Services\DtrSynchronizationService;
 use App\Services\HolidayEntitlementService;
+use App\Services\SaturdayWfhDtrService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -182,13 +183,16 @@ class DtrImportService
             }
 
             if ($rowsToImport === []) {
-                $result['message'] = 'No new D.T.R records were imported. Every decoded row was already imported.';
+                $result['wfh_created'] = app(SaturdayWfhDtrService::class)->materializeForValidatedRows($validatedRows);
+                $result['message'] = $result['wfh_created'] > 0
+                    ? "No new device rows were imported. {$result['wfh_created']} Saturday WFH D.T.R entries were created."
+                    : 'No new D.T.R records were imported. Every decoded row was already imported.';
 
                 return $this->withSummary($result);
             }
 
             try {
-                DB::transaction(function () use ($rowsToImport, $importName, &$result): void {
+                DB::transaction(function () use ($rowsToImport, $validatedRows, $importName, &$result): void {
                     $dailyAggregation = app(DtrDailyAggregationService::class);
                     $savedIds = [];
                     $importedDataRows = [];
@@ -223,6 +227,8 @@ class DtrImportService
                         $officialRecords = Dtr::query()->whereIn('id', $savedIds)->get();
                         app(DtrSynchronizationService::class)->syncOfficialBatchToVisible($officialRecords);
                     }
+
+                    $result['wfh_created'] = app(SaturdayWfhDtrService::class)->materializeForValidatedRows($validatedRows);
                 });
 
                 $result['message'] = $result['skipped'] > 0
@@ -267,6 +273,8 @@ class DtrImportService
                     app(DtrSynchronizationService::class)->syncOfficialToVisible($official);
                 }
             }
+
+            app(SaturdayWfhDtrService::class)->materializeScope((int) $data['payroll_period_id'], (int) $data['branch_id']);
 
             return $result;
         });
@@ -412,6 +420,10 @@ class DtrImportService
                 'batch_id' => $data['batch_id'] ?? null,
                 'skipped' => true,
             ];
+        }
+
+        if ($this->replacesSaturdayWfh($data)) {
+            app(SaturdayWfhDtrService::class)->supersedeForActualImport($data);
         }
 
         $record = new Dtr;
@@ -1027,12 +1039,25 @@ class DtrImportService
             ? Carbon::parse($data['date_out'])->toDateString()
             : Carbon::parse($data['date_in'])->toDateString();
 
-        return Dtr::query()
+        $records = Dtr::query()
             ->where('payroll_period_id', $data['payroll_period_id'])
             ->where('branch_id', $this->getImportedBranchId($data))
             ->where('fingerprint_id', (string) $data['fingerprint_id'])
             ->whereBetween('date_in', [$rangeStart, $rangeEnd])
             ->get();
+
+        return $this->replacesSaturdayWfh($data)
+            ? $records->reject(fn (Dtr $record): bool => $record->entry_source === SaturdayWfhDtrService::SOURCE
+                && $record->date_in === $data['date_in'] && ! $record->is_locked)->values()
+            : $records;
+    }
+
+    /** @param array<string, mixed> $data */
+    protected function replacesSaturdayWfh(array $data): bool
+    {
+        return ! $this->isAbsenceRow($data)
+            && $this->resolveScheduleType($data) !== 'Overtime'
+            && Carbon::parse($data['date_in'])->isSaturday();
     }
 
     /**

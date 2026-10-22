@@ -69,6 +69,37 @@ class ProbationaryEmploymentPromotionTest extends TestCase
         $this->assertSame('Probationary', $employee->refresh()->employment_type);
     }
 
+    public function test_end_of_contract_is_an_ended_employment_status(): void
+    {
+        $employee = $this->employee('0005', 'Permanent', '2025-01-01');
+
+        $change = app(EmploymentTypeChangeService::class)->save(
+            employee: $employee,
+            employmentType: 'End of Contract',
+            effectiveDate: '2026-10-01',
+            explanation: 'Contract period completed.',
+        );
+
+        $employee->refresh();
+
+        $this->assertSame('End of Contract', $employee->employment_type);
+        $this->assertSame('Permanent', $change->previous_type);
+        $this->assertTrue($employee->hasEndedEmployment());
+        $this->assertFalse(Employee::query()->activeEmployment()->whereKey($employee->id)->exists());
+        $this->assertTrue(Employee::query()->inactiveEmployment()->whereKey($employee->id)->exists());
+        $this->assertArrayHasKey('End of Contract', Employee::employmentTypeOptions());
+    }
+
+    public function test_resigned_and_other_ended_employment_types_are_inactive(): void
+    {
+        foreach (['Resigned', 'Terminated', 'End of Contract'] as $index => $employmentType) {
+            $employee = $this->employee(str_pad((string) (6 + $index), 4, '0', STR_PAD_LEFT), $employmentType, '2025-01-01');
+
+            $this->assertFalse(Employee::query()->activeEmployment()->whereKey($employee->id)->exists());
+            $this->assertTrue(Employee::query()->inactiveEmployment()->whereKey($employee->id)->exists());
+        }
+    }
+
     public function test_manual_employment_change_accepts_a_date_earlier_than_the_latest_change(): void
     {
         $employee = $this->employee('0001', 'Temporary', '2026-01-01');

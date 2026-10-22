@@ -17,6 +17,12 @@
 
         .fi-panel-hr .employee-details-page-shell {
             display: block;
+            background: #000;
+            color: #f8fafc;
+        }
+
+        .fi-panel-hr .fi-page:has(.employee-details-page-shell) .fi-page-content {
+            background: #000 !important;
         }
 
         .employee-record-header {
@@ -56,8 +62,8 @@
         .employee-details-page-shell .employee-account-status.is-missing { background: rgb(100 116 139 / .2); border-color: rgb(148 163 184 / .45); color: #cbd5e1; }
 
         .fi-panel-hr .employee-details-page-shell .fi-sc-tabs > .fi-tabs {
-            background: #101b31;
-            border: 1px solid #2f4e7e;
+            background: #000;
+            border: 1px solid #303030;
             border-radius: .5rem .5rem 0 0;
             gap: .25rem;
             margin-bottom: 0;
@@ -78,9 +84,13 @@
             color: #fff;
         }
 
+        .fi-panel-hr .employee-details-page-shell .fi-sc-tabs > .fi-tabs .fi-tabs-item:not(.fi-active) {
+            color: #cbd5e1;
+        }
+
         .fi-panel-hr .employee-details-page-shell .fi-sc-tabs > .fi-sc-tabs-tab.fi-active {
-            background: #151a24;
-            border: 1px solid #2f405e;
+            background: #000;
+            border: 1px solid #303030;
             border-radius: 0 0 .5rem .5rem;
             border-top: 0;
             min-width: 0;
@@ -96,7 +106,7 @@
 
         .fi-panel-hr .employee-details-page-shell .fi-sc-section .fi-section-header {
             background: transparent;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid #303030;
             padding: .65rem 0;
         }
 
@@ -110,8 +120,25 @@
             padding: 1rem 0 1.25rem;
         }
 
+        .fi-panel-hr .employee-details-page-shell :is(.fi-input-wrp, .fi-input, .fi-select-input) {
+            background: #000 !important;
+            border-color: #3f3f46 !important;
+            color: #f8fafc !important;
+            color-scheme: dark;
+        }
+
+        .fi-panel-hr .employee-details-page-shell :is(input, select, textarea)::placeholder {
+            color: #94a3b8;
+        }
+
+        .fi-panel-hr .employee-details-page-shell select option {
+            background: #000;
+            color: #f8fafc;
+        }
+
         .employee-details-page-shell :is(.employee-deductions-table, .employee-loans-table) {
-            border: 1px solid #334155;
+            background: #000;
+            border: 1px solid #303030;
             border-radius: .5rem;
             max-width: 100%;
         }
@@ -120,7 +147,7 @@
         .employee-details-page-shell .employee-loans-table table { min-width: 1120px; }
 
         .employee-details-page-shell :is(.employee-deductions-table, .employee-loans-table) th {
-            background: #132b4e;
+            background: #000;
             color: #bfdbfe;
             font-size: .72rem;
             font-weight: 700;
@@ -129,14 +156,15 @@
         }
 
         .employee-details-page-shell :is(.employee-deductions-table, .employee-loans-table) td {
-            border-bottom: 1px solid #334155 !important;
+            background: #000;
+            border-bottom: 1px solid #27272a !important;
             color: #e2e8f0;
             padding: .7rem .85rem !important;
             vertical-align: top;
         }
 
         .employee-details-page-shell :is(.employee-deductions-table, .employee-loans-table) tbody tr:nth-child(even) {
-            background: rgb(30 41 59 / .4);
+            background: #000;
         }
 
         .employee-details-save-actions {

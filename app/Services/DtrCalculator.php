@@ -72,7 +72,8 @@ class DtrCalculator
             : 0;
 
         $baseWorkMinutes = max(0, $scheduledMinutes - $late - $undertime);
-        $isSaturdaySchedule = str($scheduleType ?? '')->lower()->contains('saturday');
+        $isSaturdaySchedule = str($scheduleType ?? '')->lower()->contains('saturday')
+            || strcasecmp(trim((string) $scheduleType), 'WFH') === 0;
 
         $workMinutes = $isSaturdaySchedule
             ? $baseWorkMinutes

@@ -9,7 +9,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
-use App\Services\SaturdayWfhPolicyService;
+use App\Services\SaturdayWfhDtrService;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -189,7 +189,7 @@ class DtrManage extends Page
         $attendanceUnits = app(DtrAttendanceUnitService::class);
         $workDayUnits = $attendanceUnits->attendanceDays($workRecords);
         $absence = $attendanceUnits->absenceBreakdown($finalizedRecords);
-        $wfhDates = app(SaturdayWfhPolicyService::class)->completedWfhDates($employee, $period, $records);
+        $wfhCount = $finalizedRecords->where('entry_source', SaturdayWfhDtrService::SOURCE)->count();
         $leaveDayCount = $finalizedRecords
             ->filter(fn (DtrModel $r): bool => filled($r->leave_id)
                 || $r->entry_source === DtrDayPartService::SOURCE_LEAVE
@@ -205,11 +205,11 @@ class DtrManage extends Page
 
         return [
             'total_entries' => $records->count(),
-            'total_days_work' => (float) ($workDayUnits + $leaveDayCount + count($wfhDates) * 0.5),
+            'total_days_work' => (float) ($workDayUnits + $leaveDayCount),
             'absent_days' => $absence['weekday_days'],
             'saturday_absent_hours' => $absence['saturday_hours'],
-            'saturday_wfh_days' => count($wfhDates),
-            'credited_work_hrs' => (int) $finalizedRecords->sum('credited_work_hrs') + count($wfhDates) * 180,
+            'saturday_wfh_days' => $wfhCount,
+            'credited_work_hrs' => (int) $finalizedRecords->sum('credited_work_hrs'),
             'credited_overtime' => (int) $finalizedRecords->sum('credited_overtime'),
             'pending_ot_count' => $pendingOtCount,
             'late' => (int) $finalizedRecords->sum('late'),

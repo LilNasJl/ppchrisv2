@@ -141,12 +141,14 @@ class Dashboard extends Page
                 ->columnSpanFull(),
             Grid::make($this->getHeaderWidgetsColumns())
                 ->schema(fn (): array => $this->getWidgetsSchemaComponents([EmployeeStatusSummary::class]))
-                ->columnSpanFull(),
+                ->columnSpanFull()
+                ->extraAttributes(['class' => 'ppc-dashboard-employee-snapshot-cards']),
             View::make('filament.pages.partials.dashboard-shoutout-hall')
                 ->columnSpanFull(),
             Grid::make($this->getHeaderWidgetsColumns())
                 ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getEmployeeSnapshotChartWidgets()))
-                ->columnSpanFull(),
+                ->columnSpanFull()
+                ->extraAttributes(['class' => 'ppc-dashboard-employment-charts']),
             View::make('filament.pages.partials.employee-snapshot-header')
                 ->viewData([
                     'eyebrow' => 'Attendance Overview',
@@ -155,7 +157,8 @@ class Dashboard extends Page
                 ])
                 ->columnSpanFull(),
             Grid::make($this->getHeaderWidgetsColumns())
-                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getAttendanceLeaveWidgets())),
+                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getAttendanceLeaveWidgets()))
+                ->extraAttributes(['class' => 'ppc-dashboard-attendance-leave-widgets']),
             RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_END),
         ])->hidden(fn (): bool => empty($this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())));
     }

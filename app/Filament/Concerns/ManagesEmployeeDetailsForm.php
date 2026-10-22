@@ -171,7 +171,7 @@ trait ManagesEmployeeDetailsForm
             ->icon(Heroicon::ArrowsRightLeft)
             ->color('primary')
             ->modalHeading('Change Employment Type')
-            ->modalDescription('Select the new employment type and record when and why the change took effect.')
+            ->modalDescription('Select the new employment type and record when and why the change took effect. Resigned, terminated, end-of-contract, and other ended statuses move the employee to inactive records.')
             ->modalSubmitActionLabel('Save Change')
             ->fillForm(function (): array {
                 $latestChange = $this->employeeRecord?->employmentTypeChanges()->first();
@@ -189,6 +189,7 @@ trait ManagesEmployeeDetailsForm
                     ->label('Employment Type')
                     ->options(ModelsEmployee::employmentTypeOptions())
                     ->searchable()
+                    ->helperText('Ended employment statuses move the employee out of active employee lists and exclude them from new DTR imports.')
                     ->required(),
 
                 DatePicker::make('effective_date')

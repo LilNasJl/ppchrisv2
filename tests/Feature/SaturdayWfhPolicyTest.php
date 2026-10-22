@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Employee\Pages\Dtr as EmployeeDtr;
+use App\Filament\Employee\Widgets\StationDtrManageTable;
 use App\Filament\Pages\Dtr as HrDtr;
 use App\Filament\Pages\DtrManage;
 use App\Filament\Pages\SaturdayWfhPolicy as SaturdayWfhPolicyPage;
+use App\Filament\Widgets\DtrManageTable;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
@@ -15,12 +18,16 @@ use App\Models\Leave;
 use App\Models\PayrollPeriod;
 use App\Models\SaturdayOnSiteExemption;
 use App\Models\User;
+use App\Services\DtrAttendanceUnitService;
 use App\Services\Imports\DtrImportService;
 use App\Services\Imports\EmployeeVisibleDtrImportService;
 use App\Services\PayrollCalculator;
+use App\Services\SaturdayWfhDtrService;
 use App\Services\SaturdayWfhPolicyService;
 use Carbon\Carbon;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -198,7 +205,7 @@ class SaturdayWfhPolicyTest extends TestCase
         $result = app(DtrImportService::class)->importRows([$row], 'Stopped Saturday WFH');
 
         $this->assertSame(1, $result['successful'], json_encode($result));
-        $this->assertSame(180, Dtr::query()->sole()->absence_minutes);
+        $this->assertSame(180, Dtr::query()->whereDate('date_in', '2026-10-24')->sole()->absence_minutes);
     }
 
     public function test_hr_can_assign_multiple_employees_today_and_return_one_to_wfh_today(): void
@@ -269,7 +276,7 @@ class SaturdayWfhPolicyTest extends TestCase
     }
 
     #[DataProvider('importers')]
-    public function test_saturday_wfh_candidate_is_skipped_without_fabricating_a_dtr(string $importer): void
+    public function test_saturday_wfh_candidate_creates_an_editable_dtr(string $importer): void
     {
         app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
         Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
@@ -279,8 +286,9 @@ class SaturdayWfhPolicyTest extends TestCase
         $this->assertSame(0, $result['successful'], json_encode($result));
         $this->assertSame(1, $result['skipped'], json_encode($result));
         $this->assertStringContainsString('Saturday WFH', json_encode($result['notices']));
-        $this->assertSame(0, Dtr::query()->count());
-        $this->assertSame(0, EmployeeVisibleDtr::query()->count());
+        $this->assertSame(1, $result['wfh_created']);
+        $this->assertSame(1, Dtr::query()->count());
+        $this->assertSame(1, EmployeeVisibleDtr::query()->count());
         $this->assertEquals(0, app(PayrollCalculator::class)->row($this->employee, $this->period)['absent']);
 
         $page = new DtrManage;
@@ -292,6 +300,25 @@ class SaturdayWfhPolicyTest extends TestCase
         $this->assertSame(0, $summary['saturday_absent_hours']);
         $this->assertEquals(0.5, $summary['total_days_work']);
         $this->assertSame(180, $summary['credited_work_hrs']);
+
+        $record = Dtr::query()->sole();
+        $this->assertSame('2026-10-10', $record->date_in);
+        $this->assertSame('WFH', $record->schedule_type);
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, $record->entry_source);
+        $this->assertSame('08:00:00', $record->schedule_start);
+        $this->assertSame('11:00:00', $record->schedule_end);
+        $this->assertSame('08:00:00', $record->time_in);
+        $this->assertSame('11:00:00', $record->time_out);
+        $this->assertEquals(180, $record->credited_work_hrs);
+        $this->assertTrue($record->exists);
+
+        $master = User::query()->where('username', 'masteradmin')->firstOrFail();
+        $table = Livewire::actingAs($master)->test(DtrManageTable::class, [
+            'employeeId' => $this->employee->id,
+            'branchId' => $this->branch->id,
+            'periodId' => $this->period->id,
+        ]);
+        $this->assertSame('WFH', $table->instance()->getTableRecords()->first()->schedule_type);
     }
 
     #[DataProvider('importers')]
@@ -364,6 +391,189 @@ class SaturdayWfhPolicyTest extends TestCase
         $summary = $page->getSummaryMetrics();
         $this->assertSame(0, $summary['saturday_wfh_days']);
         $this->assertEquals(0.5, $summary['total_days_work']);
+        $this->assertSame(1, Dtr::query()->count());
+        $this->assertSame('Saturday', Dtr::query()->sole()->schedule_type);
+    }
+
+    #[DataProvider('importers')]
+    public function test_repeat_sync_does_not_duplicate_saturday_wfh(string $importer): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+
+        app($importer)->importRows([$this->candidate()], 'First Saturday sync');
+        $result = app($importer)->importRows([$this->candidate()], 'Repeat Saturday sync');
+
+        $this->assertSame(0, $result['wfh_created']);
+        $this->assertSame(1, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+        $this->assertSame(1, EmployeeVisibleDtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+    }
+
+    #[DataProvider('importers')]
+    public function test_later_actual_saturday_punch_supersedes_generated_wfh(string $importer): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        app($importer)->importRows([$this->candidate()], 'WFH before actual scan');
+
+        $actual = $this->candidate();
+        $actual['schedule_type'] = 'Saturday';
+        $actual['time_in'] = '08:00:00';
+        $actual['time_out'] = '11:00:00';
+        unset($actual['absence_candidate'], $actual['entry_source']);
+        $result = app($importer)->importRows([$actual], 'Late arriving Saturday scan');
+
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $this->assertSame(1, Dtr::query()->count());
+        $this->assertSame(1, EmployeeVisibleDtr::query()->count());
+        $this->assertSame('Saturday', Dtr::query()->sole()->schedule_type);
+        $this->assertSame(0, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+    }
+
+    public function test_locked_period_does_not_generate_saturday_wfh(): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        $this->period->update(['is_locked' => true]);
+
+        $this->assertSame(0, app(SaturdayWfhDtrService::class)->materializeScope($this->period->id, $this->branch->id));
+        $this->assertSame(0, Dtr::query()->count());
+    }
+
+    #[DataProvider('importers')]
+    public function test_locked_wfh_entry_is_not_replaced_by_later_device_punch(string $importer): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        app($importer)->importRows([$this->candidate()], 'Saturday WFH');
+        DB::table('dtrs')->update(['is_locked' => true]);
+        DB::table('employee_visible_dtrs')->update(['is_locked' => true]);
+
+        $actual = $this->candidate();
+        $actual['schedule_type'] = 'Saturday';
+        $actual['time_in'] = '08:00:00';
+        $actual['time_out'] = '11:00:00';
+        unset($actual['absence_candidate'], $actual['entry_source']);
+        $result = app($importer)->importRows([$actual], 'Saturday scan after lock');
+
+        $this->assertSame(0, $result['successful'], json_encode($result));
+        $this->assertSame(1, Dtr::query()->count());
+        $this->assertSame(1, EmployeeVisibleDtr::query()->count());
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, Dtr::query()->sole()->entry_source);
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, EmployeeVisibleDtr::query()->sole()->entry_source);
+    }
+
+    #[DataProvider('importers')]
+    public function test_weekday_sync_creates_wfh_for_all_eligible_branch_employees(string $importer): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-12 12:00:00', 'Asia/Manila'));
+        $second = Employee::query()->create([
+            'uid' => '0025', 'firstname' => 'Second', 'lastname' => 'Employee',
+            'branch_id' => $this->branch->id, 'fingerprint_id' => '654322',
+            'hired_date' => '2026-09-01', 'employment_type' => 'Permanent',
+            'rate_type' => 'monthly', 'monthly_rate' => 20800,
+        ]);
+        $daily = Employee::query()->create([
+            'uid' => '0026', 'firstname' => 'Daily', 'lastname' => 'Employee',
+            'branch_id' => $this->branch->id, 'fingerprint_id' => '654323',
+            'hired_date' => '2026-09-01', 'employment_type' => 'Permanent',
+            'rate_type' => 'daily', 'daily_rate' => 800,
+        ]);
+
+        $weekday = $this->candidate();
+        $weekday['date_in'] = '2026-10-12';
+        $weekday['date_out'] = '2026-10-12';
+        $weekday['time_in'] = '08:00:00';
+        $weekday['time_out'] = '18:00:00';
+        $weekday['schedule_type'] = 'Regular';
+        $weekday['schedule_end'] = '18:00:00';
+        $weekday['source_session_id'] = 'WEEKDAY-654321-20261012';
+        unset($weekday['absence_candidate'], $weekday['entry_source']);
+
+        $result = app($importer)->importRows([$weekday], 'Weekday sync');
+
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $this->assertSame(2, $result['wfh_created']);
+        $this->assertSame(2, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+        $this->assertSame(2, EmployeeVisibleDtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+        $this->assertEquals(0.5, app(DtrAttendanceUnitService::class)->attendanceDays(
+            Dtr::query()->where('employee_id', $second->id)->get()
+        ));
+        $this->assertSame(0, Dtr::query()->where('employee_id', $daily->id)->count());
+    }
+
+    public function test_hr_can_edit_wfh_times_without_losing_wfh_label(): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        app(DtrImportService::class)->importRows([$this->candidate()], 'Saturday WFH');
+
+        $master = User::query()->where('username', 'masteradmin')->firstOrFail();
+        Livewire::actingAs($master)->test(DtrManageTable::class, [
+            'employeeId' => $this->employee->id,
+            'branchId' => $this->branch->id,
+            'periodId' => $this->period->id,
+        ])->callTableAction('editDtr', Dtr::query()->sole(), [
+            'dtr_type' => 'regular',
+            'date_in' => '2026-10-10',
+            'time_in' => '08:15:00',
+            'date_out' => '2026-10-10',
+            'time_out' => '11:00:00',
+            'saturday_schedule_start' => '08:00:00',
+            'saturday_schedule_end' => '11:00:00',
+        ])->assertHasNoErrors();
+
+        $record = Dtr::query()->sole();
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, $record->entry_source);
+        $this->assertSame('WFH', $record->schedule_type);
+        $this->assertSame('08:15:00', $record->time_in);
+        $this->assertSame(15, (int) $record->late);
+        $this->assertSame(165, (int) $record->credited_work_hrs);
+        $this->assertSame('08:15:00', EmployeeVisibleDtr::query()->sole()->time_in);
+    }
+
+    public function test_employee_dtr_table_shows_saved_saturday_wfh(): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        app(DtrImportService::class)->importRows([$this->candidate()], 'Saturday WFH');
+        $user = User::withoutEvents(fn (): User => User::query()->create([
+            'name' => 'Saturday employee', 'username' => 'saturday-employee',
+            'email' => 'saturday@example.test', 'password' => 'password', 'role' => 'employee',
+        ]));
+        $this->employee->update(['user_id' => $user->id]);
+        Filament::setCurrentPanel(Filament::getPanel('employee'));
+
+        $page = Livewire::actingAs($user)->test(EmployeeDtr::class);
+        $this->assertSame('WFH', $page->instance()->getTableRecords()->first()->schedule_type);
+        $this->assertSame('WFH', $page->instance()->attendanceStatus($page->instance()->getTableRecords()->first()));
+        $page->assertSee('WFH')->assertSee('08:00 AM')->assertSee('11:00 AM');
+        $this->assertSame(1, Dtr::query()->count());
+    }
+
+    public function test_station_dtr_table_shows_saved_saturday_wfh(): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+        app(EmployeeVisibleDtrImportService::class)->importRows([$this->candidate()], 'Saturday WFH');
+        $user = User::withoutEvents(fn (): User => User::query()->create([
+            'name' => 'Station manager', 'username' => 'station-manager',
+            'email' => 'station-manager@example.test', 'password' => 'password', 'role' => 'employee',
+        ]));
+        $this->employee->update(['user_id' => $user->id]);
+        Filament::setCurrentPanel(Filament::getPanel('employee'));
+
+        $table = Livewire::actingAs($user)->test(StationDtrManageTable::class, [
+            'employeeId' => $this->employee->id,
+            'branchId' => $this->branch->id,
+            'periodId' => $this->period->id,
+        ]);
+        $record = $table->instance()->getTableRecords()->first();
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, $record->entry_source);
+        $this->assertSame('WFH', $record->schedule_type);
+        $this->assertTrue($record->exists);
+        $this->assertSame(1, EmployeeVisibleDtr::query()->count());
     }
 
     public function test_overtime_only_does_not_cancel_saturday_wfh_credit(): void

@@ -107,9 +107,13 @@
 
         /* Holiday Highlights Widget */
         .ppc-holiday-highlights {
-            background: var(--dashboard-surface);
+            --dashboard-surface: #000000;
+            --dashboard-muted: #94a3b8;
+            --dashboard-blue-strong: #93c5fd;
+            background: #000000;
             border: 1px solid var(--dashboard-border);
             border-radius: 10px;
+            color: #f8fafc;
             padding: 0.75rem 1rem;
             width: 100%;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
@@ -206,6 +210,11 @@
             transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
         }
 
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employee-snapshot-cards .fi-wi-stats-overview-stat,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-stats-overview-stat {
+            background: #000000 !important;
+        }
+
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat::before {
             background: var(--dashboard-blue);
             content: '';
@@ -278,6 +287,15 @@
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
             height: 100%;
             overflow: hidden;
+        }
+
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart > .fi-section,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart .fi-section-header,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart .fi-section-content,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart > .fi-section,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart .fi-section-header,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart .fi-section-content {
+            background: #000000 !important;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header {

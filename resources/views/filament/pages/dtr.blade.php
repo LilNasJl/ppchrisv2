@@ -939,6 +939,94 @@
                 color: rgb(100, 116, 139);
             }
         }
+
+        /* Keep DTR content surfaces black while leaving the gradient header unchanged. */
+        .dtr-workspace .dtr-filter-card,
+        .dtr-workspace .dtr-stat-card,
+        .dtr-workspace .table-card,
+        .dtr-workspace .table-card-header,
+        .dtr-workspace .dtr-table,
+        .dtr-workspace .dtr-table thead,
+        .dtr-workspace .dtr-table tbody,
+        .dtr-workspace .dtr-table tbody tr {
+            background: #000000 !important;
+        }
+
+        .dtr-workspace .dtr-filter-card,
+        .dtr-workspace .dtr-stat-card,
+        .dtr-workspace .table-card {
+            border-color: #303030;
+        }
+
+        .dtr-workspace .table-card-header {
+            border-bottom-color: #27272a;
+        }
+
+        .dtr-workspace .dtr-label,
+        .dtr-workspace .dtr-stat-value,
+        .dtr-workspace .emp-name,
+        .dtr-workspace .dtr-table tbody td {
+            color: #f8fafc;
+        }
+
+        .dtr-workspace .dtr-stat-label,
+        .dtr-workspace .dtr-stat-meta,
+        .dtr-workspace .dtr-table thead th,
+        .dtr-workspace .dtr-idx-text,
+        .dtr-workspace .emp-meta,
+        .dtr-workspace .dtr-text-plain,
+        .dtr-workspace .dtr-hours-sub,
+        .dtr-workspace .dtr-table td::before {
+            color: #94a3b8 !important;
+        }
+
+        .dtr-workspace .table-card-title {
+            color: #cbd5e1;
+        }
+
+        .dtr-workspace .dtr-table th,
+        .dtr-workspace .dtr-table td {
+            border-color: #27272a;
+        }
+
+        .dtr-workspace .dtr-table tbody tr {
+            border-color: #303030;
+        }
+
+        .dtr-workspace .dtr-table tbody tr:hover {
+            background: #171717 !important;
+        }
+
+        .dtr-workspace .dtr-input,
+        .dtr-workspace .dtr-select {
+            background: #000000 !important;
+            border-color: #3f3f46;
+            color: #f8fafc !important;
+            color-scheme: dark;
+        }
+
+        .dtr-workspace .dtr-input::placeholder {
+            color: #94a3b8;
+        }
+
+        .dtr-workspace .dtr-select option {
+            background: #000000;
+            color: #f8fafc;
+        }
+
+        .dtr-workspace .dtr-filter-card .dtr-btn.outline,
+        .dtr-workspace .dtr-cell-btn.outline {
+            background: #000000;
+            border-color: #3f3f46;
+            color: #e2e8f0;
+        }
+
+        .dtr-workspace .dtr-filter-card .dtr-btn.outline:hover,
+        .dtr-workspace .dtr-cell-btn.outline:hover {
+            background: #171717;
+            border-color: #52525b;
+            color: #ffffff;
+        }
     </style>
 
     <div class="dtr-workspace">
@@ -970,6 +1058,12 @@
                             <a href="{{ \App\Filament\Pages\SaturdayWfhPolicy::getUrl() }}" class="dtr-dropdown-item">
                                 <x-filament::icon icon="heroicon-o-calendar-days" class="dtr-btn-icon" />
                                 <span>Saturday WFH Policy</span>
+                            </a>
+                        @endif
+                        @if(\App\Filament\Pages\ClearDtrEntries::canAccess())
+                            <a href="{{ \App\Filament\Pages\ClearDtrEntries::getUrl() }}" class="dtr-dropdown-item">
+                                <x-filament::icon icon="heroicon-o-trash" class="dtr-btn-icon" />
+                                <span>Clear DTR Entries</span>
                             </a>
                         @endif
                     </div>

@@ -413,6 +413,86 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Black content surfaces, with the gradient page header left intact. */
+        .payroll-workspace .payroll-filter-card,
+        .payroll-workspace .table-wrapper,
+        .payroll-workspace .payroll-table,
+        .payroll-workspace .payroll-table thead,
+        .payroll-workspace .payroll-table tbody,
+        .payroll-workspace .payroll-table tbody tr {
+            background: #000000 !important;
+        }
+
+        .payroll-workspace .payroll-filter-card {
+            border-color: #303030;
+        }
+
+        .payroll-workspace .table-wrapper {
+            border-color: #303030;
+        }
+
+        .payroll-workspace .payroll-label,
+        .payroll-workspace .payroll-emp-name,
+        .payroll-workspace .payroll-table tbody td {
+            color: #f8fafc;
+        }
+
+        .payroll-workspace .payroll-table thead th,
+        .payroll-workspace .payroll-cell-muted,
+        .payroll-workspace .payroll-col-idx {
+            color: #94a3b8;
+        }
+
+        .payroll-workspace .payroll-table th,
+        .payroll-workspace .payroll-table td {
+            border-color: #27272a;
+        }
+
+        .payroll-workspace .payroll-table tbody tr:hover {
+            background: #171717 !important;
+        }
+
+        .payroll-workspace .payroll-table tbody td[colspan] {
+            color: #94a3b8 !important;
+        }
+
+        .payroll-workspace .payroll-input,
+        .payroll-workspace .payroll-select {
+            background: #000000 !important;
+            border-color: #3f3f46;
+            color: #f8fafc !important;
+            color-scheme: dark;
+        }
+
+        .payroll-workspace .payroll-input::placeholder {
+            color: #94a3b8;
+        }
+
+        .payroll-workspace .payroll-select option {
+            background: #000000;
+            color: #f8fafc;
+        }
+
+        .payroll-workspace .payroll-input:focus,
+        .payroll-workspace .payroll-select:focus {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+        }
+
+        .payroll-workspace .payroll-filter-card .payroll-btn.outline,
+        .payroll-workspace .payroll-table-btn.outline {
+            background: #000000;
+            border-color: #3f3f46;
+            color: #e2e8f0;
+        }
+
+        .payroll-workspace .payroll-filter-card .payroll-btn.outline:hover,
+        .payroll-workspace .payroll-table-btn.outline:hover {
+            background: #171717;
+            border-color: #52525b;
+            color: #ffffff;
+        }
     </style>
 
     <div class="payroll-workspace">

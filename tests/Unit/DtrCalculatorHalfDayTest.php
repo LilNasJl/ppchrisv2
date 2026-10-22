@@ -8,6 +8,23 @@ use Tests\TestCase;
 
 class DtrCalculatorHalfDayTest extends TestCase
 {
+    public function test_wfh_and_regular_saturday_keep_saturday_work_minutes(): void
+    {
+        foreach (['WFH', 'Regular Saturday'] as $scheduleType) {
+            $result = app(DtrCalculator::class)->calculate(
+                dateIn: '2026-10-10',
+                timeIn: '08:00:00',
+                dateOut: '2026-10-10',
+                timeOut: '11:00:00',
+                scheduleStart: '08:00:00',
+                scheduleEnd: '11:00:00',
+                scheduleType: $scheduleType,
+            );
+
+            $this->assertSame(180, $result['work_hrs']);
+        }
+    }
+
     public function test_morning_half_day_only_deducts_time_inside_the_morning_window(): void
     {
         $result = app(DtrCalculator::class)->calculate(

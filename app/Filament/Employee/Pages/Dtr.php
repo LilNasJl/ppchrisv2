@@ -11,6 +11,7 @@ use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrChangeRequestService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
+use App\Services\SaturdayWfhDtrService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -29,6 +30,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Override;
@@ -203,7 +205,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'Absent' => 'danger',
-                        'Leave' => 'info',
+                        'Leave', 'WFH' => 'info',
                         'For Approval' => 'warning',
                         'Overtime' => 'warning',
                         'Morning' => 'info',
@@ -295,7 +297,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->replace('_', ' ')->title()->toString() : '-')
                     ->color(fn (?string $state): string => match (str($state ?? '')->lower()->toString()) {
                         'regular', 'regular work' => 'gray',
-                        'saturday', 'sunday', 'rest_day', 'regular saturday' => 'info',
+                        'saturday', 'sunday', 'rest_day', 'regular saturday', 'wfh' => 'info',
                         'leave' => 'purple',
                         'overtime' => 'warning',
                         'absent', 'forgot to punch' => 'danger',
@@ -307,7 +309,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->label('Day Part')
                     ->badge()
                     ->placeholder('-')
-                    ->getStateUsing(fn ($record): string => $record instanceof \App\Models\Dtr
+                    ->getStateUsing(fn ($record): string => $record instanceof DtrModel
                         ? app(DtrAttendanceUnitService::class)->dayPartForRecord($record)
                         : (string) ($record->day_part ?? ''))
                     ->formatStateUsing(fn (?string $state): string => app(DtrDayPartService::class)->label($state))
@@ -322,7 +324,9 @@ class Dtr extends Page implements HasForms, HasTable
                 TextColumn::make('entry_source')
                     ->label('Source')
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->title()->toString() : 'System')
+                    ->formatStateUsing(fn ($state): string => $state === SaturdayWfhDtrService::SOURCE
+                        ? 'Saturday WFH policy'
+                        : (filled($state) ? str($state)->title()->toString() : 'System'))
                     ->color('gray')
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -445,7 +449,7 @@ class Dtr extends Page implements HasForms, HasTable
                         ->disabled(fn (DtrModel $record): bool => $this->isSelectedPeriodLocked() || (bool) $record->is_locked || (bool) $record->payrollPeriod?->is_locked)
                         ->modalHeading('Submit D.T.R Change Request')
                         ->modalIcon(Heroicon::DocumentPlus)
-                        ->modalDescription(fn (DtrModel $record): string => 'Request approval or correction for ' . (filled($record->date_in) ? Carbon::parse($record->date_in)->format('M d, Y') : 'this D.T.R entry'))
+                        ->modalDescription(fn (DtrModel $record): string => 'Request approval or correction for '.(filled($record->date_in) ? Carbon::parse($record->date_in)->format('M d, Y') : 'this D.T.R entry'))
                         ->modalSubmitActionLabel('Submit Request')
                         ->modalCancelActionLabel('Cancel')
                         ->modalWidth('2xl')
@@ -597,6 +601,12 @@ class Dtr extends Page implements HasForms, HasTable
                                 ->columnSpanFull(),
                         ])
                         ->action(function (DtrModel $record, array $data): void {
+                            if (! $record->exists) {
+                                Notification::make()->title('D.T.R entry not found')->danger()->send();
+
+                                return;
+                            }
+
                             if ($this->isSelectedPeriodLocked() || (bool) $record->is_locked || (bool) $record->payrollPeriod?->is_locked || $record->isPayrollPeriodLocked()) {
                                 Notification::make()
                                     ->title('Payroll Period Locked')
@@ -610,6 +620,7 @@ class Dtr extends Page implements HasForms, HasTable
                             $employee = $this->employee;
                             if (! $employee) {
                                 Notification::make()->title('Employee record not found')->danger()->send();
+
                                 return;
                             }
 
@@ -633,11 +644,11 @@ class Dtr extends Page implements HasForms, HasTable
                             }
                         }),
                 ])
-                ->icon(Heroicon::EllipsisVertical)
-                ->iconButton()
-                ->label('Action')
-                ->tooltip('Actions')
-                ->color('gray'),
+                    ->icon(Heroicon::EllipsisVertical)
+                    ->iconButton()
+                    ->label('Action')
+                    ->tooltip('Actions')
+                    ->color('gray'),
             ])
             ->actionsColumnLabel('Action')
             ->recordUrl(null)
@@ -745,6 +756,10 @@ class Dtr extends Page implements HasForms, HasTable
 
     public function attendanceStatus(DtrModel $record): string
     {
+        if ($record->entry_source === SaturdayWfhDtrService::SOURCE) {
+            return 'WFH';
+        }
+
         if ($record->requiresAttendanceApproval()) {
             return 'For Approval';
         }
@@ -769,7 +784,7 @@ class Dtr extends Page implements HasForms, HasTable
     }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Collection<int, PayrollPeriod>
+     * @return Collection<int, PayrollPeriod>
      */
     public function payrollPeriods()
     {

@@ -81,7 +81,7 @@ class SaturdayWfhPolicyService
             ->all();
     }
 
-    /** Approved no-punch Saturdays are HRIS attendance credit, not biometric DTR rows. */
+    /** Approved no-punch Saturdays become HRIS-created WFH DTR entries, not biometric rows. */
     public function completedWfhDates(Employee $employee, PayrollPeriod $period, Collection $records): array
     {
         $start = Schema::hasTable('saturday_wfh_policy_periods')

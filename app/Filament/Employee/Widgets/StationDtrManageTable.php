@@ -25,7 +25,6 @@ class StationDtrManageTable extends DtrManageTable
     public function table(Table $table): Table
     {
         return parent::table($table)
-            ->query(fn (): Builder => $this->getDtrQuery())
             ->headerActions([
                 ActionGroup::make([
                     Action::make('dtrOverview')

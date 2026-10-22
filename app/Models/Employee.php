@@ -29,6 +29,8 @@ class Employee extends Model
         'Resigned',
         'Terminated',
         'Force Resigned',
+        'End of Contract',
+        'Contract Ended',
         'Death of Employee',
         'Death Employee',
     ];
@@ -39,6 +41,7 @@ class Employee extends Model
         'Temporary',
         'Coterminous',
         'Contractual',
+        'End of Contract',
         'Casual',
         'Job Order',
         'Contract of Service',

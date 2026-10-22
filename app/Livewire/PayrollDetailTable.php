@@ -4,12 +4,14 @@ namespace App\Livewire;
 
 use App\Filament\Pages\EmployeePayroll;
 use App\Filament\Pages\OvertimeManagement;
+use App\Filament\Pages\PayrollByBranch;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollSnapshot;
+use App\Services\EmployeeDeductionService;
 use App\Services\OvertimeApprovalService;
 use App\Services\PayrollCalculator;
 use Filament\Actions\Action;
@@ -283,11 +285,11 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('uniform', 'Uniform'),
                 $this->moneyColumn('other_deductions', 'Other Deductions'),
                 $this->moneyColumn('loan_payment', 'Loan Payment'),
-                $this->moneyColumn('sss_loan', 'SSS Loan'),
-                $this->moneyColumn('sss_ee', 'SSS EE'),
-                $this->moneyColumn('hdmf_loan', 'HDMF Loan'),
-                $this->moneyColumn('hdmf_ee', 'HDMF EE'),
-                $this->moneyColumn('phic_ee', 'PHIC EE'),
+                $this->remittanceColumn('sss_loan', 'SSS Loan'),
+                $this->remittanceColumn('sss_ee', 'SSS EE'),
+                $this->remittanceColumn('hdmf_loan', 'HDMF Loan'),
+                $this->remittanceColumn('hdmf_ee', 'HDMF EE'),
+                $this->remittanceColumn('phic_ee', 'PHIC EE'),
                 $this->moneyColumn('total_deductions', 'Total Deductions'),
                 $this->moneyColumn('net_pay', 'Net Pay'),
                 $this->textColumn('signature', 'Signature'),
@@ -814,6 +816,45 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->formatStateUsing(fn (mixed $state): string => $this->money($state))
             ->alignEnd()
             ->visible(fn (): bool => $this->isColumnVisible($key)), $key);
+    }
+
+    protected function remittanceColumn(string $key, string $label): Column
+    {
+        return $this->totalizeColumn(TextInputColumn::make($key)
+            ->label($label)
+            ->type('number')
+            ->step('0.01')
+            ->rules(['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2'])
+            ->getStateUsing(fn (PayrollPeriodEmployeeAdjustment $record): string => number_format((float) $this->rowValue($record, $key), 2, '.', ''))
+            ->disabled(fn (): bool => $this->isLocked() || ! PayrollByBranch::canAccess())
+            ->updateStateUsing(fn (PayrollPeriodEmployeeAdjustment $record, mixed $state): string => $this->saveRemittance($record, $key, $state))
+            ->afterStateUpdated(function (): void {
+                $this->invalidateRowCaches();
+                $this->dispatch('payroll-adjustment-updated');
+            })
+            ->tooltip('Saved to employee Deductions & Benefits for future open payroll periods.')
+            ->alignEnd()
+            ->visible(fn (): bool => $this->isColumnVisible($key)), $key);
+    }
+
+    protected function saveRemittance(PayrollPeriodEmployeeAdjustment $record, string $key, mixed $state): string
+    {
+        abort_unless(PayrollByBranch::canAccess(), 403);
+        abort_unless(
+            (int) $record->payroll_period_id === (int) $this->periodId
+                && $this->includedEmployeeIds()->contains((int) $record->employee_id)
+                && $record->employee !== null,
+            403,
+        );
+
+        $employeeDeduction = app(EmployeeDeductionService::class)->updatePermanentRemittance(
+            $this->period(),
+            $record->employee,
+            PayrollCalculator::DEFAULT_DEDUCTION_TITLES[$key],
+            $state,
+        );
+
+        return (string) $employeeDeduction->amount;
     }
 
     protected function numberColumn(string $key, string $label): TextColumn

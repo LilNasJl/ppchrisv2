@@ -261,7 +261,7 @@ class DtrAttendanceUnitService
             ->replace([' ', '_', '-'], '')
             ->toString();
 
-        return $scheduleType === 'saturday';
+        return in_array($scheduleType, ['saturday', 'wfh'], true);
     }
 
     protected function isShift(Dtr $record): bool

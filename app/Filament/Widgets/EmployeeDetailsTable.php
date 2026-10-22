@@ -13,6 +13,9 @@ use App\Models\EmployeeDeduction;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
@@ -573,7 +576,7 @@ class EmployeeDetailsTable extends TableWidget
             ->recordClasses(fn (User $record): ?string => $record->employee?->hasEndedEmployment()
                 ? 'employee-employment-ended'
                 : null)
-            ->recordUrl(fn (User $record): string => ViewEmployeeDetails::getUrl([
+            ->recordUrl(fn (User $record): ?string => $record->trashed() ? null : ViewEmployeeDetails::getUrl([
                 'employeeId' => $record->employee?->publicKey(),
                 'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
             ]))
@@ -649,23 +652,50 @@ class EmployeeDetailsTable extends TableWidget
                     Action::make('viewEmployeeDetails')
                         ->label('View')
                         ->icon(Heroicon::Eye)
+                        ->hidden(fn (User $record): bool => $record->trashed())
                         ->url(fn (User $record): string => ViewEmployeeDetails::getUrl([
                             'employeeId' => $record->employee?->publicKey(),
                             'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
                         ])),
 
+                    Action::make('accountHistory')
+                        ->label('Account History')
+                        ->icon(Heroicon::Clock)
+                        ->modalHeading(fn (User $record): string => ($record->employee?->full_name ?? 'Employee').' Account History')
+                        ->modalSubmitAction(false)
+                        ->modalContent(fn (User $record) => view('filament.resources.users.partials.account-history', [
+                            'histories' => $record->accountStatusHistories()
+                                ->with('changedBy')
+                                ->get(),
+                        ])),
+
                     Action::make('editEmployeeDetails')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
+                        ->hidden(fn (User $record): bool => $record->trashed())
                         ->url(fn (User $record): string => EditEmployeeDetails::getUrl([
                             'employeeId' => $record->employee?->publicKey(),
                             'returnUrl' => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()),
                         ])),
 
+                    Impersonate::make('impersonateEmployee')
+                        ->label('Impersonate')
+                        ->guard('web')
+                        ->redirectTo(url('/employee'))
+                        ->backTo(fn (): string => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()))
+                        ->withoutSpa()
+                        ->hidden(fn (User $record): bool => ! auth()->user()?->can('Impersonate:Employee')
+                            || (bool) $record->is_disabled
+                            || $record->trashed()
+                            || ! $record->employee
+                            || $record->employee->trashed()
+                            || $record->employee->hasEndedEmployment()),
+
                     Action::make('toggleAccountStatus')
                         ->label(fn (User $record): string => $record->is_disabled ? 'Enable Account' : 'Disable Account')
                         ->icon(fn (User $record): Heroicon => $record->is_disabled ? Heroicon::CheckCircle : Heroicon::NoSymbol)
                         ->color(fn (User $record): string => $record->is_disabled ? 'success' : 'danger')
+                        ->hidden(fn (User $record): bool => $record->trashed())
                         ->requiresConfirmation()
                         ->modalHeading(fn (User $record): string => $record->is_disabled ? 'Enable employee account?' : 'Disable employee account?')
                         ->modalDescription('Please add remarks for this account status change. This will be saved in the account history.')
@@ -697,29 +727,22 @@ class EmployeeDetailsTable extends TableWidget
                                 ->send();
                         }),
 
-                    Action::make('accountHistory')
-                        ->label('Account History')
-                        ->icon(Heroicon::Clock)
-                        ->modalHeading(fn (User $record): string => ($record->employee?->full_name ?? 'Employee').' Account History')
-                        ->modalSubmitAction(false)
-                        ->modalContent(fn (User $record) => view('filament.resources.users.partials.account-history', [
-                            'histories' => $record->accountStatusHistories()
-                                ->with('changedBy')
-                                ->get(),
-                        ])),
+                    DeleteAction::make()
+                        ->authorize(fn (User $record): bool => auth()->user()?->can('delete', $record) ?? false)
+                        ->modalHeading('Delete employee account?')
+                        ->modalDescription('The employee and account will move to trash. You can restore them from the Trashed filter.')
+                        ->successNotificationTitle('Employee account moved to trash'),
 
-                    Impersonate::make('impersonateEmployee')
-                        ->label('Impersonate')
-                        ->guard('web')
-                        ->redirectTo(url('/employee'))
-                        ->backTo(fn (): string => $this->tableReturnUrl($this->returnPageUrl ?: EmployeeDetails::getUrl()))
-                        ->withoutSpa()
-                        ->hidden(fn (User $record): bool => ! auth()->user()?->can('Impersonate:Employee')
-                            || (bool) $record->is_disabled
-                            || $record->trashed()
-                            || ! $record->employee
-                            || $record->employee->trashed()
-                            || $record->employee->hasEndedEmployment()),
+                    RestoreAction::make()
+                        ->authorize(fn (User $record): bool => auth()->user()?->can('restore', $record) ?? false)
+                        ->successNotificationTitle('Employee account restored'),
+
+                    ForceDeleteAction::make()
+                        ->authorize(fn (User $record): bool => auth()->user()?->can('forceDelete', $record) ?? false)
+                        ->modalHeading('Permanently delete employee account?')
+                        ->modalDescription('This permanently deletes the employee account and related employee record. This cannot be undone.')
+                        ->successNotificationTitle('Employee account permanently deleted'),
+
                 ])
                     ->icon(Heroicon::EllipsisHorizontal),
             ]);

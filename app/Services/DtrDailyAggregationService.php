@@ -223,7 +223,7 @@ class DtrDailyAggregationService
         return [
             'date' => $dutyDate,
             'day_part' => $this->dayPartService->normalize($first->day_part),
-            'day_count' => preg_match('/^(brkn[12]|brokenshift[12]|saturday)$/', preg_replace('/[^a-z0-9]/', '', strtolower((string) $first->schedule_type))) ? 0.5 : 1.0,
+            'day_count' => preg_match('/^(brkn[12]|brokenshift[12]|saturday|wfh)$/', preg_replace('/[^a-z0-9]/', '', strtolower((string) $first->schedule_type))) ? 0.5 : 1.0,
             'schedule_start' => $first->schedule_start,
             'schedule_end' => $first->schedule_end,
             'first_time_in' => $first->time_in,
@@ -595,7 +595,7 @@ class DtrDailyAggregationService
     {
         $type = preg_replace('/[^a-z0-9]/', '', strtolower((string) $record->schedule_type));
 
-        return (bool) preg_match('/^(shift[123]|brkn[12]|brokenshift[12]|saturday)$/', $type)
+        return (bool) preg_match('/^(shift[123]|brkn[12]|brokenshift[12]|saturday|wfh)$/', $type)
             && filled($record->schedule_start) && filled($record->schedule_end);
     }
 

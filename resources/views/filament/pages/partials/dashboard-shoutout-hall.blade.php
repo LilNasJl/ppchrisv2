@@ -10,12 +10,12 @@
 
 <style>
     .ppc-dashboard-shoutout {
-        --shoutout-surface: var(--dashboard-surface, #ffffff);
-        --shoutout-muted: var(--dashboard-muted, #64748b);
+        --shoutout-surface: #000000;
+        --shoutout-muted: #94a3b8;
         --shoutout-border: var(--dashboard-border, #e2e8f0);
         --shoutout-blue: var(--dashboard-blue, #2563eb);
         --shoutout-blue-soft: var(--dashboard-blue-soft, #eff6ff);
-        --shoutout-text: var(--dashboard-text, #0f172a);
+        --shoutout-text: #f8fafc;
         background: var(--shoutout-surface);
         border: 1px solid var(--shoutout-border);
         border-radius: 10px;
@@ -24,12 +24,12 @@
     }
 
     .dark .ppc-dashboard-shoutout {
-        --shoutout-surface: var(--dashboard-surface, #1e293b);
-        --shoutout-muted: var(--dashboard-muted, #94a3b8);
+        --shoutout-surface: #000000;
+        --shoutout-muted: #94a3b8;
         --shoutout-border: var(--dashboard-border, #334155);
         --shoutout-blue: var(--dashboard-blue, #60a5fa);
         --shoutout-blue-soft: var(--dashboard-blue-soft, rgba(30, 64, 175, 0.2));
-        --shoutout-text: var(--dashboard-text, #f8fafc);
+        --shoutout-text: #f8fafc;
     }
 
     .ppc-dashboard-shoutout-header {
@@ -133,7 +133,7 @@
     }
 
     .dark .ppc-dashboard-shoutout-message {
-        background: rgba(15, 23, 42, 0.5);
+        background: #000000;
     }
 
     .ppc-dashboard-shoutout-sent-at {

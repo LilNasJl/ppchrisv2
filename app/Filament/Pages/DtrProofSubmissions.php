@@ -27,7 +27,7 @@ class DtrProofSubmissions extends Page implements HasTable
     }
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.dtr-proof-submissions';
 
     protected static bool $shouldRegisterNavigation = false;
 

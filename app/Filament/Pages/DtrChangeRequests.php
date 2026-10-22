@@ -41,7 +41,7 @@ class DtrChangeRequests extends Page implements HasTable
     use HasTabs;
     use InteractsWithTable;
 
-    protected string $view = 'filament-panels::pages.page';
+    protected string $view = 'filament.pages.dtr-change-requests';
 
     protected static bool $shouldRegisterNavigation = false;
 

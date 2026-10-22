@@ -16,6 +16,7 @@ use App\Services\DtrSynchronizationService;
 use App\Services\HolidayEntitlementService;
 use App\Services\OnFieldDtrService;
 use App\Services\OvertimeApprovalService;
+use App\Services\SaturdayWfhDtrService;
 use App\Services\Shift3PremiumService;
 use App\Support\HrDatabaseNotification;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
@@ -68,6 +69,10 @@ class DtrManageTable extends BaseWidget
                     ->label('Status')
                     ->badge()
                     ->getStateUsing(function (ModelsDtr $record): string {
+                        if ($record->entry_source === SaturdayWfhDtrService::SOURCE) {
+                            return 'WFH';
+                        }
+
                         if ($record->requiresAttendanceApproval()) {
                             return 'For Approval';
                         }
@@ -88,7 +93,7 @@ class DtrManageTable extends BaseWidget
                         };
                     })
                     ->color(fn (string $state): string => match ($state) {
-                        'Leave' => 'info',
+                        'Leave', 'WFH' => 'info',
                         'Absent' => 'danger',
                         'For Approval', 'Review Required' => 'warning',
                         default => 'success',
@@ -171,7 +176,7 @@ class DtrManageTable extends BaseWidget
                     ->badge()
                     ->placeholder('-')
                     ->color(fn (?string $state): string => match ($state) {
-                        'Saturday', 'Regular Saturday' => 'info',
+                        'Saturday', 'Regular Saturday', 'WFH' => 'info',
                         'Leave' => 'purple',
                         'Overtime' => 'warning',
                         'Forgot to Punch', 'Absent' => 'danger',
@@ -673,6 +678,20 @@ class DtrManageTable extends BaseWidget
 
         $dtrData = $this->buildDtrData($data);
 
+        if ($record->entry_source === SaturdayWfhDtrService::SOURCE) {
+            if ($dtrData['date_in'] !== $record->date_in || ($data['dtr_type'] ?? 'regular') !== 'regular') {
+                Notification::make()->title('Unable to update WFH entry')
+                    ->body('Keep the assigned Saturday and regular D.T.R type. The time in and out may be edited.')
+                    ->danger()->send();
+
+                return false;
+            }
+
+            $dtrData['schedule_type'] = 'WFH';
+            $dtrData['entry_source'] = SaturdayWfhDtrService::SOURCE;
+            $dtrData['day_part'] = DtrDayPartService::WHOLE_DAY;
+        }
+
         if ($this->hasConflictingDtrEntry($dtrData, $record->id)) {
             Notification::make()
                 ->title('Unable to update D.T.R record')
@@ -1074,7 +1093,7 @@ class DtrManageTable extends BaseWidget
 
     protected function getEditFormData(ModelsDtr $record): array
     {
-        $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday'], true)
+        $usesSaturdaySchedule = in_array($record->schedule_type, ['Saturday', 'Regular Saturday', 'WFH'], true)
             && $this->usesSaturdaySchedule($record->date_in);
         $dayPart = app(DtrAttendanceUnitService::class)->dayPartForRecord($record);
 

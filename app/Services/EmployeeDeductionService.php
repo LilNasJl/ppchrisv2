@@ -5,10 +5,61 @@ namespace App\Services;
 use App\Models\Deduction;
 use App\Models\Employee;
 use App\Models\EmployeeDeduction;
+use App\Models\PayrollPeriod;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class EmployeeDeductionService
 {
+    public function updatePermanentRemittance(
+        PayrollPeriod $period,
+        Employee $employee,
+        string $title,
+        mixed $amount,
+    ): EmployeeDeduction {
+        abort_unless(in_array($title, Deduction::REMITTANCE_TITLES, true), 403);
+
+        $validated = Validator::make(
+            ['amount' => $amount],
+            ['amount' => ['required', 'numeric', 'min:0', 'max:99999999.99', 'decimal:0,2']],
+        )->validate();
+
+        return DB::transaction(function () use ($period, $employee, $title, $validated): EmployeeDeduction {
+            $currentPeriod = PayrollPeriod::query()->lockForUpdate()->findOrFail($period->id);
+
+            if ($currentPeriod->is_locked) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Unlock this payroll period before changing employee deductions.',
+                ]);
+            }
+
+            $deduction = Deduction::query()
+                ->where('title', $title)
+                ->where('category', Deduction::CATEGORY_REMITTANCE)
+                ->first();
+
+            if (! $deduction) {
+                throw ValidationException::withMessages([
+                    'amount' => "The {$title} deduction is not configured.",
+                ]);
+            }
+
+            $employeeDeduction = $this->ensureEmployeeDeduction($employee, $deduction);
+            $employeeDeduction->forceFill([
+                'amount' => $validated['amount'],
+                'term_type' => Deduction::TERM_PERMANENT,
+                'term_periods' => null,
+                'remaining_terms' => null,
+                'active' => true,
+                'completed_at' => null,
+            ])->save();
+
+            return $employeeDeduction;
+        });
+    }
+
     public function defaultDeductions(): Collection
     {
         return Deduction::query()

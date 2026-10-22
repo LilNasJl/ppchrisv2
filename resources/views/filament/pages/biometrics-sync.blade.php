@@ -182,20 +182,20 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
+            background: #000000;
+            border: 1px solid #303030;
             border-radius: 0.875rem;
             padding: 1.15rem 1.25rem;
             text-decoration: none;
-            color: inherit;
+            color: #f8fafc;
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
             transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
             overflow: hidden;
         }
 
         .dark .bio-card {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #303030;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
         }
 
@@ -310,7 +310,7 @@
         .bio-device-name {
             font-size: 0.9375rem;
             font-weight: 700;
-            color: #0f172a;
+            color: #f8fafc;
             margin: 0;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -325,7 +325,7 @@
         .bio-device-code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             font-size: 0.725rem;
-            color: #64748b;
+            color: #94a3b8;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -398,9 +398,9 @@
             padding: 0.25rem 0.6rem;
             border-radius: 0.45rem;
             font-size: 0.725rem;
-            color: #475569;
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
+            color: #cbd5e1;
+            background: #111111;
+            border: 1px solid #303030;
             margin-bottom: 0.85rem;
             width: fit-content;
             max-width: 100%;
@@ -408,14 +408,14 @@
 
         .dark .bio-firmware-pill {
             color: #cbd5e1;
-            background: #1e293b;
-            border-color: #334155;
+            background: #111111;
+            border-color: #303030;
         }
 
         .bio-firmware-icon {
             width: 0.85rem;
             height: 0.85rem;
-            color: #64748b;
+            color: #94a3b8;
         }
 
         .dark .bio-firmware-icon {
@@ -442,14 +442,14 @@
             flex-direction: column;
             gap: 0.65rem;
             padding: 0.75rem 0;
-            border-top: 1px solid #f1f5f9;
-            border-bottom: 1px solid #f1f5f9;
+            border-top: 1px solid #27272a;
+            border-bottom: 1px solid #27272a;
             margin-bottom: 0.75rem;
         }
 
         .dark .bio-metrics {
-            border-top-color: #1e293b;
-            border-bottom-color: #1e293b;
+            border-top-color: #27272a;
+            border-bottom-color: #27272a;
         }
 
         .bio-metric-item {
@@ -464,7 +464,7 @@
             display: inline-flex;
             align-items: center;
             gap: 0.3rem;
-            color: #64748b;
+            color: #94a3b8;
             font-weight: 600;
             flex-shrink: 0;
         }
@@ -485,7 +485,7 @@
 
         .bio-metric-val {
             font-weight: 600;
-            color: #1e293b;
+            color: #f1f5f9;
             font-size: 0.75rem;
         }
 
@@ -506,7 +506,7 @@
         }
 
         .dark .bio-metric-sub {
-            color: #64748b;
+            color: #94a3b8;
         }
 
         /* Sync Status Pill */

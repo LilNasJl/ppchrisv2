@@ -11,7 +11,32 @@
         .wfh-status.is-disabled { background: #7f1d1d; border-color: #f87171; color: #fff1f2; }
         .wfh-status-dot { width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
         .wfh-header-actions { display: flex; align-items: center; gap: .6rem; }
-        .wfh-card { border: 1px solid #334155; border-radius: .8rem; padding: 1.2rem 1.4rem; background: #111827; color: #f8fafc; }
+        .wfh-card { border: 1px solid #303030; border-radius: .8rem; padding: 1.2rem 1.4rem; background: #000000; color: #f8fafc; }
+        .wfh-workspace .fi-ta-ctn,
+        .wfh-workspace .fi-ta-header,
+        .wfh-workspace .fi-ta-header-toolbar,
+        .wfh-workspace .fi-ta-content,
+        .wfh-workspace .fi-ta-table,
+        .wfh-workspace .fi-ta-table thead,
+        .wfh-workspace .fi-ta-table tbody,
+        .wfh-workspace .fi-ta-table tbody tr,
+        .wfh-workspace .fi-ta-footer,
+        .wfh-workspace .fi-ta-pagination,
+        .wfh-workspace .fi-input-wrp,
+        .wfh-workspace .fi-input,
+        .wfh-workspace .fi-select-input { background: #000000 !important; }
+        .wfh-workspace .fi-ta-ctn,
+        .wfh-workspace .fi-ta-table th,
+        .wfh-workspace .fi-ta-table td { border-color: #303030 !important; }
+        .wfh-workspace .fi-ta-table thead th,
+        .wfh-workspace .fi-ta-empty-state-description { color: #94a3b8 !important; }
+        .wfh-workspace .fi-ta-table tbody td,
+        .wfh-workspace .fi-ta-empty-state-heading { color: #f8fafc; }
+        .wfh-workspace .fi-ta-table tbody tr:hover,
+        .wfh-workspace .fi-ta-table tbody tr:hover td { background: #171717 !important; }
+        .wfh-workspace .fi-input-wrp input,
+        .wfh-workspace .fi-input,
+        .wfh-workspace .fi-select-input { color: #f8fafc !important; color-scheme: dark; }
         .wfh-table-heading { margin: 0 0 .8rem; font-size: 1.05rem; font-weight: 750; }
         @media (max-width: 640px) { .wfh-header, .wfh-card { padding: 1rem; } .wfh-title { font-size: 1.35rem; } }
     </style>
