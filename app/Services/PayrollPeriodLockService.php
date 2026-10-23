@@ -7,9 +7,11 @@ use App\Models\EmployeeDeduction;
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanPayment;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollSnapshot;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Throwable;
 
@@ -61,6 +63,7 @@ class PayrollPeriodLockService
 
             if (blank($period->loan_payments_processed_at)) {
                 $this->processLoanPayments($period);
+                $this->assertLoanPaymentsMatchSnapshot($period);
 
                 $period->forceFill([
                     'loan_payments_processed_at' => now(),
@@ -73,6 +76,20 @@ class PayrollPeriodLockService
     {
         DB::transaction(function () use ($period): void {
             $period->setRawAttributes(PayrollPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail()->getAttributes(), true);
+
+            $laterPosted = EmployeeLoanPayment::query()
+                ->where('payroll_period_id', $period->id)
+                ->where('status', EmployeeLoanPayment::STATUS_POSTED)
+                ->whereHas('loan.payments', fn ($query) => $query
+                    ->where('status', EmployeeLoanPayment::STATUS_POSTED)
+                    ->whereHas('payrollPeriod', fn ($periodQuery) => $periodQuery
+                        ->whereDate('date_start', '>', $period->date_start)))
+                ->exists();
+            if ($laterPosted) {
+                throw ValidationException::withMessages([
+                    'is_locked' => 'Unlock later payroll periods with posted payments for the same loan first.',
+                ]);
+            }
 
             $this->rollbackLoanPayments($period);
 
@@ -197,7 +214,7 @@ class PayrollPeriodLockService
         }
 
         EmployeeLoan::query()
-            ->with('amortizationStartPayrollPeriod')
+            ->with(['amortizationStartPayrollPeriod', 'adjustments.effectivePayrollPeriod'])
             ->whereIn('employee_id', $employeeIds)
             ->where('status', EmployeeLoan::STATUS_ACTIVE)
             ->where('payment_amount', '>', 0)
@@ -215,7 +232,7 @@ class PayrollPeriodLockService
                     return;
                 }
 
-                $balance = $loan->balance_amount;
+                $balance = $loan->balanceForPeriod($period);
 
                 if ($balance <= 0) {
                     $loan->forceFill(['status' => EmployeeLoan::STATUS_PAID])->save();
@@ -248,9 +265,39 @@ class PayrollPeriodLockService
 
                 $loan->forceFill([
                     'paid_amount' => round((float) $loan->paid_amount + $payment, 2),
-                    'status' => $balanceAfter <= 0 ? EmployeeLoan::STATUS_PAID : EmployeeLoan::STATUS_ACTIVE,
+                    'status' => round($loan->total_amount - (float) $loan->paid_amount - $payment, 2) <= 0
+                        ? EmployeeLoan::STATUS_PAID : EmployeeLoan::STATUS_ACTIVE,
                 ])->save();
             });
+    }
+
+    protected function assertLoanPaymentsMatchSnapshot(PayrollPeriod $period): void
+    {
+        $snapshots = PayrollSnapshot::query()
+            ->where('payroll_period_id', $period->id)
+            ->get(['employee_id', 'data']);
+
+        if ($snapshots->isEmpty()) {
+            return;
+        }
+
+        $posted = DB::table('employee_loan_payments')
+            ->join('employee_loans', 'employee_loans.id', '=', 'employee_loan_payments.employee_loan_id')
+            ->where('employee_loan_payments.payroll_period_id', $period->id)
+            ->where('employee_loan_payments.status', EmployeeLoanPayment::STATUS_POSTED)
+            ->select('employee_loans.employee_id', DB::raw('SUM(employee_loan_payments.amount) as amount'))
+            ->groupBy('employee_loans.employee_id')
+            ->pluck('amount', 'employee_id');
+
+        foreach ($snapshots as $snapshot) {
+            $expected = (int) round((float) ($snapshot->data['loan_payment'] ?? 0) * 100);
+            $actual = (int) round((float) ($posted[$snapshot->employee_id] ?? 0) * 100);
+            if ($expected !== $actual) {
+                throw ValidationException::withMessages([
+                    'loan_payment' => 'Payroll loan deduction does not match posted loan payments. The period was not locked.',
+                ]);
+            }
+        }
     }
 
     protected function rollbackLoanPayments(PayrollPeriod $period): void

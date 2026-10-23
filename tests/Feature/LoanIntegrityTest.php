@@ -7,10 +7,13 @@ use App\Livewire\LoanLedgerTable;
 use App\Livewire\LoanRequestManagementTable;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
+use App\Models\EmployeeLoanAdjustment;
 use App\Models\EmployeeLoanPayment;
 use App\Models\PayrollPeriod;
+use App\Models\PayrollSnapshot;
 use App\Models\User;
 use App\Services\EmployeeLoanRequestService;
+use App\Services\LoanAdjustmentService;
 use App\Services\LoanTermsService;
 use App\Services\PayrollCalculator;
 use App\Services\PayrollPeriodLockService;
@@ -62,6 +65,190 @@ class LoanIntegrityTest extends TestCase
         $this->app->instance(PayrollCalculator::class, $calculator);
     }
 
+    private function loanManager(): User
+    {
+        $user = User::factory()->create(['role' => 'admin']);
+        $user->givePermissionTo(Permission::findOrCreate('View:LoanManagement', 'web'));
+
+        return $user;
+    }
+
+    public function test_active_loan_can_reschedule_only_future_payments(): void
+    {
+        $employee = $this->employee();
+        $first = $this->period(2);
+        $second = $this->period(3);
+        $third = $this->period(4);
+        $loan = $this->loan($employee, $first);
+        $this->mockPayroll($employee);
+        $service = app(PayrollPeriodLockService::class);
+        $service->lock($first);
+
+        app(LoanAdjustmentService::class)->adjust($loan, [
+            'type' => 'reschedule', 'remaining_deductions' => 2,
+            'effective_payroll_period_id' => $second->id,
+            'reason' => 'Correct the remaining installments',
+        ], $this->loanManager());
+
+        $service->lock($second);
+        $service->lock($third);
+        $this->assertSame(333.33, (float) $loan->payments()->where('payroll_period_id', $first->id)->first()->amount);
+        $this->assertSame(333.34, (float) $loan->payments()->where('payroll_period_id', $second->id)->first()->amount);
+        $this->assertSame(333.33, (float) $loan->payments()->where('payroll_period_id', $third->id)->first()->amount);
+        $this->assertSame(0.0, $loan->fresh()->balance_amount);
+    }
+
+    public function test_corrected_total_recalculates_remaining_payments_and_survives_relock(): void
+    {
+        $employee = $this->employee();
+        $first = $this->period(2);
+        $second = $this->period(3);
+        $third = $this->period(4);
+        $loan = $this->loan($employee, $first);
+        $this->mockPayroll($employee);
+        $service = app(PayrollPeriodLockService::class);
+        $service->lock($first);
+
+        app(LoanAdjustmentService::class)->adjust($loan, [
+            'type' => 'correct_total', 'new_total' => 900,
+            'remaining_deductions' => 2,
+            'effective_payroll_period_id' => $second->id,
+            'reason' => 'Correct the original total owed',
+        ], $this->loanManager());
+
+        $service->lock($second);
+        $this->assertSame(283.34, (float) $loan->payments()->where('payroll_period_id', $second->id)->first()->amount);
+        $service->unlock($second);
+        $service->lock($second);
+        $service->lock($third);
+        $this->assertSame(333.33, (float) $loan->payments()->where('payroll_period_id', $first->id)->first()->amount);
+        $this->assertSame(283.33, (float) $loan->payments()->where('payroll_period_id', $third->id)->first()->amount);
+        $this->assertSame(900.0, $loan->fresh()->total_amount);
+        $this->assertSame(900.0, (float) $loan->fresh()->paid_amount);
+        $this->assertDatabaseCount('employee_loan_adjustments', 1);
+    }
+
+    public function test_corrected_loan_amount_is_audited_and_does_not_rewrite_locked_history(): void
+    {
+        $employee = $this->employee();
+        $first = $this->period(2);
+        $second = $this->period(3);
+        $loan = $this->loan($employee, $first);
+        $this->mockPayroll($employee);
+        $service = app(PayrollPeriodLockService::class);
+        $service->lock($first);
+
+        $adjustment = app(LoanAdjustmentService::class)->adjust($loan, [
+            'type' => 'correct_total', 'new_loan_amount' => 850, 'new_total' => 900,
+            'remaining_deductions' => 2, 'effective_payroll_period_id' => $second->id,
+            'reason' => 'Correct principal and total owed',
+        ], $this->loanManager());
+
+        $this->assertSame(1000.0, (float) $adjustment->previous_loan_amount);
+        $this->assertSame(850.0, (float) $loan->fresh()->loan_amount);
+        $this->assertSame(50.0, (float) $loan->fresh()->loan_interest);
+        $this->assertSame(1000.0, $loan->fresh()->totalAmountForPeriod($first));
+        $this->assertSame(900.0, $loan->fresh()->totalAmountForPeriod($second));
+        $this->assertSame(333.33, (float) $loan->payments()->first()->amount);
+        $service->lock($second);
+        $this->assertSame(283.34, (float) $loan->payments()->where('payroll_period_id', $second->id)->first()->amount);
+    }
+
+    public function test_voided_history_can_be_corrected_without_erasing_audit_events(): void
+    {
+        $employee = $this->employee();
+        $period = $this->period(2);
+        $loan = $this->loan($employee, $period);
+        $this->mockPayroll($employee);
+        $service = app(PayrollPeriodLockService::class);
+        $service->lock($period);
+        $service->unlock($period);
+
+        app(LoanAdjustmentService::class)->adjust($loan, [
+            'type' => 'correct_total', 'new_total' => 900,
+            'remaining_deductions' => 3,
+            'effective_payroll_period_id' => $period->id,
+            'reason' => 'Correct test loan total',
+        ], $this->loanManager());
+
+        $service->lock($period);
+        $payment = $loan->payments()->first();
+        $this->assertSame(300.0, (float) $payment->amount);
+        $this->assertSame(['Posted', 'Voided', 'Posted'], $payment->events()->orderBy('id')->pluck('status')->all());
+        $this->assertSame(600.0, $loan->fresh()->balance_amount);
+    }
+
+    public function test_earlier_payroll_cannot_unlock_while_later_loan_payment_is_posted(): void
+    {
+        $employee = $this->employee();
+        $first = $this->period(2);
+        $second = $this->period(3);
+        $this->loan($employee, $first);
+        $this->mockPayroll($employee);
+        $service = app(PayrollPeriodLockService::class);
+        $service->lock($first);
+        $service->lock($second);
+
+        $this->expectException(ValidationException::class);
+        $service->unlock($first);
+    }
+
+    public function test_payroll_lock_rolls_back_when_snapshot_loan_deduction_disagrees(): void
+    {
+        $employee = $this->employee();
+        $period = $this->period(2);
+        $loan = $this->loan($employee, $period);
+        $calculator = Mockery::mock(PayrollCalculator::class);
+        $calculator->shouldReceive('includedEmployeeIds')->andReturn(collect([$employee->id]));
+        $calculator->shouldReceive('snapshotPeriod')->once()->andReturnUsing(function (PayrollPeriod $lockedPeriod) use ($employee): void {
+            PayrollSnapshot::create([
+                'payroll_period_id' => $lockedPeriod->id,
+                'employee_id' => $employee->id,
+                'row_number' => 1,
+                'data' => ['loan_payment' => 0],
+            ]);
+        });
+        $this->app->instance(PayrollCalculator::class, $calculator);
+
+        try {
+            app(PayrollPeriodLockService::class)->lock($period);
+            $this->fail('Expected snapshot reconciliation failure');
+        } catch (ValidationException) {
+            $this->assertFalse($period->fresh()->is_locked);
+            $this->assertSame(0.0, (float) $loan->fresh()->paid_amount);
+            $this->assertDatabaseCount('employee_loan_payments', 0);
+        }
+    }
+
+    public function test_active_loan_with_payment_history_opens_adjustment_form(): void
+    {
+        $employee = $this->employee();
+        $period = $this->period(2);
+        $loan = $this->loan($employee, $period);
+        $this->mockPayroll($employee);
+        app(PayrollPeriodLockService::class)->lock($period);
+        $this->actingAs($this->loanManager());
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+
+        Livewire::test(LoanManagement::class)
+            ->call('mountTableAction', 'edit', (string) $loan->id)
+            ->assertSet('mountedActions.0.name', 'edit')
+            ->setTableActionData([
+                'type' => EmployeeLoanAdjustment::TYPE_RESCHEDULE,
+                'remaining_deductions' => 2,
+                'effective_payroll_period_id' => $this->period(3)->id,
+                'reason' => 'Correct the remaining repayment schedule.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('employee_loan_adjustments', [
+            'employee_loan_id' => $loan->id,
+            'type' => EmployeeLoanAdjustment::TYPE_RESCHEDULE,
+            'remaining_deductions' => 2,
+        ]);
+    }
+
     public function test_final_payment_collects_exact_balance_in_preview_and_posting(): void
     {
         $employee = $this->employee();
@@ -97,7 +284,7 @@ class LoanIntegrityTest extends TestCase
         $this->assertSame(['Posted', 'Voided', 'Posted'], $loan->payments()->first()->events->pluck('status')->all());
     }
 
-    public function test_loan_terms_and_deletion_are_blocked_after_payment_history_exists(): void
+    public function test_original_terms_stay_protected_but_active_loan_can_be_soft_deleted(): void
     {
         $employee = $this->employee();
         $period = $this->period(2);
@@ -110,8 +297,34 @@ class LoanIntegrityTest extends TestCase
         } catch (ValidationException) {
             $this->assertSame(1000.0, (float) $loan->fresh()->loan_amount);
         }
-        $this->expectException(ValidationException::class);
         $loan->fresh()->delete();
+        $this->assertSoftDeleted('employee_loans', ['id' => $loan->id]);
+        $this->assertSame(333.33, (float) $loan->payments()->where('payroll_period_id', $period->id)->first()->amount);
+        $next = $this->period(3);
+        app(PayrollPeriodLockService::class)->lock($next);
+        $this->assertDatabaseMissing('employee_loan_payments', ['employee_loan_id' => $loan->id, 'payroll_period_id' => $next->id]);
+    }
+
+    public function test_hr_delete_action_soft_deletes_active_loan_with_history(): void
+    {
+        $employee = $this->employee();
+        $period = $this->period(2);
+        $loan = $this->loan($employee, $period);
+        $this->mockPayroll($employee);
+        app(PayrollPeriodLockService::class)->lock($period);
+        $this->actingAs($this->loanManager());
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+
+        Livewire::test(LoanManagement::class)
+            ->callTableAction('delete', (string) $loan->id)
+            ->assertHasNoErrors();
+
+        $this->assertSoftDeleted('employee_loans', ['id' => $loan->id]);
+        $this->assertDatabaseHas('employee_loan_payments', [
+            'employee_loan_id' => $loan->id,
+            'payroll_period_id' => $period->id,
+            'status' => EmployeeLoanPayment::STATUS_POSTED,
+        ]);
     }
 
     public function test_legacy_deleted_loan_is_reversed_when_payroll_unlocks(): void

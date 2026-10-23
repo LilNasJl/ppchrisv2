@@ -99,11 +99,6 @@ class EmployeeLoan extends Model
             $loan->status ??= self::STATUS_ACTIVE;
             $loan->schedule = self::normalizeSchedule($loan->schedule);
         });
-        static::deleting(function (EmployeeLoan $loan): void {
-            if ($loan->payments()->exists()) {
-                throw ValidationException::withMessages(['loan_amount' => 'Loans with payment history must be retained.']);
-            }
-        });
     }
 
     public static function statusOptions(): array
@@ -208,6 +203,11 @@ class EmployeeLoan extends Model
         return $this->hasMany(EmployeeLoanPayment::class);
     }
 
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(EmployeeLoanAdjustment::class);
+    }
+
     public function request()
     {
         return $this->hasOne(EmployeeLoanRequest::class, 'approved_employee_loan_id');
@@ -221,20 +221,84 @@ class EmployeeLoan extends Model
 
     public function getTotalAmountAttribute(): float
     {
-        return round((float) $this->loan_amount + (float) $this->loan_interest, 2);
+        $adjustment = $this->latestAdjustment();
+
+        return $adjustment
+            ? round((float) $adjustment->new_total, 2)
+            : round((float) $this->loan_amount + (float) $this->loan_interest, 2);
+    }
+
+    public function getLoanAmountAttribute(mixed $value): float
+    {
+        return round((float) ($this->latestAdjustment()?->new_loan_amount ?? $value), 2);
+    }
+
+    public function getLoanInterestAttribute(mixed $value): float
+    {
+        $adjustment = $this->latestAdjustment();
+
+        return $adjustment?->new_loan_amount !== null
+            ? round((float) $adjustment->new_total - (float) $adjustment->new_loan_amount, 2)
+            : round((float) $value, 2);
     }
 
     public function getPaymentAmountAttribute(mixed $value): float
     {
+        if ($adjustment = $this->latestAdjustment()) {
+            return round((float) $adjustment->payment_amount, 2);
+        }
+
         if (filled($value)) {
             return round((float) $value, 2);
         }
 
         if ($this->usesCalendarMonthTerms()) {
-            return $this->expected_payment_amount;
+            return self::plannedPaymentAmount(
+                $this->loan_amount, $this->loan_interest, (int) $this->loan_terms_months,
+                $this->schedule, $this->terms_basis,
+            );
         }
 
-        return round($this->total_amount / max(1, (int) $this->loan_terms_months), 2);
+        return round($this->originalTotalAmount() / max(1, (int) $this->loan_terms_months), 2);
+    }
+
+    public function originalTotalAmount(): float
+    {
+        return round((float) $this->getRawOriginal('loan_amount') + (float) $this->getRawOriginal('loan_interest'), 2);
+    }
+
+    public function latestAdjustment(): ?EmployeeLoanAdjustment
+    {
+        return $this->relationLoaded('adjustments')
+            ? $this->adjustments->sortByDesc('id')->first()
+            : $this->adjustments()->latest('id')->first();
+    }
+
+    public function adjustmentForPeriod(PayrollPeriod $period): ?EmployeeLoanAdjustment
+    {
+        if (! $period->date_start) {
+            return null;
+        }
+
+        $adjustments = $this->relationLoaded('adjustments')
+            ? $this->adjustments
+            : $this->adjustments()->with('effectivePayrollPeriod')->get();
+
+        return $adjustments
+            ->filter(fn (EmployeeLoanAdjustment $adjustment): bool => $adjustment->effectivePayrollPeriod?->date_start
+                && $adjustment->effectivePayrollPeriod->date_start->lessThanOrEqualTo($period->date_start))
+            ->sortByDesc('id')
+            ->first();
+    }
+
+    public function totalAmountForPeriod(PayrollPeriod $period): float
+    {
+        return round((float) ($this->adjustmentForPeriod($period)?->new_total ?? $this->originalTotalAmount()), 2);
+    }
+
+    public function balanceForPeriod(PayrollPeriod $period): float
+    {
+        return round(max(0, $this->totalAmountForPeriod($period) - (float) $this->paid_amount), 2);
     }
 
     public function usesCalendarMonthTerms(): bool
@@ -283,6 +347,11 @@ class EmployeeLoan extends Model
 
     public function hasRemainingTerms(): bool
     {
+        if ($adjustment = $this->latestAdjustment()) {
+            return $this->postedPaymentsSince($adjustment) < $adjustment->remaining_deductions
+                || ($this->balance_amount > 0 && $this->balance_amount <= 0.01);
+        }
+
         $maximumDeductions = $this->usesCalendarMonthTerms()
             ? $this->scheduled_deductions_count
             : max(1, (int) $this->loan_terms_months);
@@ -323,15 +392,22 @@ class EmployeeLoan extends Model
             return 0.0;
         }
 
-        $balance = $this->balance_amount;
+        $balance = $this->balanceForPeriod($period);
 
-        if ($balance <= 0 || $this->payment_amount <= 0) {
+        $adjustment = $this->adjustmentForPeriod($period);
+        $paymentAmount = $adjustment
+            ? (float) $adjustment->payment_amount
+            : (float) ($this->getRawOriginal('payment_amount') ?? $this->getPaymentAmountAttribute(null));
+
+        if ($balance <= 0 || $paymentAmount <= 0) {
             return 0.0;
         }
 
-        $lastDeduction = $this->postedPaymentsCount() + 1 >= $this->scheduled_deductions_count;
+        $lastDeduction = $adjustment
+            ? $this->postedPaymentsSince($adjustment) + 1 >= $adjustment->remaining_deductions
+            : $this->postedPaymentsCount() + 1 >= $this->scheduled_deductions_count;
 
-        return round($lastDeduction ? $balance : min($this->payment_amount, $balance), 2);
+        return round($lastDeduction ? $balance : min($paymentAmount, $balance), 2);
     }
 
     public function hasStartedForPeriod(PayrollPeriod $period): bool
@@ -382,7 +458,35 @@ class EmployeeLoan extends Model
             return false;
         }
 
-        return $this->hasRemainingTerms();
+        if ($adjustment = $this->adjustmentForPeriod($period)) {
+            $remaining = $this->totalAmountForPeriod($period) - (float) $this->paid_amount;
+
+            return $this->postedPaymentsSince($adjustment) < $adjustment->remaining_deductions
+                || ($remaining > 0 && $remaining <= 0.01);
+        }
+
+        $maximumDeductions = $this->usesCalendarMonthTerms()
+            ? $this->scheduled_deductions_count
+            : max(1, (int) $this->loan_terms_months);
+        $remaining = $this->originalTotalAmount() - (float) $this->paid_amount;
+
+        return $this->postedPaymentsCount() < $maximumDeductions
+            || ($this->usesCalendarMonthTerms() && $remaining > 0
+                && $remaining <= max(0.01, $maximumDeductions * 0.005 + 0.001));
+    }
+
+    protected function postedPaymentsSince(EmployeeLoanAdjustment $adjustment): int
+    {
+        $date = $adjustment->effectivePayrollPeriod?->date_start;
+        if (! $date) {
+            return 0;
+        }
+
+        if ($this->relationLoaded('postedPayments')) {
+            return $this->postedPayments->filter(fn (EmployeeLoanPayment $payment): bool => $payment->payrollPeriod?->date_start?->greaterThanOrEqualTo($date))->count();
+        }
+
+        return $this->postedPayments()->whereHas('payrollPeriod', fn ($query) => $query->whereDate('date_start', '>=', $date))->count();
     }
 
     public static function isValidMonthlyTermStartPeriod(PayrollPeriod $period, ?string $schedule): bool

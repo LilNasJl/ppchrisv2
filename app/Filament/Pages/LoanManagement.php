@@ -4,8 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
+use App\Models\EmployeeLoanAdjustment;
 use App\Models\PayrollPeriod;
 use App\Services\LoanAccessService;
+use App\Services\LoanAdjustmentService;
 use App\Services\LoanTermsService;
 use App\Support\LoanAmortizationPreview;
 use BackedEnum;
@@ -15,7 +17,9 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -100,7 +104,7 @@ class LoanManagement extends Page implements HasForms, HasTable
             ->heading('Loan List')
             ->description('Manage active employee loans and their amortization status.')
             ->query(fn (): Builder => EmployeeLoan::query()
-                ->with(['employee.branch', 'employee.designation', 'amortizationStartPayrollPeriod'])
+                ->with(['employee.branch', 'employee.designation', 'amortizationStartPayrollPeriod', 'adjustments.effectivePayrollPeriod'])
                 ->latest('loan_date')
                 ->latest('id'))
             ->columns([
@@ -196,10 +200,18 @@ class LoanManagement extends Page implements HasForms, HasTable
                     Action::make('edit')
                         ->label('Edit')
                         ->icon(Heroicon::PencilSquare)
-                        ->disabled(fn (EmployeeLoan $record): bool => $record->payments()->exists())
-                        ->tooltip(fn (EmployeeLoan $record): ?string => $record->payments()->exists() ? 'Payment history exists; loan terms are protected.' : null)
-                        ->schema($this->loanFormSchema())
-                        ->fillForm(fn (EmployeeLoan $record): array => [
+                        ->disabled(fn (EmployeeLoan $record): bool => $record->status !== EmployeeLoan::STATUS_ACTIVE)
+                        ->schema(fn (EmployeeLoan $record): array => $record->payments()->exists()
+                            ? $this->adjustmentFormSchema($record) : $this->loanFormSchema())
+                        ->fillForm(fn (EmployeeLoan $record): array => $record->payments()->exists() ? [
+                            'type' => EmployeeLoanAdjustment::TYPE_RESCHEDULE,
+                            'new_total' => $record->total_amount,
+                            'new_loan_amount' => $record->loan_amount,
+                            'remaining_deductions' => $record->latestAdjustment()?->remaining_deductions
+                                ?? max(1, $record->scheduled_deductions_count - $record->postedPaymentsCount()),
+                            'effective_payroll_period_id' => $this->defaultOpenPayrollPeriodId(),
+                            'reason' => '',
+                        ] : [
                             'employee_id' => $record->employee_id,
                             'loan_type' => $record->loan_type,
                             'loan_date' => optional($record->loan_date)->toDateString(),
@@ -212,15 +224,27 @@ class LoanManagement extends Page implements HasForms, HasTable
                             'schedule' => $record->schedule,
                             'amortization_start_payroll_period_id' => $record->amortization_start_payroll_period_id,
                         ])
-                        ->modalHeading('Edit Loan Information')
-                        ->modalSubmitActionLabel('Update Loan')
-                        ->action(fn (EmployeeLoan $record, array $data): mixed => $this->updateLoan($record, $data)),
+                        ->modalHeading(fn (EmployeeLoan $record): string => $record->payments()->exists()
+                            ? 'Adjust Active Loan' : 'Edit Loan Information')
+                        ->modalSubmitActionLabel(fn (EmployeeLoan $record): string => $record->payments()->exists()
+                            ? 'Save Adjustment' : 'Update Loan')
+                        ->action(function (EmployeeLoan $record, array $data): void {
+                            if ($record->payments()->exists()) {
+                                app(LoanAdjustmentService::class)->adjust($record, $data, auth()->user());
+                                Notification::make()->title('Loan adjustment saved')->success()->send();
+
+                                return;
+                            }
+
+                            $this->updateLoan($record, $data);
+                        }),
 
                     DeleteAction::make()
                         ->label('Delete')
                         ->icon(Heroicon::Trash)
-                        ->disabled(fn (EmployeeLoan $record): bool => $record->payments()->exists())
-                        ->modalHeading('Delete loan record'),
+                        ->disabled(fn (EmployeeLoan $record): bool => $record->status !== EmployeeLoan::STATUS_ACTIVE)
+                        ->modalHeading('Stop future loan deductions')
+                        ->modalDescription('This removes the active loan from future payroll calculations. Locked payroll results and posted payment history remain unchanged.'),
                 ])
                     ->icon(Heroicon::EllipsisHorizontal)
                     ->tooltip('Actions'),
@@ -406,6 +430,73 @@ class LoanManagement extends Page implements HasForms, HasTable
                         ]),
                 ])
                 ->columnSpanFull(),
+        ];
+    }
+
+    protected function adjustmentFormSchema(EmployeeLoan $loan): array
+    {
+        return [
+            Section::make('Future loan deductions')
+                ->description('Posted payroll deductions stay in the ledger. This change starts with the selected open period.')
+                ->schema([
+                    Select::make('type')
+                        ->label('What needs correction?')
+                        ->options([
+                            EmployeeLoanAdjustment::TYPE_RESCHEDULE => 'Change remaining payment plan',
+                            EmployeeLoanAdjustment::TYPE_CORRECT_TOTAL => 'Correct total owed',
+                        ])
+                        ->required()->live(),
+
+                    TextInput::make('new_total')
+                        ->label('Corrected total owed')
+                        ->numeric()->minValue(0.01)->required()
+                        ->visible(fn (Get $get): bool => $get('type') === EmployeeLoanAdjustment::TYPE_CORRECT_TOTAL)
+                        ->live(onBlur: true),
+
+                    TextInput::make('new_loan_amount')
+                        ->label('Corrected loan amount')
+                        ->numeric()->minValue(0.01)->required()
+                        ->visible(fn (Get $get): bool => $get('type') === EmployeeLoanAdjustment::TYPE_CORRECT_TOTAL)
+                        ->live(onBlur: true),
+
+                    TextInput::make('remaining_deductions')
+                        ->label('Remaining payroll deductions')
+                        ->numeric()->integer()->minValue(1)->maxValue(240)
+                        ->required()->live(onBlur: true),
+
+                    Select::make('effective_payroll_period_id')
+                        ->label('Effective payroll period')
+                        ->options(fn (): array => $this->openPayrollPeriodOptions())
+                        ->getOptionLabelUsing(fn (mixed $value): ?string => $this->payrollPeriodOptionLabel($value))
+                        ->searchable()->preload()->required(),
+
+                    Textarea::make('reason')
+                        ->label('Reason for adjustment')
+                        ->rows(2)->minLength(5)->maxLength(2000)->required()
+                        ->columnSpanFull(),
+
+                    Placeholder::make('adjustment_preview')
+                        ->label('Before and after')
+                        ->content(function (Get $get) use ($loan): string {
+                            $total = $get('type') === EmployeeLoanAdjustment::TYPE_CORRECT_TOTAL
+                                ? (float) ($get('new_total') ?? 0) : $loan->total_amount;
+                            $loanAmount = $get('type') === EmployeeLoanAdjustment::TYPE_CORRECT_TOTAL
+                                ? (float) ($get('new_loan_amount') ?? 0) : (float) $loan->loan_amount;
+                            $count = max(1, (int) ($get('remaining_deductions') ?? 1));
+                            $balance = max(0, round($total - (float) $loan->paid_amount, 2));
+                            $payment = round($balance / $count, 2);
+                            $final = round($balance - $payment * ($count - 1), 2);
+
+                            return 'Loan amount: '.$this->money($loan->loan_amount).' -> '.$this->money($loanAmount)
+                                .' | Total: '.$this->money($loan->total_amount).' -> '.$this->money($total)
+                                .' | Posted: '.$this->money($loan->paid_amount)
+                                .' | Balance: '.$this->money($balance)
+                                .' | Next payment: '.$this->money($payment)
+                                .' | Final payment: '.$this->money($final);
+                        })
+                        ->columnSpanFull(),
+                ])
+                ->columns(['default' => 1, 'md' => 2]),
         ];
     }
 

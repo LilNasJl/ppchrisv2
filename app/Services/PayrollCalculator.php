@@ -191,7 +191,7 @@ class PayrollCalculator
             ->keyBy(fn (PayrollPeriodEmployeeAdjustment $adj): int => (int) $adj->employee_id);
 
         $loansByEmployee = EmployeeLoan::query()
-            ->with(['amortizationStartPayrollPeriod', 'postedPayments'])
+            ->with(['amortizationStartPayrollPeriod', 'postedPayments.payrollPeriod', 'adjustments.effectivePayrollPeriod'])
             ->whereIn('employee_id', $employeeIds->all())
             ->whereIn('status', [EmployeeLoan::STATUS_ACTIVE, EmployeeLoan::STATUS_PAID])
             ->get()
@@ -1214,7 +1214,7 @@ class PayrollCalculator
 
         return $this->money(
             EmployeeLoan::query()
-                ->with(['amortizationStartPayrollPeriod', 'postedPayments'])
+                ->with(['amortizationStartPayrollPeriod', 'postedPayments.payrollPeriod', 'adjustments.effectivePayrollPeriod'])
                 ->where('employee_id', $employee->id)
                 ->whereIn('status', [EmployeeLoan::STATUS_ACTIVE, EmployeeLoan::STATUS_PAID])
                 ->get()
