@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanRequest;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Services\EmployeeLoanRequestService;
 use App\Services\LoanAccessService;
@@ -223,9 +224,10 @@ class LoanRequestManagementTable extends Component implements HasActions, HasSch
                         ->label('Total Interest')->numeric()->minValue(0)->live(onBlur: true)
                         ->visible(fn (Get $get): bool => $get('terms_basis') === EmployeeLoan::TERMS_BASIS_PAYROLL_PERIOD),
 
-                    TextInput::make('loan_type')
+                    Select::make('loan_type')
                         ->label('Loan Type')
-                        ->maxLength(191)
+                        ->options(fn (): array => LoanType::options())
+                        ->searchable()
                         ->required(),
 
                     DatePicker::make('loan_date')

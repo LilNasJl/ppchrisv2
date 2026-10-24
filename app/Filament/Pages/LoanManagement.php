@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
 use App\Models\EmployeeLoanAdjustment;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Services\LoanAccessService;
 use App\Services\LoanAdjustmentService;
@@ -273,10 +274,11 @@ class LoanManagement extends Page implements HasForms, HasTable
                 ->color(fn (): string => $this->activeLoanTab === 'information' ? 'primary' : 'gray')
                 ->action(fn () => $this->showLoanTab('information')),
 
-            Action::make('return')
-                ->label('Return')
-                ->icon(Heroicon::ArrowLeft)
-                ->url(ComplianceBenefits::getUrl()),
+            Action::make('loan-types')
+                ->label('Add Loan Type')
+                ->icon(Heroicon::PlusCircle)
+                ->visible(fn (): bool => $this->activeLoanTab === 'information')
+                ->url(LoanTypes::getUrl()),
         ];
     }
 
@@ -343,10 +345,10 @@ class LoanManagement extends Page implements HasForms, HasTable
                                 ->getOptionLabelUsing(fn (mixed $value): ?string => $this->employeeOptionLabel($value))
                                 ->required(),
 
-                            TextInput::make('loan_type')
+                            Select::make('loan_type')
                                 ->label('Loan Type')
-                                ->placeholder('Enter loan type, e.g., SSS, PAG-IBIG, Company Loan')
-                                ->maxLength(191)
+                                ->options(fn (): array => LoanType::options())
+                                ->searchable()
                                 ->required(),
 
                             DatePicker::make('loan_date')

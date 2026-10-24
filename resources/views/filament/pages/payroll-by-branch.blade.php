@@ -386,11 +386,12 @@
             }
         }
 
-        @media print {
-            @page {
-                margin: 0;
-            }
+        @page {
+            size: landscape;
+            margin: 4mm 5mm;
+        }
 
+        @media print {
             body {
                 print-color-adjust: exact;
                 -webkit-print-color-adjust: exact;
@@ -410,8 +411,8 @@
                 color: #000 !important;
                 position: absolute;
                 inset: 0 auto auto 0;
-                padding: 8mm;
-                width: 100%;
+                padding: 0 !important;
+                width: 100% !important;
             }
 
             .payroll-print-area * {
@@ -613,6 +614,7 @@
                     :initial-per-page="$this->payroll_per_page"
                     :initial-preset="$this->payroll_preset"
                     :show-column-presets="false"
+                    :show-loan-types="true"
                     :show-totals="true"
                     :key="'payroll-'.$this->period_id.'-'.$this->scope_type.'-'.$this->branch_id.'-'.$this->department_id.'-'.$this->payroll_page"
                 />
@@ -620,6 +622,7 @@
             <div class="payroll-print-table">
                 @include('filament.pages.partials.payroll-detail-table', [
                     'rows' => $this->rows,
+                    'loanTypeColumns' => $this->loanTypeColumns(),
                 ])
             </div>
 

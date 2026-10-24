@@ -4,6 +4,8 @@ namespace App\Filament\Employee\Pages;
 
 use App\Models\Employee;
 use App\Models\EmployeeLoan;
+use App\Models\EmployeeLoanRequest;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Services\EmployeeLoanRequestService;
 use App\Support\LoanAmortizationPreview;
@@ -66,9 +68,9 @@ class Loan extends Page implements HasTable
         $totalBorrowing = $loans->sum(fn (EmployeeLoan $loan) => $loan->total_amount);
         $totalPaid = $loans->sum(fn (EmployeeLoan $loan) => (float) $loan->paid_amount);
 
-        $pendingRequests = \App\Models\EmployeeLoanRequest::query()
+        $pendingRequests = EmployeeLoanRequest::query()
             ->where('employee_id', $employee->id)
-            ->where('status', \App\Models\EmployeeLoanRequest::STATUS_PENDING)
+            ->where('status', EmployeeLoanRequest::STATUS_PENDING)
             ->count();
 
         return [
@@ -99,10 +101,10 @@ class Loan extends Page implements HasTable
                 ->schema([
                     Fieldset::make('Loan Details')
                         ->schema([
-                            TextInput::make('loan_type')
+                            Select::make('loan_type')
                                 ->label('Loan Type')
-                                ->placeholder('e.g., SSS, PAG-IBIG, Company Loan')
-                                ->maxLength(191)
+                                ->options(fn (): array => LoanType::options())
+                                ->searchable()
                                 ->required(),
 
                             Select::make('schedule')
@@ -269,14 +271,14 @@ class Loan extends Page implements HasTable
                     ->alignEnd()
                     ->weight('semibold')
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->total_amount)
-                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱'.number_format((float) $state, 2)),
 
                 TextColumn::make('paid_amount')
                     ->label('Paid')
                     ->alignEnd()
                     ->color('success')
                     ->weight('semibold')
-                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱'.number_format((float) $state, 2)),
 
                 TextColumn::make('balance_amount')
                     ->label('Remaining Balance')
@@ -284,13 +286,13 @@ class Loan extends Page implements HasTable
                     ->weight('bold')
                     ->color(fn (EmployeeLoan $record): string => $record->balance_amount > 0 ? 'danger' : 'success')
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->balance_amount)
-                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱'.number_format((float) $state, 2)),
 
                 TextColumn::make('payment_amount')
                     ->label('Payment / Period')
                     ->alignEnd()
                     ->getStateUsing(fn (EmployeeLoan $record): float => $record->payment_amount)
-                    ->formatStateUsing(fn (mixed $state): string => '₱' . number_format((float) $state, 2)),
+                    ->formatStateUsing(fn (mixed $state): string => '₱'.number_format((float) $state, 2)),
 
                 TextColumn::make('schedule')
                     ->label('Schedule')

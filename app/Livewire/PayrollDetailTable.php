@@ -8,10 +8,12 @@ use App\Filament\Pages\PayrollByBranch;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeAdjustment;
 use App\Models\PayrollSnapshot;
 use App\Services\EmployeeDeductionService;
+use App\Services\LoanPaymentBreakdown;
 use App\Services\OvertimeApprovalService;
 use App\Services\PayrollCalculator;
 use Filament\Actions\Action;
@@ -58,6 +60,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     public bool $showColumnPresets = true;
 
+    public bool $showLoanTypes = false;
+
     public string $columnPreset = 'summary';
 
     protected const COLUMN_PRESETS = [
@@ -68,13 +72,13 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         ],
         'earnings' => [
             'index', 'bank_id_no', 'name', 'designation', 'rate', 'monthly_rate',
-            'half_month_pay', 'rate_per_day', 'rate_per_hour', 'days_worked',
+            'rate_per_day', 'rate_per_hour', 'days_worked',
             'salary_adjustment', 'allowance', 'overtime_hours', 'overtime_amount',
             'shift3_premium', 'ot_approval', 'regular_holiday', 'special_holiday', 'gross_pay',
         ],
         'deductions' => [
-            'index', 'bank_id_no', 'name', 'gross_pay', 'undertime_minutes',
-            'undertime_amount', 'halfday', 'absent', 'unpaid_leave', 'late', 'shortages', 'uniform',
+            'index', 'bank_id_no', 'name', 'gross_pay',
+            'undertime_amount', 'halfday', 'absent', 'late', 'shortages', 'uniform',
             'other_deductions', 'loan_payment', 'total_deductions', 'net_pay',
         ],
         'remittances' => [
@@ -91,6 +95,10 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
     protected bool $employeeRowsWarmed = false;
 
     protected array $totalsCache = [];
+
+    protected ?array $loanBreakdowns = null;
+
+    protected ?array $loanTypeNames = null;
 
     protected array $summaryRecordsCache = [];
 
@@ -124,6 +132,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         string $initialPreset = 'summary',
         bool $showTotals = false,
         bool $showColumnPresets = true,
+        bool $showLoanTypes = false,
     ): void {
         $this->periodId = $periodId;
         $this->branchId = $branchId;
@@ -134,6 +143,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         $this->enableSearch = $enableSearch;
         $this->showTotals = $showTotals;
         $this->showColumnPresets = $showColumnPresets;
+        $this->showLoanTypes = $showLoanTypes;
         $this->tableSearch = $initialSearch ?? '';
         $this->tableRecordsPerPage = in_array($initialPerPage, [10, 25, 50, 100], true)
             ? $initialPerPage
@@ -157,6 +167,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
         $this->employeeRowCache = [];
         $this->employeeRowsWarmed = false;
         $this->totalsCache = [];
+        $this->loanBreakdowns = null;
         $this->summaryRecordsCache = [];
     }
 
@@ -231,7 +242,6 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->textColumn('branch', 'Branch')->placeholder('-'),
                 $this->textColumn('rate', 'Rate')->alignCenter(),
                 $this->moneyColumn('monthly_rate', 'Monthly Rate'),
-                $this->moneyColumn('half_month_pay', 'Half Month Pay'),
                 $this->moneyColumn('rate_per_day', 'Rate Per Day'),
                 $this->moneyColumn('rate_per_hour', 'Rate Per Hour'),
                 $this->numberColumn('days_worked', 'Days Work'),
@@ -263,11 +273,9 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
                 $this->moneyColumn('regular_holiday', 'Regular Holiday'),
                 $this->moneyColumn('special_holiday', 'Special Holiday'),
                 $this->moneyColumn('gross_pay', 'Gross Pay'),
-                $this->numberColumn('undertime_minutes', 'Undertime Minutes'),
                 $this->moneyColumn('undertime_amount', 'Undertime Amount'),
                 $this->moneyColumn('halfday', 'Halfday'),
                 $this->moneyColumn('absent', 'Absent'),
-                $this->moneyColumn('unpaid_leave', 'Unpaid Leave'),
                 $this->moneyColumn('late', 'Late'),
 
                 $this->totalizeColumn(TextInputColumn::make('shortages')
@@ -284,7 +292,7 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
                 $this->moneyColumn('uniform', 'Uniform'),
                 $this->moneyColumn('other_deductions', 'Other Deductions'),
-                $this->moneyColumn('loan_payment', 'Loan Payment'),
+                ...($this->showLoanTypes ? $this->loanTypeMoneyColumns() : [$this->moneyColumn('loan_payment', 'Loan Payment')]),
                 $this->remittanceColumn('sss_loan', 'SSS Loan'),
                 $this->remittanceColumn('sss_ee', 'SSS EE'),
                 $this->remittanceColumn('hdmf_loan', 'HDMF Loan'),
@@ -573,7 +581,32 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function rowValue(PayrollPeriodEmployeeAdjustment $record, string $key): mixed
     {
+        if ($this->showLoanTypes && str_starts_with($key, 'loan_type_')) {
+            $typeId = (int) substr($key, strlen('loan_type_'));
+            $name = $this->loanTypeNames()[$typeId] ?? null;
+            if (! $name || ! $this->period()) {
+                return 0;
+            }
+
+            $this->loanBreakdowns ??= app(LoanPaymentBreakdown::class)
+                ->forEmployees($this->period(), $this->includedEmployeeIds());
+
+            return $this->loanBreakdowns[(int) $record->employee_id][$name] ?? 0;
+        }
+
         return $this->row($record)[$key] ?? null;
+    }
+
+    protected function loanTypeNames(): array
+    {
+        return $this->loanTypeNames ??= LoanType::query()->orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    protected function loanTypeMoneyColumns(): array
+    {
+        return collect($this->loanTypeNames())
+            ->map(fn (string $name, int $id): TextColumn => $this->moneyColumn('loan_type_'.$id, $name))
+            ->values()->all();
     }
 
     protected function period(): ?PayrollPeriod
@@ -908,6 +941,10 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
 
     protected function isColumnVisible(string $key): bool
     {
+        if ($this->showLoanTypes && str_starts_with($key, 'loan_type_')) {
+            return in_array($this->columnPreset, ['all', 'deductions'], true);
+        }
+
         return $this->columnPreset === 'all'
             || in_array($key, self::COLUMN_PRESETS[$this->columnPreset] ?? self::COLUMN_PRESETS['summary'], true);
     }

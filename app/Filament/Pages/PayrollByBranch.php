@@ -4,8 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\Branch;
 use App\Models\Department;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
+use App\Services\LoanPaymentBreakdown;
 use App\Services\PayrollCalculator;
 use App\Support\CompanyExportHeader;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -327,11 +329,19 @@ class PayrollByBranch extends Page implements HasForms
 
         $this->cachedRowsKey = $key;
 
-        return $this->cachedRows = app(PayrollCalculator::class)->rowsForScope(
+        $rows = app(PayrollCalculator::class)->rowsForScope(
             $this->selectedPeriod,
             $this->scope_type,
             filled($scopeId) ? (int) $scopeId : null,
         );
+
+        return $this->cachedRows = app(LoanPaymentBreakdown::class)
+            ->addColumns($this->selectedPeriod, $rows, $this->loanTypeColumns());
+    }
+
+    public function loanTypeColumns(): array
+    {
+        return LoanType::query()->orderBy('name')->pluck('name', 'id')->all();
     }
 
     /**
@@ -505,7 +515,20 @@ class PayrollByBranch extends Page implements HasForms
 
     protected function downloadExcel(): StreamedResponse
     {
-        $headers = app(PayrollCalculator::class)->payrollHeaders();
+        $headers = [];
+        $excludedKeys = ['half_month_pay', 'undertime_minutes', 'unpaid_leave'];
+        foreach (app(PayrollCalculator::class)->payrollHeaders() as $key => $label) {
+            if (in_array($key, $excludedKeys, true)) {
+                continue;
+            }
+            if ($key === 'loan_payment') {
+                foreach ($this->loanTypeColumns() as $id => $name) {
+                    $headers['loan_type_'.$id] = $name;
+                }
+            } else {
+                $headers[$key] = $label;
+            }
+        }
         $period = $this->selectedPeriod?->title ?? 'payroll';
         $branch = $this->selectedScopeName();
         $filename = 'payroll-'.str($branch)->slug().'-'.str($period)->slug().'.xls';

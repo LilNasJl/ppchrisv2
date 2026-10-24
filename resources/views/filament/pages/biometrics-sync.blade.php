@@ -1598,10 +1598,18 @@
                             </div>
                         </div>
                     </div>
-                    <a href="{{ $this->detailsReturnUrl() }}" class="bio-header-btn">
-                        <x-filament::icon icon="heroicon-m-arrow-left" class="h-4 w-4" />
-                        <span>Return to device</span>
-                    </a>
+                    <div style="display:flex;align-items:center;justify-content:flex-end;gap:.5rem;flex-wrap:wrap">
+                        @if($detailSync->sync_type === 'payroll')
+                            <button type="button" wire:click="exportDtrExcel" wire:loading.attr="disabled" wire:target="exportDtrExcel" class="bio-header-btn">
+                                <x-filament::icon icon="heroicon-m-arrow-down-tray" class="h-4 w-4" />
+                                <span>Export Excel</span>
+                            </button>
+                        @endif
+                        <a href="{{ $this->detailsReturnUrl() }}" class="bio-header-btn">
+                            <x-filament::icon icon="heroicon-m-arrow-left" class="h-4 w-4" />
+                            <span>Return to device</span>
+                        </a>
+                    </div>
                 </div>
 
                 @if($detailSync->sync_type === 'employee')

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Employee;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
+use App\Services\LoanPaymentBreakdown;
 use App\Services\PayrollCalculator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -48,10 +50,18 @@ class PayrollPayslipPrintController extends Controller
 
         abort_if($calculator->isEmployeePayrollExcluded($payrollPeriod, $payrollEmployee), 404);
 
+        $loanTypeColumns = LoanType::query()->orderBy('name')->pluck('name', 'id')->all();
+        $row = app(LoanPaymentBreakdown::class)->addColumns(
+            $payrollPeriod,
+            collect([$calculator->employeeRow($payrollEmployee, $payrollPeriod)]),
+            $loanTypeColumns,
+        )->first();
+
         return view('payroll.payslip', [
             'employee' => $payrollEmployee,
             'period' => $payrollPeriod,
-            'row' => $calculator->employeeRow($payrollEmployee, $payrollPeriod),
+            'row' => $row,
+            'loanTypeColumns' => $loanTypeColumns,
         ]);
     }
 }

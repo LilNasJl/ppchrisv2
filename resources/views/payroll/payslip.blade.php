@@ -473,7 +473,9 @@
                         <tr><td>Shortages</td><td>{{ $money($row['shortages'] ?? 0) }}</td></tr>
                         <tr><td>Company Uniform</td><td>{{ $money($row['uniform'] ?? 0) }}</td></tr>
                         <tr><td>Other Deductions</td><td>{{ $money($row['other_deductions'] ?? 0) }}</td></tr>
-                        <tr><td>Loan Payment</td><td>{{ $money($row['loan_payment'] ?? 0) }}</td></tr>
+                        @foreach ($loanTypeColumns as $loanTypeId => $loanTypeName)
+                            <tr><td>{{ $loanTypeName }}</td><td>{{ $money($row['loan_type_'.$loanTypeId] ?? 0) }}</td></tr>
+                        @endforeach
                     </tbody>
                 </table>
             </div>

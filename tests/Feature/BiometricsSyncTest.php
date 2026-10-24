@@ -11,10 +11,12 @@ use App\Models\BiometricsSyncRequest;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\Employee;
+use App\Models\EmployeeVisibleDtr;
 use App\Models\LeaveApprovalWorkflow;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use App\Services\Biometrics\BiometricDtrBinCodec;
+use App\Services\Biometrics\BiometricsSyncDtrExport;
 use App\Services\Biometrics\BiometricsSyncService;
 use App\Services\Biometrics\SyncSignature;
 use App\Services\DtrAttendanceUnitService;
@@ -23,8 +25,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use OpenSpout\Reader\XLSX\Reader;
 use Tests\TestCase;
 
 class BiometricsSyncTest extends TestCase
@@ -94,7 +98,7 @@ class BiometricsSyncTest extends TestCase
         $workflow = LeaveApprovalWorkflow::create([
             'name' => $name.' workflow', 'is_active' => true, 'version' => 1,
             'branch_id' => $employee->branch_id,
-            'active_scope_key' => (string) \Illuminate\Support\Str::uuid(),
+            'active_scope_key' => (string) Str::uuid(),
             'device_ids' => ['1'],
         ]);
         $workflow->levels()->create([
@@ -107,7 +111,7 @@ class BiometricsSyncTest extends TestCase
     private function syncHistoryRecord(User $requester, string $status = 'success'): BiometricsSyncRequest
     {
         return BiometricsSyncRequest::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'id' => (string) Str::uuid(),
             'device_id' => '1',
             'device_name' => 'Maco',
             'active_device_key' => null,
@@ -218,7 +222,7 @@ class BiometricsSyncTest extends TestCase
         $this->assertSame('success', $sync->fresh()->status);
         $this->assertSame(1, $sync->fresh()->result['successful']);
         $this->assertSame(180, Dtr::query()->sole()->absence_minutes);
-        $this->assertSame(1, \App\Models\EmployeeVisibleDtr::query()->where('is_absent', true)->count());
+        $this->assertSame(1, EmployeeVisibleDtr::query()->where('is_absent', true)->count());
         $this->assertEquals(300, app(PayrollCalculator::class)->row($employee->fresh(), $this->period)['absent']);
     }
 
@@ -841,5 +845,46 @@ class BiometricsSyncTest extends TestCase
         app(BiometricsSyncService::class)->advance($sync->id);
         $this->assertNull($sync->fresh()->active_device_key);
         $this->assertNotNull($sync->fresh()->remote_acknowledged_at);
+    }
+
+    public function test_details_excel_exports_all_dtr_rows_without_audit_columns(): void
+    {
+        $this->fakeServer([$this->row(['name' => 'Test Employee', 'late' => 4, 'undertime' => 254, 'overtime' => 3, 'early' => 5]), $this->row(['date_in' => '2026-07-22', 'date_out' => '2026-07-22', 'name' => 'Second Employee'])]);
+        $sync = $this->createSync();
+        app(BiometricsSyncService::class)->advance($sync->id);
+        $sync = $sync->fresh();
+
+        $path = app(BiometricsSyncDtrExport::class)->create($sync);
+        try {
+            $reader = new Reader;
+            $reader->open($path);
+            $rows = [];
+            foreach ($reader->getSheetIterator() as $sheet) {
+                foreach ($sheet->getRowIterator() as $row) {
+                    $rows[] = array_map(fn ($cell) => $cell->getValue(), $row->getCells());
+                }
+            }
+            $reader->close();
+
+            $this->assertCount(3, $rows);
+            $this->assertContains('Overtime', $rows[0]);
+            $this->assertContains('Test Employee', $rows[1]);
+            $this->assertContains('Second Employee', $rows[2]);
+            $this->assertSame(4, $rows[1][array_search('Late', $rows[0], true)]);
+            $this->assertSame(254, $rows[1][array_search('Undertime', $rows[0], true)]);
+            $this->assertSame(3, $rows[1][array_search('Overtime', $rows[0], true)]);
+            $this->assertSame('12345', $rows[1][array_search('Fingerprint ID', $rows[0], true)]);
+            foreach (['Flag', 'Reasons', 'Device Code', 'Session ID', 'Finding', 'Row Check'] as $excluded) {
+                $this->assertNotContains($excluded, $rows[0]);
+            }
+        } finally {
+            @unlink($path);
+        }
+
+        $master = User::where('username', 'masteradmin')->firstOrFail();
+        Livewire::withQueryParams(['device' => '1', 'syncId' => $sync->id])
+            ->actingAs($master)
+            ->test(BiometricsSyncDetails::class)
+            ->assertSee('Export Excel');
     }
 }

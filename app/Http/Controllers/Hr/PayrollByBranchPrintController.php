@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Hr;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Department;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSignatory;
+use App\Services\LoanPaymentBreakdown;
 use App\Services\PayrollCalculator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -33,11 +35,19 @@ class PayrollByBranchPrintController extends Controller
         }
         $scopeId = $branch?->id ?: $department?->id;
 
+        $loanTypeColumns = LoanType::query()->orderBy('name')->pluck('name', 'id')->all();
+        $rows = app(LoanPaymentBreakdown::class)->addColumns(
+            $period,
+            $calculator->rowsForScope($period, $scope, $scopeId),
+            $loanTypeColumns,
+        );
+
         return view('payroll.print-by-branch', [
             'period' => $period,
             'branch' => $branch,
             'scopeName' => $branch?->branch_name ?: ($department?->name ?: 'All Branches'),
-            'rows' => $calculator->rowsForScope($period, $scope, $scopeId),
+            'rows' => $rows,
+            'loanTypeColumns' => $loanTypeColumns,
             'signatory' => PayrollSignatory::default(),
         ]);
     }

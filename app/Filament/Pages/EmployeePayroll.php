@@ -4,8 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\Branch;
 use App\Models\Employee;
+use App\Models\LoanType;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodEmployeeAdjustment;
+use App\Services\LoanPaymentBreakdown;
 use App\Services\PayrollCalculator;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -56,6 +58,7 @@ class EmployeePayroll extends Page implements HasForms
     {
         return [
             Section::make('Period Adjustments')
+                ->compact()
                 ->schema([
                     TextInput::make('salary_adjustment')
                         ->label('Salary Adjustment')
@@ -118,7 +121,16 @@ class EmployeePayroll extends Page implements HasForms
             return null;
         }
 
-        return $calculator->employeeRow($this->employee, $this->selectedPeriod);
+        return app(LoanPaymentBreakdown::class)->addColumns(
+            $this->selectedPeriod,
+            collect([$calculator->employeeRow($this->employee, $this->selectedPeriod)]),
+            $this->loanTypeColumns(),
+        )->first();
+    }
+
+    public function loanTypeColumns(): array
+    {
+        return LoanType::query()->orderBy('name')->pluck('name', 'id')->all();
     }
 
     public function saveAdjustment(string $field, mixed $state): void
