@@ -17,6 +17,7 @@ use App\Services\DtrChangeRequestService;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -36,6 +37,38 @@ class TestStationDtrManageTable extends StationDtrManageTable
 
 class DtrChangeRequestApprovalWorkflowTest extends TestCase
 {
+    private function hrReviewer(): User
+    {
+        $hr = User::query()->where('email', 'dtr-final-hr@example.test')->first();
+        if (! $hr) {
+            $hr = User::query()->findOrFail(DB::table('users')->insertGetId([
+                'email' => 'dtr-final-hr@example.test',
+                'name' => 'DTR Final HR',
+                'role' => 'hr',
+                'password' => 'secret',
+            ]));
+        }
+
+        return $hr;
+    }
+
+    private function approveAndCompleteHrWhenPending(
+        DtrChangeRequestService $service,
+        DtrChangeRequest $request,
+        Employee|User $reviewer,
+        ?string $remarks = null,
+        array $approvalData = [],
+    ): DtrChangeRequest {
+        $request = $service->approve($request, $reviewer, $remarks, $approvalData);
+        if ($request->isPendingHrApproval()) {
+            $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+            $this->assertNull($request->assigned_employee_id);
+            $request = $service->approve($request, $this->hrReviewer(), 'Approved by HR.');
+        }
+
+        return $request;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -444,12 +477,12 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'Forgot to punch out at 5pm due to emergency meeting.',
         ]);
 
-        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(2, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame($sic->id, $request->assigned_employee_id);
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertTrue($request->is_first_level);
-        $this->assertTrue($request->is_final_level);
+        $this->assertFalse($request->is_final_level);
 
         // SIC (First-level) edits DTR
         $this->assertTrue($request->canBeEditedBy($sic));
@@ -468,11 +501,11 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // SIC approves the request
         $this->assertTrue($request->canBeReviewedBy($sic));
-        $request = $service->approve($request, $sic, 'Verified with CCTV log.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Verified with CCTV log.');
 
         // Request becomes Approved immediately
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
-        $this->assertCount(1, $request->approvals_history);
+        $this->assertCount(2, $request->approvals_history);
         $this->assertSame('Approved', $request->approvals_history[0]['action']);
 
         // DTR is finalized
@@ -542,7 +575,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'System punch malfunction at 5pm.',
         ]);
 
-        $this->assertSame(2, $request->total_levels);
+        $this->assertSame(3, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame($sic->id, $request->assigned_employee_id);
 
@@ -558,13 +591,13 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         // SIC approves -> moves to Level 2
-        $request = $service->approve($request, $sic, 'Endorsed to RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed to RC.');
 
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertSame(2, $request->current_level);
         $this->assertSame($rc->id, $request->assigned_employee_id);
         $this->assertFalse($request->is_first_level);
-        $this->assertTrue($request->is_final_level);
+        $this->assertFalse($request->is_final_level);
 
         // DTR not finalized yet
         $dtr->refresh();
@@ -642,14 +675,14 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'schedule_type' => 'Regular',
         ]);
 
-        $request = $service->approve($request, $sic, 'Endorsed to RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed to RC.');
 
         // RC can review and approve
         $this->assertTrue($request->canBeReviewedBy($rc));
-        $request = $service->approve($request, $rc, 'Approved by RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Approved by RC.');
 
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
-        $this->assertCount(2, $request->approvals_history);
+        $this->assertCount(3, $request->approvals_history);
 
         // DTR is now officially finalized
         $dtr->refresh();
@@ -721,7 +754,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'Biometric registered 09:30 AM due to network lag. Actual time in was 08:00 AM.',
         ]);
 
-        $this->assertSame(3, $request->total_levels);
+        $this->assertSame(4, $request->total_levels);
         $this->assertSame(1, $request->current_level);
 
         // Level 1 SIC edits and approves
@@ -734,7 +767,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
         ]);
-        $request = $service->approve($request, $sic, 'Endorsed by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed by SIC.');
 
         $this->assertSame(2, $request->current_level);
         $this->assertSame($rc->id, $request->assigned_employee_id);
@@ -743,7 +776,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Level 2 RC approves
         $this->assertFalse($request->canBeEditedBy($rc));
-        $request = $service->approve($request, $rc, 'Reviewed and passed to AM.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Reviewed and passed to AM.');
 
         $this->assertSame(3, $request->current_level);
         $this->assertSame($am->id, $request->assigned_employee_id);
@@ -752,10 +785,10 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Level 3 Area Manager approves -> Finalizes
         $this->assertFalse($request->canBeEditedBy($am));
-        $request = $service->approve($request, $am, 'Approved by Area Manager.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $am, 'Approved by Area Manager.');
 
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
-        $this->assertCount(3, $request->approvals_history);
+        $this->assertCount(4, $request->approvals_history);
 
         $dtr->refresh();
         $this->assertSame('08:00 AM', $dtr->time_in);
@@ -798,7 +831,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertFalse($request->canBeEditedBy($sic));
 
         // Approver approves OT
-        $request = $service->approve($request, $sic, 'Overtime approved.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Overtime approved.');
 
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $dtr->refresh();
@@ -964,7 +997,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'date_out' => '2026-09-09',
             'time_out' => '05:00 PM',
         ]);
-        $service->approve($request, $sic, 'Endorsed.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed.');
 
         // Now acting as RC at level 2
         $this->actingAs($rcUser);
@@ -1034,7 +1067,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'date_out' => '2026-09-10',
             'time_out' => '05:00 PM',
         ]);
-        $service->approve($request, $sic, 'Endorsed.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed.');
 
         // Level 2 RC rejects the request
         $request = $service->reject($request, $rc, 'No record of attendance on CCTV.');
@@ -1144,7 +1177,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY, $request->overtime_request_scope);
 
         // Approver approves the request (overtime only)
-        $service->approve($request, $sic, 'Overtime approved.', [
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Overtime approved.', [
             'credited_overtime_minutes' => 60,
         ]);
 
@@ -1189,7 +1222,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::OT_SCOPE_EARLY_ONLY, $request->overtime_request_scope);
 
         // Approver approves early clock in only
-        $service->approve($request, $sic, 'Early clock in approved.', [
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Early clock in approved.', [
             'credited_early_minutes' => 45,
         ]);
 
@@ -1234,7 +1267,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::OT_SCOPE_BOTH, $request->overtime_request_scope);
 
         // Approver approves both components
-        $service->approve($request, $sic, 'Both approved.', [
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Both approved.', [
             'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
             'credited_early_minutes' => 45,
             'credited_overtime_minutes' => 60,
@@ -1279,7 +1312,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         // Manager decides to approve Overtime Only
-        $service->approve($request, $sic, 'Only regular OT verified.', [
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Only regular OT verified.', [
             'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
             'credited_overtime_minutes' => 60,
         ]);
@@ -1426,10 +1459,10 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         $this->assertSame(1, $request->current_level);
-        $this->assertSame(2, $request->total_levels);
+        $this->assertSame(3, $request->total_levels);
 
         // Level 1 SIC approves with Early Only
-        $request = $service->approve($request, $sic, 'Verified early OT only.', [
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Verified early OT only.', [
             'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
             'credited_early_minutes' => 60,
         ]);
@@ -1442,7 +1475,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertFalse((bool) $dtr->early_clock_in_approved);
 
         // Level 2 RC approves and finalizes
-        $request = $service->approve($request, $rc, 'Finalized by RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Finalized by RC.');
 
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
@@ -1517,7 +1550,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         // === LEVEL 1: Visible only to SIC ===
-        $this->assertSame(3, $request->total_levels);
+        $this->assertSame(4, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame($sic->id, $request->assigned_employee_id);
 
@@ -1541,21 +1574,21 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Premature approval / rejection attempts by higher levels are blocked
         try {
-            $service->approve($request, $rc, 'Trying premature approve');
+            $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Trying premature approve');
             $this->fail('RC should not be authorized to approve at Level 1');
         } catch (AuthorizationException $e) {
             $this->assertTrue(true);
         }
 
         try {
-            $service->approve($request, $am, 'Trying premature approve');
+            $this->approveAndCompleteHrWhenPending($service, $request, $am, 'Trying premature approve');
             $this->fail('Area Manager should not be authorized to approve at Level 1');
         } catch (AuthorizationException $e) {
             $this->assertTrue(true);
         }
 
         // === LEVEL 1 APPROVAL by SIC -> advances to LEVEL 2 (RC) ===
-        $request = $service->approve($request, $sic, 'Endorsed by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed by SIC.');
         $this->assertSame(2, $request->current_level);
         $this->assertSame($rc->id, $request->assigned_employee_id);
 
@@ -1579,14 +1612,14 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Area Manager still blocked
         try {
-            $service->approve($request, $am, 'Trying premature approve');
+            $this->approveAndCompleteHrWhenPending($service, $request, $am, 'Trying premature approve');
             $this->fail('Area Manager should not be authorized to approve at Level 2');
         } catch (AuthorizationException $e) {
             $this->assertTrue(true);
         }
 
         // === LEVEL 2 APPROVAL by RC -> advances to LEVEL 3 (Area Manager) ===
-        $request = $service->approve($request, $rc, 'Endorsed by RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Endorsed by RC.');
         $this->assertSame(3, $request->current_level);
         $this->assertSame($am->id, $request->assigned_employee_id);
 
@@ -1609,9 +1642,9 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertTrue($request->canBeReviewedBy($am));
 
         // === LEVEL 3 APPROVAL by Area Manager -> Finalizes ===
-        $request = $service->approve($request, $am, 'Final approval by Area Manager.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $am, 'Final approval by Area Manager.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
-        $this->assertCount(3, $request->approvals_history);
+        $this->assertCount(4, $request->approvals_history);
 
         // All pending counts and badges are cleared
         $this->assertSame(0, DtrChangeRequest::query()->pendingForApprover($sic)->count());
@@ -1686,7 +1719,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         // Level 1 approves
-        $request = $service->approve($request, $sic, 'Endorsed by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed by SIC.');
         $this->assertSame(2, $request->current_level);
 
         // Level 2 (RC) rejects
@@ -1704,11 +1737,52 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertFalse($request->canBeReviewedBy($am));
 
         try {
-            $service->approve($request, $am, 'Area manager trying to approve rejected');
+            $this->approveAndCompleteHrWhenPending($service, $request, $am, 'Area manager trying to approve rejected');
             $this->fail('Area manager should not be able to approve a rejected request');
         } catch (ValidationException $e) {
             $this->assertTrue(true);
         }
+    }
+
+    public function test_station_endorsement_waits_for_hr_before_finalizing_dtr(): void
+    {
+        [$employee, $branch, $period, $sic] = $this->setupEmployeeAndBranch();
+        $dtr = Dtr::query()->create([
+            'employee_id' => $employee->id,
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-08',
+            'time_in' => '08:00 AM',
+            'date_out' => '2026-09-08',
+            'time_out' => '05:00 PM',
+            'schedule_start' => '08:00 AM',
+            'schedule_end' => '05:00 PM',
+            'schedule_type' => 'Regular',
+            'overtime' => 60,
+            'overtime_approved' => false,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+        $request = $service->submitFromDtr($employee, $dtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'explanation' => 'One hour of verified overtime.',
+        ]);
+
+        $this->assertSame(2, $request->total_levels);
+        $this->assertTrue($request->workflow_snapshot[1]['is_hr']);
+        $request = $service->approve($request, $sic, 'Endorsed to HR.');
+
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+        $this->assertTrue($request->isPendingHrApproval());
+        $this->assertSame(1, DtrChangeRequest::query()->pendingForHr()->count());
+        $this->assertFalse((bool) $dtr->fresh()->overtime_approved);
+        $this->assertFalse($request->canBeReviewedBy($sic));
+
+        $request = $service->approve($request, $this->hrReviewer(), 'Final HR approval.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+        $this->assertTrue((bool) $dtr->fresh()->overtime_approved);
+        $this->assertCount(2, $request->approvals_history);
+        $this->assertSame('HR Final Approval', $request->approvals_history[1]['label']);
     }
 
     public function test_single_level_workflow_immediately_visible_to_sic_and_finalized_upon_approval(): void
@@ -1725,7 +1799,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         ]);
 
         // Single level workflow
-        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(2, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame($sic->id, $request->assigned_employee_id);
 
@@ -1736,7 +1810,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertTrue($request->canBeReviewedBy($sic));
 
         // SIC approves -> Automatically treated as fully approved
-        $request = $service->approve($request, $sic, 'Approved by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved by SIC.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         // Badge and table cleared
@@ -1790,7 +1864,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame('Shift1', $request->proposed_values['schedule_type']);
 
         // Approving finalizes and updates visible DTR
-        $service->approve($request, $sic, 'Verified and approved.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Verified and approved.');
         $visibleDtr->refresh();
         $this->assertSame('12:30:00', $visibleDtr->time_out);
         $this->assertSame('Shift1', $visibleDtr->schedule_type);
@@ -1837,7 +1911,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame('20:30:00', $request->proposed_values['schedule_end']);
         $this->assertSame('Shift2', $request->proposed_values['schedule_type']);
 
-        $service->approve($request, $sic, 'Shift 2 confirmed.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Shift 2 confirmed.');
         $visibleDtr->refresh();
         $this->assertSame('Shift2', $visibleDtr->schedule_type);
         $this->assertSame('20:30:00', $visibleDtr->time_out);
@@ -1965,7 +2039,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame('04:00:00', $request->proposed_values['schedule_end']);
 
         // Approve and verify DTR calculation
-        $service->approve($request, $sic, 'Overnight shift approved.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Overnight shift approved.');
         $visibleDtr->refresh();
         $this->assertSame('2026-09-06', $visibleDtr->date_out);
         $this->assertSame('04:00:00', $visibleDtr->time_out);
@@ -2136,7 +2210,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'explanation' => 'SIC overtime work.',
         ]);
 
-        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(2, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame($rc->id, $request->assigned_employee_id);
         $this->assertSame('RC', $request->current_step_label);
@@ -2145,7 +2219,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertTrue($request->canBeReviewedBy($rc));
 
         // RC approves -> RC is the final approver, so DTR is finalized immediately
-        $request = $service->approve($request, $rc, 'Approved by RC as final approver.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Approved by RC as final approver.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $this->assertTrue((bool) $sicDtr->fresh()->overtime_approved);
     }
@@ -2230,7 +2304,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'schedule_type' => 'Regular',
         ]);
 
-        $request = $service->approve($request, $hrUser, 'Verified and approved by HR.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $hrUser, 'Verified and approved by HR.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $this->assertSame('05:00 PM', $rcDtr->fresh()->time_out);
     }
@@ -2274,7 +2348,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertFalse($request->canBeReviewedBy($sic));
         $this->assertSame(1, DtrChangeRequest::query()->pendingForHr()->count());
 
-        $request = $service->approve($request, $hrUser, 'Approved by HR.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $hrUser, 'Approved by HR.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $this->assertTrue((bool) $sicDtr->fresh()->overtime_approved);
         $this->assertSame(0, DtrChangeRequest::query()->pendingForHr()->count());

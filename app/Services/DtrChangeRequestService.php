@@ -25,15 +25,9 @@ class DtrChangeRequestService
      * Resolves the approval workflow hierarchy for an employee by checking
      * LeaveApprovalWorkflow.
      *
-     * Rules:
-     * - Regular employee requests use the configured workflow approvers only
-     *   (the last workflow approver is the final approver).
-     * - When an approver submits their own DTR Change Request, skip the requester
-     *   (and any lower workflow levels):
-     *   - If a higher workflow approver exists, send the request to that approver
-     *     (who becomes the final approver if last in the workflow).
-     *   - If no higher workflow approver exists, automatically send the request
-     *     directly to HR for final approval.
+     * Configured approvers review in order, followed by HR final approval.
+     * An approver's own request skips that approver and lower levels; if no
+     * higher approver remains, the request goes directly to HR.
      *
      * @return array<int, array{level: int, label: string, approver_employee_id: int|null, approver_name: string, is_hr?: bool}>
      */
@@ -147,23 +141,19 @@ class DtrChangeRequestService
             }
         }
 
-        if (count($candidateSteps) > 0) {
-            return $candidateSteps;
+        if ($candidateSteps === [] && ! ($allowHrFallbackWhenLastApprover && $requesterHighestIndex >= 0 && $hasAnyActiveApproverInFlow)) {
+            return [];
         }
 
-        if ($allowHrFallbackWhenLastApprover && $requesterHighestIndex >= 0 && $hasAnyActiveApproverInFlow) {
-            return [
-                [
-                    'level' => 1,
-                    'label' => 'HR Final Approval',
-                    'approver_employee_id' => null,
-                    'approver_name' => 'HR',
-                    'is_hr' => true,
-                ],
-            ];
-        }
+        $candidateSteps[] = [
+            'level' => count($candidateSteps) + 1,
+            'label' => 'HR Final Approval',
+            'approver_employee_id' => null,
+            'approver_name' => 'HR',
+            'is_hr' => true,
+        ];
 
-        return [];
+        return $candidateSteps;
     }
 
     /**
@@ -1315,6 +1305,12 @@ class DtrChangeRequestService
 
             $isFinal = (int) $request->current_level >= (int) $request->total_levels;
 
+            if ($isFinal && ! $isHrStage) {
+                throw ValidationException::withMessages([
+                    'status' => 'HR must complete the final D.T.R approval. Refresh this request or contact HR if its approval route has not been updated.',
+                ]);
+            }
+
             if (! $isFinal) {
                 // Multi-level workflow: Advance to next configured level (which may be another employee or HR Final Approval)
                 $nextLevel = (int) $request->current_level + 1;
@@ -1332,7 +1328,7 @@ class DtrChangeRequestService
                 return $request->refresh();
             }
 
-            // Final Approval (last workflow approver or HR Final Approval): Officially finalize DTR
+            // Only HR final approval officially changes the DTR.
             $request->proposed_values = $proposed;
             $this->finalizeApprovedRequest($request, $identity['employee']);
 

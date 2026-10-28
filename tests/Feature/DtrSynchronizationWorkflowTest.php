@@ -467,6 +467,10 @@ class DtrSynchronizationWorkflowTest extends TestCase
 
         app(DtrChangeRequestService::class)->approve($changeRequest->refresh(), $ctx['sicEmployee'], 'Approved after CCTV check.');
 
+        $this->assertSame('Pending', $changeRequest->fresh()->status);
+        $this->assertSame('08:30:00', $officialBefore->fresh()->time_in);
+        app(DtrChangeRequestService::class)->approve($changeRequest->refresh(), $ctx['hrUser'], 'Final HR approval.');
+
         $visibleAfter = $visibleRecord->refresh();
         $officialAfter = $officialBefore->refresh();
 

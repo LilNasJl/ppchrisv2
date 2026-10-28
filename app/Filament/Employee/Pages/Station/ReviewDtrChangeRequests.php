@@ -551,7 +551,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                                     return 'Approving will permanently delete the selected DTR entry from official records. This action cannot be undone.';
                                 }
 
-                                return 'Approving will forward this deletion request to the next approval level.';
+                                return 'Approving will forward this deletion request to the next approval level or HR for final review.';
                             }
 
                             if ($record->request_type === DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES) {
@@ -560,14 +560,14 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                                     return "Approving will officially create {$count} missing DTR record(s) and apply them to payroll calculations.";
                                 }
 
-                                return "Approving will forward this missing DTR request ({$count} entries) to the next approval level.";
+                                return "Approving will forward this missing DTR request ({$count} entries) to the next approval level or HR for final review.";
                             }
 
                             if ($isFinal) {
                                 return 'Approving will officially finalize the attendance record and apply changes to payroll calculations.';
                             }
 
-                            return 'Approving will forward this request to the next approval level with any saved corrections.';
+                            return 'Approving will forward this request to the next approval level or HR for final review, with any saved corrections.';
                         })
                         ->modalSubmitActionLabel('Yes, Approve Request')
                         ->schema(function (DtrChangeRequest $record): array {

@@ -13,6 +13,7 @@ use App\Services\DtrChangeRequestService;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +21,15 @@ use Tests\TestCase;
 
 class DtrChangeRequestWorkflowTest extends TestCase
 {
+    private function hrReviewer(): User
+    {
+        return User::query()->findOrFail(DB::table('users')->insertGetId([
+            'name' => 'HR Final Reviewer',
+            'role' => 'hr',
+            'password' => 'secret',
+        ]));
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -344,8 +354,11 @@ class DtrChangeRequestWorkflowTest extends TestCase
 
         $reviewed = app(DtrChangeRequestService::class)->approve($request, $owner, 'Verified against the biometric log.');
 
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $reviewed->status);
+        $this->assertTrue($reviewed->isPendingHrApproval());
+        $this->assertNull($reviewed->reviewed_at);
+        $reviewed = app(DtrChangeRequestService::class)->approve($reviewed, $this->hrReviewer(), 'Final HR approval.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $reviewed->status);
-        $this->assertSame($owner->id, $reviewed->reviewed_by_employee_id);
         $this->assertNotNull($reviewed->reviewed_at);
         $this->assertDatabaseCount('dtrs', 0);
     }
@@ -406,7 +419,9 @@ class DtrChangeRequestWorkflowTest extends TestCase
     {
         [$employee, $period, $owner] = $this->context();
         $request = app(DtrChangeRequestService::class)->submit($employee, $this->requestData($period));
-        app(DtrChangeRequestService::class)->approve($request, $owner, 'Approved.');
+        $request = app(DtrChangeRequestService::class)->approve($request, $owner, 'Endorsed to HR.');
+        $this->assertSame(0, DtrChangeRequest::query()->where('employee_id', $employee->id)->reviewed()->count());
+        app(DtrChangeRequestService::class)->approve($request, $this->hrReviewer(), 'Approved by HR.');
 
         $this->assertSame(1, DtrChangeRequest::query()
             ->where('employee_id', $employee->id)

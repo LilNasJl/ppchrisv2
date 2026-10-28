@@ -404,6 +404,12 @@ class DtrChangeRequest extends Model
         }
 
         if ($this->isCurrentStepHr()) {
+            $employee = $actor instanceof Employee ? $actor : $actor?->employee;
+
+            if ($employee && (int) $employee->id === (int) $this->employee_id) {
+                return false;
+            }
+
             return self::isHrReviewer($actor);
         }
 
@@ -438,6 +444,12 @@ class DtrChangeRequest extends Model
         }
 
         if ($this->isCurrentStepHr()) {
+            $employee = $actor instanceof Employee ? $actor : $actor?->employee;
+
+            if ($employee && (int) $employee->id === (int) $this->employee_id) {
+                return false;
+            }
+
             return self::isHrReviewer($actor);
         }
 

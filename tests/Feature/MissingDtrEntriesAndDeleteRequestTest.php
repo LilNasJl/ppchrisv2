@@ -15,6 +15,7 @@ use App\Services\DtrChangeRequestService;
 use Filament\Facades\Filament;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +23,32 @@ use Tests\TestCase;
 
 class MissingDtrEntriesAndDeleteRequestTest extends TestCase
 {
+    private function approveAndCompleteHrWhenPending(
+        DtrChangeRequestService $service,
+        DtrChangeRequest $request,
+        Employee|User $reviewer,
+        ?string $remarks = null,
+        array $approvalData = [],
+    ): DtrChangeRequest {
+        $request = $service->approve($request, $reviewer, $remarks, $approvalData);
+        if ($request->isPendingHrApproval()) {
+            $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+            $this->assertNull($request->assigned_employee_id);
+            $hr = User::query()->where('email', 'dtr-final-hr@example.test')->first();
+            if (! $hr) {
+                $hr = User::query()->findOrFail(DB::table('users')->insertGetId([
+                    'email' => 'dtr-final-hr@example.test',
+                    'name' => 'DTR Final HR',
+                    'role' => 'hr',
+                    'password' => 'secret',
+                ]));
+            }
+            $request = $service->approve($request, $hr, 'Approved by HR.');
+        }
+
+        return $request;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -458,7 +485,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'attachment_original_name' => 'proof.png',
         ]);
 
-        $this->assertSame(2, $request->total_levels);
+        $this->assertSame(3, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertSame(DtrChangeRequest::TYPE_MISSING_DTR_ENTRIES, $request->request_type);
@@ -467,14 +494,14 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertSame(0, Dtr::query()->where('employee_id', $employee->id)->orWhere('fingerprint_id', $employee->fingerprint_id)->count());
 
         // Level 1: SIC Approves
-        $request = $service->approve($request, $sic, 'Endorsed by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed by SIC.');
         $this->assertSame(2, $request->current_level);
         $this->assertSame($rc->id, $request->assigned_employee_id);
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertSame(0, Dtr::query()->where('fingerprint_id', $employee->fingerprint_id)->count());
 
         // Level 2: RC Approves (Final Level)
-        $request = $service->approve($request, $rc, 'Final approval by RC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Final approval by RC.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         // Official DTR and EmployeeVisibleDtr now have all 3 entries
@@ -508,10 +535,10 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'attachment_path' => $attachmentPath,
         ]);
 
-        $this->assertSame(1, $request->total_levels);
+        $this->assertSame(2, $request->total_levels);
         $this->assertSame(1, $request->current_level);
 
-        $request = $service->approve($request, $sic, 'Approved by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved by SIC.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         $this->assertSame(2, Dtr::query()->where('fingerprint_id', $employee->fingerprint_id)->count());
@@ -537,7 +564,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'attachment_path' => $attachmentPath,
         ]);
 
-        $request = $service->approve($request, $sic, 'Approved by SIC.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved by SIC.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         $official = Dtr::query()->where('fingerprint_id', $employee->fingerprint_id)->whereDate('date_in', '2026-10-05')->first();
@@ -752,7 +779,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'explanation' => 'Accidental biometric swipe on rest day.',
         ]);
 
-        $this->assertSame(2, $request->total_levels);
+        $this->assertSame(3, $request->total_levels);
         $this->assertSame(1, $request->current_level);
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
 
@@ -760,13 +787,13 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertDatabaseHas('dtrs', ['id' => $dtr->id]);
 
         // Level 1: SIC approves
-        $request = $service->approve($request, $sic, 'Endorsed for deletion.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Endorsed for deletion.');
         $this->assertSame(2, $request->current_level);
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertDatabaseHas('dtrs', ['id' => $dtr->id]);
 
         // Level 2: RC approves (Final)
-        $request = $service->approve($request, $rc, 'Final deletion approval.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $rc, 'Final deletion approval.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         // Record is permanently deleted across both official and visible tables
@@ -840,7 +867,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'explanation' => 'Duplicate clock in test.',
         ]);
 
-        $request = $service->approve($request, $sic, 'Approved deletion.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved deletion.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         $this->assertDatabaseMissing('dtrs', ['id' => $dtr->id]);
@@ -916,7 +943,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
 
         // Approving must fail due to conflict and NOT create partial entry for 2026-10-12
         try {
-            $service->approve($request, $sic, 'Approving missing entries.');
+            $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approving missing entries.');
             $this->fail('Expected exception for conflicting entry during final approval.');
         } catch (\DomainException $e) {
             $this->assertStringContainsString('2026-10-13', $e->getMessage());
@@ -972,7 +999,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertCount(2, $request->proposed_values['entries']);
 
         // Approve and verify records created
-        $request = $service->approve($request, $sic, 'Approved dual shift.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved dual shift.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         $created = Dtr::query()->where('fingerprint_id', $employee->fingerprint_id)->whereDate('date_in', '2026-10-01')->get();
@@ -1056,7 +1083,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
 
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
 
-        $request = $service->approve($request, $sic, 'Approved.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         $records = Dtr::query()->where('fingerprint_id', $employee->fingerprint_id)->whereDate('date_in', '2026-10-01')->get();
@@ -1225,7 +1252,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertDatabaseHas('dtrs', ['id' => $record5OtherEmp->id]);
 
         // Approver approves the request
-        $request = $service->approve($request, $sic, 'Approved deletion of Record 1.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved deletion of Record 1.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         // ONLY Record 1 is deleted!
@@ -1312,7 +1339,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertSame($entryB->id, $request->employee_visible_dtr_id);
         $this->assertSame($entryB->id, $request->targetDtrUid());
 
-        $request = $service->approve($request, $sic, 'Approved.');
+        $request = $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
 
         // ONLY Entry B is deleted
@@ -1370,7 +1397,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage('The selected DTR entry no longer exists or has already been deleted.');
 
-        $service->approve($request, $sic, 'Attempting approval');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Attempting approval');
 
         // Other record on same date MUST still exist (no date fallback occurred!)
         $this->assertDatabaseHas('dtrs', ['id' => $otherDtrSameDate->id]);
@@ -1424,8 +1451,11 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             'description' => 'Tampered delete request.',
             'status' => DtrChangeRequest::STATUS_PENDING,
             'current_level' => 1,
-            'total_levels' => 1,
-            'workflow_snapshot' => [['level' => 1, 'label' => 'SIC', 'approver_employee_id' => $sic->id, 'approver_name' => $sic->full_name]],
+            'total_levels' => 2,
+            'workflow_snapshot' => [
+                ['level' => 1, 'label' => 'SIC', 'approver_employee_id' => $sic->id, 'approver_name' => $sic->full_name],
+                ['level' => 2, 'label' => 'HR Final Approval', 'approver_employee_id' => null, 'approver_name' => 'HR', 'is_hr' => true],
+            ],
             'approvals_history' => [],
             'proposed_values' => ['action' => 'delete', 'dtr_uid' => $otherDtr->id],
         ]);
@@ -1433,7 +1463,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->expectException(\DomainException::class);
         $this->expectExceptionMessage('The selected DTR entry does not belong to the requesting employee.');
 
-        $service->approve($request, $sic, 'Attempting approval');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Attempting approval');
     }
 
     /**
@@ -1522,7 +1552,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertNull($missingReq->targetDtrRecord());
 
         // Approving the missing entry request should finalize without errors
-        $missingReq = $service->approve($missingReq, $sic, 'Approved missing entries.');
+        $missingReq = $this->approveAndCompleteHrWhenPending($service, $missingReq, $sic, 'Approved missing entries.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $missingReq->status);
 
         // 2. Official DTR lookup fallback in targetDtrRecord queries by fingerprint_id, not employee_id
@@ -1608,7 +1638,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertSame($visible->id, $request->employee_visible_dtr_id);
 
         // Approve delete request
-        $service->approve($request, $sic, 'Approved deletion.');
+        $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Approved deletion.');
 
         // Both tables have the record permanently removed!
         $this->assertDatabaseMissing('employee_visible_dtrs', ['id' => $visible->id]);
@@ -1711,14 +1741,14 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
             ],
         ]);
 
-        $this->assertSame(1, $sicRequest->total_levels);
+        $this->assertSame(2, $sicRequest->total_levels);
         $this->assertSame(1, $sicRequest->current_level);
         $this->assertSame($rc->id, $sicRequest->assigned_employee_id);
         $this->assertFalse($sicRequest->canBeReviewedBy($sic));
         $this->assertTrue($sicRequest->canBeReviewedBy($rc));
 
         // RC approves -> RC is final approver, so DTR record is created immediately
-        $sicRequest = $service->approve($sicRequest, $rc, 'Approved by RC.');
+        $sicRequest = $this->approveAndCompleteHrWhenPending($service, $sicRequest, $rc, 'Approved by RC.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $sicRequest->status);
         $this->assertDatabaseHas('dtrs', [
             'fingerprint_id' => '9',
@@ -1753,7 +1783,7 @@ class MissingDtrEntriesAndDeleteRequestTest extends TestCase
         $this->assertTrue($rcRequest->canBeReviewedBy($hrUser));
 
         // HR approves -> finalizes and creates the missing DTR entry for PF-0014
-        $rcRequest = $service->approve($rcRequest, $hrUser, 'Approved by HR.');
+        $rcRequest = $this->approveAndCompleteHrWhenPending($service, $rcRequest, $hrUser, 'Approved by HR.');
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $rcRequest->status);
         $this->assertDatabaseHas('dtrs', [
             'fingerprint_id' => '14',

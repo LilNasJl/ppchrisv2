@@ -26,6 +26,7 @@ use App\Services\StationManagementAccess;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\PermissionRegistrar;
@@ -34,6 +35,15 @@ use Tests\TestCase;
 
 class StationManagementApprovalWorkflowAccessTest extends TestCase
 {
+    private function hrReviewer(): User
+    {
+        return User::query()->findOrFail(DB::table('users')->insertGetId([
+            'name' => 'HR Final Reviewer',
+            'role' => 'hr',
+            'password' => 'secret',
+        ]));
+    }
+
     protected Branch $tagum;
 
     protected Branch $maco;
@@ -997,8 +1007,11 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         $this->assertSame('Pending', $cr->status);
         $this->assertSame(3, $cr->current_level);
 
-        // Level 3 approves -> final level applies changes and marks Approved
+        // Level 3 endorses; HR applies the final change.
         $cr = $service->approve($cr, $empL3, 'L3 finalized');
+        $this->assertSame('Pending', $cr->status);
+        $this->assertSame('04:30 PM', $dtr->fresh()->time_out);
+        $cr = $service->approve($cr, $this->hrReviewer(), 'HR finalized');
         $this->assertSame('Approved', $cr->status);
         $this->assertSame('05:05 PM', $dtr->fresh()->time_out);
     }
@@ -1104,6 +1117,8 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         $this->assertTrue($missingReq->canBeReviewedBy($tagumSic));
 
         $missingReq = $service->approve($missingReq, $tagumSic, 'Approved missing entry');
+        $this->assertSame('Pending', $missingReq->status);
+        $missingReq = $service->approve($missingReq, $this->hrReviewer(), 'HR approved missing entry');
         $this->assertSame('Approved', $missingReq->status);
         $createdDtr = Dtr::query()->where('fingerprint_id', $staffEmp->fingerprint_id)->whereDate('date_in', '2026-10-05')->firstOrFail();
 
@@ -1116,6 +1131,9 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         $this->assertTrue($deleteReq->canBeReviewedBy($tagumSic));
 
         $deleteReq = $service->approve($deleteReq, $tagumSic, 'Approved permanent deletion');
+        $this->assertSame('Pending', $deleteReq->status);
+        $this->assertNotNull(Dtr::withTrashed()->find($createdDtr->id));
+        $deleteReq = $service->approve($deleteReq, $this->hrReviewer(), 'HR approved deletion');
         $this->assertSame('Approved', $deleteReq->status);
         $this->assertNull(Dtr::withTrashed()->find($createdDtr->id));
     }
@@ -1197,8 +1215,10 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         ]);
         $cr = $service->approve($cr, $empA, 'Approved by Alice');
 
+        $this->assertSame('Pending', $cr->status);
+        $cr = $service->approve($cr, $this->hrReviewer(), 'Final HR approval');
         $this->assertSame('Approved', $cr->status);
-        $this->assertSame($empA->id, (int) $cr->reviewed_by_employee_id);
+        $this->assertNull($cr->reviewed_by_employee_id);
 
         // Remove Alice from the workflow
         LeaveApprovalLevel::query()->where('workflow_id', $workflow->id)->delete();
@@ -1209,9 +1229,9 @@ class StationManagementApprovalWorkflowAccessTest extends TestCase
         // Historical record still preserves Alice's approval metadata and step history
         $crFresh = $cr->fresh();
         $this->assertSame('Approved', $crFresh->status);
-        $this->assertSame($empA->id, (int) $crFresh->reviewed_by_employee_id);
-        $this->assertSame('Approved by Alice', $crFresh->reviewer_remarks);
-        $this->assertCount(1, $crFresh->approvals_history);
+        $this->assertNull($crFresh->reviewed_by_employee_id);
+        $this->assertSame('Final HR approval', $crFresh->reviewer_remarks);
+        $this->assertCount(2, $crFresh->approvals_history);
         $this->assertSame($empA->id, (int) $crFresh->approvals_history[0]['actor_id']);
         $this->assertSame('Approved', $crFresh->approvals_history[0]['action']);
     }
