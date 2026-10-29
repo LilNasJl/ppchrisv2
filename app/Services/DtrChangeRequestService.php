@@ -969,7 +969,7 @@ class DtrChangeRequestService
             $steps = $this->resolveWorkflow($employee);
             $firstStep = $steps[0];
 
-            return DtrChangeRequest::query()->create([
+            $request = DtrChangeRequest::query()->create([
                 'employee_id' => $employee->id,
                 'branch_id' => $employee->branch_id,
                 'payroll_period_id' => $period->id,
@@ -996,6 +996,18 @@ class DtrChangeRequestService
                 'original_values' => $originalValues,
                 'proposed_values' => $proposedValues,
             ]);
+
+            if ($requestType === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH && ! empty($data['employee_proposal_required'])) {
+                return $this->saveCorrectionsInternal($request, $employee, [
+                    'date_in' => $dtrDate,
+                    'date_out' => $data['date_out'] ?? $originalValues['date_out'],
+                    'time_in' => filled($originalValues['time_in']) ? $originalValues['time_in'] : ($data['time_in'] ?? null),
+                    'time_out' => filled($originalValues['time_out']) ? $originalValues['time_out'] : ($data['time_out'] ?? null),
+                    'schedule_type' => $data['schedule_type'] ?? null,
+                ], true);
+            }
+
+            return $request;
         });
     }
 
@@ -1004,7 +1016,12 @@ class DtrChangeRequestService
      */
     public function saveCorrections(DtrChangeRequest $request, Employee|User $editor, array $data): DtrChangeRequest
     {
-        return DB::transaction(function () use ($request, $editor, $data): DtrChangeRequest {
+        return $this->saveCorrectionsInternal($request, $editor, $data, false);
+    }
+
+    private function saveCorrectionsInternal(DtrChangeRequest $request, Employee|User $editor, array $data, bool $atSubmission): DtrChangeRequest
+    {
+        return DB::transaction(function () use ($request, $editor, $data, $atSubmission): DtrChangeRequest {
             $request = DtrChangeRequest::query()
                 ->whereKey($request->getKey())
                 ->lockForUpdate()
@@ -1022,7 +1039,7 @@ class DtrChangeRequestService
                 ]);
             }
 
-            if (! $request->is_first_level && ! $request->isPendingHrApproval()) {
+            if (! $atSubmission && ! $request->is_first_level && ! $request->isPendingHrApproval()) {
                 throw new AuthorizationException('Only the first-level approver or HR can edit DTR information.');
             }
 
@@ -1032,7 +1049,12 @@ class DtrChangeRequestService
                 ]);
             }
 
-            if (! $request->canBeEditedBy($editor)) {
+            if ($atSubmission && ($request->request_type !== DtrChangeRequest::TYPE_FORGOT_TO_PUNCH
+                || (int) $request->employee_id !== (int) $editor->id || filled($request->proposed_values))) {
+                throw new AuthorizationException('Only the requester can propose a missing punch at submission.');
+            }
+
+            if (! $atSubmission && ! $request->canBeEditedBy($editor)) {
                 throw new AuthorizationException('You are not authorized to edit DTR information for this request.');
             }
 
@@ -1063,6 +1085,15 @@ class DtrChangeRequestService
                     throw ValidationException::withMessages([
                         'employee_id' => 'The selected DTR record does not belong to the requesting employee.',
                     ]);
+                }
+            }
+
+            if ($atSubmission && $targetRecord) {
+                foreach (['time_in', 'time_out'] as $punch) {
+                    if (filled($request->original_values[$punch] ?? null)
+                        && (string) ($data[$punch] ?? '') !== (string) $request->original_values[$punch]) {
+                        throw ValidationException::withMessages([$punch => 'An existing biometric punch cannot be changed in a forgot-to-punch request.']);
+                    }
                 }
             }
 
@@ -1178,10 +1209,14 @@ class DtrChangeRequestService
                 'comment' => $comment,
             ];
 
+            if ($atSubmission) {
+                $proposedValues['submitted_by_employee'] = true;
+            }
+
             $request->update([
                 'proposed_values' => $proposedValues,
-                'first_level_editor_id' => $editorIdentity['employee']?->id ?? $request->first_level_editor_id,
-                'first_level_edited_at' => now(),
+                'first_level_editor_id' => $atSubmission ? null : ($editorIdentity['employee']?->id ?? $request->first_level_editor_id),
+                'first_level_edited_at' => $atSubmission ? null : now(),
             ]);
 
             return $request->refresh();

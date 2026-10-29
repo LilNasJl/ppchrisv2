@@ -399,6 +399,10 @@ class DtrChangeRequest extends Model
 
     public function canBeEditedBy(User|Employee|null $actor): bool
     {
+        if ($this->request_type === self::TYPE_FORGOT_TO_PUNCH && ! empty($this->proposed_values['submitted_by_employee'])) {
+            return false;
+        }
+
         if (! $this->isPendingAtCurrentLevel() || ! $this->is_editable_type) {
             return false;
         }

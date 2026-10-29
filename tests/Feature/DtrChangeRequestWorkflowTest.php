@@ -174,6 +174,7 @@ class DtrChangeRequestWorkflowTest extends TestCase
             $table->string('schedule_type')->nullable();
             $table->string('schedule_start')->nullable();
             $table->string('schedule_end')->nullable();
+            $table->string('comment')->nullable();
             $table->double('late')->nullable()->default(0);
             $table->double('undertime')->nullable()->default(0);
             $table->double('overtime')->nullable()->default(0);
@@ -497,10 +498,78 @@ class DtrChangeRequestWorkflowTest extends TestCase
         $request = app(DtrChangeRequestService::class)->submitFromDtr($employee, $dtr, [
             'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
             'explanation' => 'Missed punching out.',
+            'schedule_type' => 'Regular',
+            'time_out' => '18:00:00',
+            'employee_proposal_required' => true,
         ]);
 
         $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
         $this->assertSame(DtrChangeRequest::TYPE_FORGOT_TO_PUNCH, $request->request_type);
+        $this->assertSame('18:00:00', $request->proposed_values['time_out']);
+        $this->assertTrue($request->proposed_values['submitted_by_employee']);
+        $this->assertFalse($request->canBeEditedBy($owner));
+        try {
+            app(DtrChangeRequestService::class)->saveCorrections($request, $owner, [
+                'date_in' => '2026-08-16',
+                'time_in' => '08:00:00',
+                'date_out' => '2026-08-16',
+                'time_out' => '19:00:00',
+                'schedule_type' => 'Regular',
+            ]);
+            $this->fail('Approvers must not edit an employee-submitted proposal.');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame('You are not authorized to edit DTR information for this request.', $exception->getMessage());
+        }
+        $this->assertNull($dtr->fresh()->time_out);
+
+        $service = app(DtrChangeRequestService::class);
+        $request = $service->approve($request, $owner);
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+        $this->assertNull($dtr->fresh()->time_out);
+        $request = $service->approve($request, $this->hrReviewer());
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+        $this->assertSame('18:00:00', $dtr->fresh()->time_out);
+    }
+
+    public function test_forgot_to_punch_requires_the_missing_time_and_preserves_existing_punch(): void
+    {
+        [$employee, $period] = $this->context();
+        $dtr = \App\Models\Dtr::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $employee->branch_id,
+            'fingerprint_id' => $employee->uid,
+            'date_in' => '2026-08-17',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-08-17',
+            'time_out' => null,
+            'schedule_type' => 'Forgot to Punch',
+        ]);
+
+        try {
+            app(DtrChangeRequestService::class)->submitFromDtr($employee, $dtr, [
+                'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+                'explanation' => 'Missed punch out.',
+                'schedule_type' => 'Regular',
+                'employee_proposal_required' => true,
+            ]);
+            $this->fail('A missing proposed punch must be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('time_out', $exception->errors());
+        }
+
+        $this->assertDatabaseMissing('dtr_change_requests', ['dtr_id' => $dtr->id]);
+
+        $request = app(DtrChangeRequestService::class)->submitFromDtr($employee, $dtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'Missed punch out.',
+            'schedule_type' => 'Regular',
+            'time_in' => '09:00:00',
+            'time_out' => '18:00:00',
+            'employee_proposal_required' => true,
+        ]);
+
+        $this->assertSame('08:00:00', $request->proposed_values['time_in']);
+        $this->assertSame('08:00:00', $dtr->fresh()->time_in);
     }
 
     public function test_submit_missing_dtr_entries_populates_schedule_times_from_branch(): void

@@ -141,7 +141,7 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                 ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
                 ->latest('created_at'))
             ->heading('Employee D.T.R Change Requests')
-            ->description('Review attendance change requests sequentially. Level 1 approvers may correct D.T.R entries prior to approval.')
+            ->description('Review attendance requests in order. Employee-submitted punch corrections can be approved or rejected without editing.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
 
@@ -243,7 +243,43 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                         ->modalWidth('2xl')
                         ->modalContent(fn (DtrChangeRequest $record) => view('filament.employee.pages.partials.dtr-change-request-details-modal', [
                             'record' => $record,
-                        ])),
+                        ]))
+                        ->extraModalFooterActions(fn (DtrChangeRequest $record): array => $record->request_type === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH
+                            && ! empty($record->proposed_values['submitted_by_employee'])
+                            && $record->canBeReviewedBy(auth()->user()) ? [
+                            Action::make('approveFromDetails')
+                                ->label('Approve')
+                                ->icon('heroicon-m-check-circle')
+                                ->color('success')
+                                ->requiresConfirmation()
+                                ->modalHeading('Approve Forgot To Punch Request')
+                                ->modalDescription('Approve the employee-proposed punch and forward this request to the next approver or HR.')
+                                ->modalSubmitActionLabel('Yes, Approve Request')
+                                ->action(function (DtrChangeRequest $record): void {
+                                    $record = app(DtrChangeRequestService::class)->approve($record, $this->managerEmployee());
+                                    $this->notifyEmployee($record);
+                                    Notification::make()->title('D.T.R change request approved')->success()->send();
+                                })
+                                ->cancelParentActions(),
+                            Action::make('rejectFromDetails')
+                                ->label('Reject')
+                                ->icon('heroicon-m-x-circle')
+                                ->color('danger')
+                                ->modalHeading('Reject Forgot To Punch Request')
+                                ->modalSubmitActionLabel('Yes, Reject Request')
+                                ->schema([
+                                    Textarea::make('reviewer_remarks')
+                                        ->label('Rejection Reason')
+                                        ->required()
+                                        ->maxLength(2000),
+                                ])
+                                ->action(function (DtrChangeRequest $record, array $data): void {
+                                    $record = app(DtrChangeRequestService::class)->reject($record, $this->managerEmployee(), (string) $data['reviewer_remarks']);
+                                    $this->notifyEmployee($record);
+                                    Notification::make()->title('D.T.R change request rejected')->success()->send();
+                                })
+                                ->cancelParentActions(),
+                        ] : []),
 
                     Action::make('editDtr')
                         ->label('Edit & Review D.T.R')
@@ -531,7 +567,8 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                         ->color('success')
                         ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING
                             && $record->canBeReviewedBy(auth()->user())
-                            && ! ($record->is_first_level && $record->is_editable_type))
+                            && ! ($record->request_type === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH && ! empty($record->proposed_values['submitted_by_employee']))
+                            && ! ($record->is_first_level && $record->is_editable_type && empty($record->proposed_values['submitted_by_employee'])))
                         ->requiresConfirmation()
                         ->modalWidth('2xl')
                         ->modalHeading('Are you sure you want to continue?')
@@ -707,7 +744,8 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                         ->color('danger')
                         ->visible(fn (DtrChangeRequest $record): bool => $record->status === DtrChangeRequest::STATUS_PENDING
                             && $record->canBeReviewedBy(auth()->user())
-                            && ! ($record->is_first_level && $record->is_editable_type))
+                            && ! ($record->request_type === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH && ! empty($record->proposed_values['submitted_by_employee']))
+                            && ! ($record->is_first_level && $record->is_editable_type && empty($record->proposed_values['submitted_by_employee'])))
                         ->requiresConfirmation()
                         ->modalHeading('Are you sure you want to continue?')
                         ->modalDescription('Explain why the change request cannot be approved. Workflow will stop and no changes will be applied.')

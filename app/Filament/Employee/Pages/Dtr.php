@@ -17,6 +17,7 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -573,6 +574,32 @@ class Dtr extends Page implements HasForms, HasTable
                                 })
                                 ->columnSpanFull(),
 
+                            Select::make('schedule_type')
+                                ->label('Schedule')
+                                ->options(fn (DtrModel $record): array => app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($this->employee?->branch, withTimes: true))
+                                ->default(function (DtrModel $record): ?string {
+                                    $options = app(DtrChangeRequestService::class)->availableScheduleOptionsForBranch($this->employee?->branch, withTimes: false);
+                                    return array_key_exists((string) $record->schedule_type, $options) ? $record->schedule_type : array_key_first($options);
+                                })
+                                ->visible(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH)
+                                ->required(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH),
+
+                            TimePicker::make('time_in')
+                                ->label('Correct Time In')
+                                ->seconds(false)
+                                ->default(fn (DtrModel $record) => $record->time_in)
+                                ->disabled(fn (DtrModel $record): bool => filled($record->time_in))
+                                ->visible(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH)
+                                ->required(fn ($get, DtrModel $record): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH && blank($record->time_in)),
+
+                            TimePicker::make('time_out')
+                                ->label('Correct Time Out')
+                                ->seconds(false)
+                                ->default(fn (DtrModel $record) => $record->time_out)
+                                ->disabled(fn (DtrModel $record): bool => filled($record->time_out))
+                                ->visible(fn ($get): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH)
+                                ->required(fn ($get, DtrModel $record): bool => $get('request_type') === DtrChangeRequest::TYPE_FORGOT_TO_PUNCH && blank($record->time_out)),
+
                             Textarea::make('explanation')
                                 ->label('Explanation / Justification')
                                 ->placeholder(fn ($get): string => $get('request_type') === DtrChangeRequest::TYPE_DELETE_TIME_ENTRY
@@ -625,6 +652,7 @@ class Dtr extends Page implements HasForms, HasTable
                             }
 
                             try {
+                                $data['employee_proposal_required'] = true;
                                 app(DtrChangeRequestService::class)->submitFromDtr($employee, $record, $data);
 
                                 Notification::make()
