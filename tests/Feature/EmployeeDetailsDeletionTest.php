@@ -78,6 +78,19 @@ class EmployeeDetailsDeletionTest extends TestCase
         $table->assertTableColumnDoesNotExist('created_at');
     }
 
+    public function test_master_data_page_renders_with_refined_table_styling(): void
+    {
+        $this->employeeAccount();
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+        $admin = User::query()->where('username', 'masteradmin')->firstOrFail();
+
+        $response = $this->actingAs($admin)->get('/hr/employee-details');
+        $response->assertSuccessful();
+        $response->assertSee('master-data-page');
+        $response->assertSee('master-data-toolbar');
+        $response->assertSee('WORKFORCE RECORDS');
+    }
+
     /** @return array{User, Employee} */
     private function employeeAccount(): array
     {
