@@ -15,6 +15,8 @@ class LeaveRequestStatusSummary extends StatsOverviewWidget
     {
         return [
             'default' => 2,
+            'sm' => 2,
+            'md' => 4,
             'lg' => 4,
         ];
     }
@@ -29,19 +31,15 @@ class LeaveRequestStatusSummary extends StatsOverviewWidget
 
         return [
             Stat::make('Pending', number_format((int) ($counts['Pending'] ?? 0)))
-                ->description('Awaiting review')
                 ->icon(Heroicon::Clock)
                 ->color('warning'),
             Stat::make('Approved', number_format((int) ($counts['Approved'] ?? 0)))
-                ->description('Approved requests')
                 ->icon(Heroicon::CheckCircle)
                 ->color('success'),
             Stat::make('Rejected', number_format((int) ($counts['Rejected'] ?? 0)))
-                ->description('Rejected requests')
                 ->icon(Heroicon::XCircle)
                 ->color('danger'),
             Stat::make('Cancelled', number_format((int) ($counts['Cancelled'] ?? 0)))
-                ->description('Cancelled requests')
                 ->icon(Heroicon::NoSymbol)
                 ->color('gray'),
         ];

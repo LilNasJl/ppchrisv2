@@ -16,7 +16,7 @@ class DepartmentEmployeeCountChart extends ChartWidget
 
     protected int|string|array $columnSpan = 1;
 
-    protected ?string $maxHeight = '280px';
+    protected ?string $maxHeight = '240px';
 
     protected function getData(): array
     {

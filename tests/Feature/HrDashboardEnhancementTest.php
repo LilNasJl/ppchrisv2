@@ -57,7 +57,12 @@ class HrDashboardEnhancementTest extends TestCase
         $response->assertSee('Dashboard: Employee Snapshot');
         $response->assertSee('Shout Out Hall');
         $response->assertSee('ppc-dashboard-shoutout');
+        $response->assertSee('ppc-dashboard-master-grid');
+        $response->assertSee('ppc-dashboard-left-col');
+        $response->assertSee('ppc-dashboard-right-col');
         $response->assertSee('Attendance & Leave Overview');
+        $response->assertDontSee(':not(.dark)');
+        $response->assertSee('position: sticky');
     }
 
     public function test_dashboard_component_mounts_cleanly_via_livewire(): void

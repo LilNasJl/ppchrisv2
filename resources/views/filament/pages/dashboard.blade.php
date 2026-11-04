@@ -1,43 +1,98 @@
 <x-filament-panels::page>
     <style>
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) {
-            --dashboard-blue: #2563eb;
-            --dashboard-blue-strong: #1e40af;
-            --dashboard-blue-soft: #eff6ff;
-            --dashboard-border: #e2e8f0;
-            --dashboard-surface: #ffffff;
-            --dashboard-muted: #64748b;
-            --dashboard-text: #0f172a;
+            --dashboard-blue: #60a5fa;
+            --dashboard-blue-strong: #93c5fd;
+            --dashboard-blue-soft: rgba(30, 64, 175, 0.2);
+            --dashboard-border: #1e293b;
+            --dashboard-surface: #000000;
+            --dashboard-card-surface: #0a1122;
+            --dashboard-muted: #94a3b8;
+            --dashboard-text: #f8fafc;
         }
 
         .dark .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) {
             --dashboard-blue: #60a5fa;
             --dashboard-blue-strong: #93c5fd;
             --dashboard-blue-soft: rgba(30, 64, 175, 0.2);
-            --dashboard-border: #334155;
-            --dashboard-surface: #1e293b;
+            --dashboard-border: #1e293b;
+            --dashboard-surface: #000000;
+            --dashboard-card-surface: #0a1122;
             --dashboard-muted: #94a3b8;
             --dashboard-text: #f8fafc;
+        }
+
+        /* Full Width Container Enforcement */
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker),
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-header-main-ctn,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-main,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-content,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-master-grid {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        /* Master Grid Layout: 100% Full-Width Block wrapping Filament's 12-Column Grid */
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-master-grid {
+            display: block !important;
+        }
+
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-master-grid > .fi-grid {
+            width: 100% !important;
+            max-width: 100% !important;
+            gap: 1.25rem !important;
+            align-items: start !important;
+        }
+
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-left-col {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 0.85rem !important;
+            min-width: 0 !important;
+            width: 100% !important;
+        }
+
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-right-col {
+            min-width: 0 !important;
+            width: 100% !important;
+        }
+
+        /* Desktop Sticky Shout Out Hall (>= 1280px) */
+        @media (min-width: 1280px) {
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-master-grid > .fi-grid > div:last-child {
+                position: sticky !important;
+                top: 5rem !important;
+                align-self: start !important;
+                height: fit-content !important;
+            }
+
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-right-col,
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-shoutout {
+                position: sticky !important;
+                top: 5rem !important;
+                align-self: start !important;
+                height: fit-content !important;
+            }
         }
 
         /* Compact Gradient Section Headers */
         .ppc-dashboard-group-header {
             background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
             border: 1px solid rgba(147, 197, 253, 0.35);
-            border-radius: 12px;
+            border-radius: 10px;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            min-height: 4.25rem;
-            padding: 0.85rem 1.25rem;
+            min-height: 2.85rem;
+            padding: 0.55rem 1rem;
             width: 100%;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
         }
 
         .ppc-dashboard-group-header--with-action {
             align-items: center;
             flex-direction: row;
-            gap: 1rem;
+            gap: 0.85rem;
             justify-content: space-between;
         }
 
@@ -50,21 +105,21 @@
             display: flex;
             align-items: center;
             gap: 0.35rem;
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.1rem;
         }
 
         .ppc-dashboard-group-eyebrow {
             color: #93c5fd;
-            font-size: 0.6875rem;
+            font-size: 0.625rem;
             font-weight: 800;
             letter-spacing: 0.05em;
-            line-height: 1.2;
+            line-height: 1.1;
             text-transform: uppercase;
         }
 
         .ppc-dashboard-group-header h2 {
             color: #ffffff;
-            font-size: 1.25rem;
+            font-size: 1.05rem;
             font-weight: 800;
             line-height: 1.2;
             margin: 0;
@@ -72,9 +127,9 @@
 
         .ppc-dashboard-group-description {
             color: #dbeafe;
-            font-size: 0.8125rem;
-            line-height: 1.35;
-            margin: 0.2rem 0 0;
+            font-size: 0.75rem;
+            line-height: 1.3;
+            margin: 0.15rem 0 0;
             max-width: 52rem;
         }
 
@@ -82,14 +137,14 @@
             align-items: center;
             background: rgba(255, 255, 255, 0.14);
             border: 1px solid rgba(255, 255, 255, 0.28);
-            border-radius: 8px;
+            border-radius: 6px;
             color: #ffffff;
             display: inline-flex;
             flex: 0 0 auto;
             gap: 0.35rem;
-            height: 2.15rem;
-            padding: 0 0.75rem;
-            font-size: 0.75rem;
+            height: 1.95rem;
+            padding: 0 0.7rem;
+            font-size: 0.725rem;
             font-weight: 700;
             text-decoration: none;
             transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
@@ -103,6 +158,8 @@
 
         .ppc-dashboard-header-action svg {
             color: #93c5fd;
+            height: 14px;
+            width: 14px;
         }
 
         /* Holiday Highlights Widget */
@@ -112,9 +169,9 @@
             --dashboard-blue-strong: #93c5fd;
             background: #000000;
             border: 1px solid var(--dashboard-border);
-            border-radius: 10px;
+            border-radius: 8px;
             color: #f8fafc;
-            padding: 0.75rem 1rem;
+            padding: 0.55rem 0.85rem;
             width: 100%;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
         }
@@ -129,14 +186,14 @@
 
         .ppc-holiday-highlights-header h3 {
             color: var(--dashboard-blue-strong);
-            font-size: 0.875rem;
+            font-size: 0.8125rem;
             font-weight: 750;
             margin: 0;
         }
 
         .ppc-holiday-highlights-header time {
             color: var(--dashboard-muted);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 600;
         }
 
@@ -146,21 +203,21 @@
             display: flex;
             gap: 0.75rem;
             justify-content: space-between;
-            margin-top: 0.5rem;
-            padding-top: 0.5rem;
+            margin-top: 0.35rem;
+            padding-top: 0.35rem;
         }
 
         .ppc-holiday-highlight-row strong {
             display: block;
-            font-size: 0.8125rem;
+            font-size: 0.775rem;
             font-weight: 700;
         }
 
         .ppc-holiday-highlight-row p,
         .ppc-holiday-empty {
             color: var(--dashboard-muted);
-            font-size: 0.75rem;
-            margin: 0.15rem 0 0;
+            font-size: 0.7rem;
+            margin: 0.1rem 0 0;
         }
 
         .ppc-holiday-today {
@@ -169,9 +226,9 @@
             border-radius: 999px;
             color: #15803d;
             flex: 0 0 auto;
-            font-size: 0.6875rem;
+            font-size: 0.65rem;
             font-weight: 700;
-            padding: 0.15rem 0.5rem;
+            padding: 0.1rem 0.45rem;
         }
 
         .dark .ppc-holiday-today {
@@ -182,27 +239,27 @@
 
         .ppc-holiday-empty {
             border-top: 1px solid var(--dashboard-border);
-            margin-top: 0.5rem;
-            padding-top: 0.5rem;
+            margin-top: 0.35rem;
+            padding-top: 0.35rem;
         }
 
         /* Widgets Grid and Section Alignment */
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-header-widgets > .fi-grid {
             align-items: stretch;
-            gap: 0.75rem;
+            gap: 0.65rem;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview .fi-section-content {
-            gap: 0.65rem;
+            gap: 0.5rem;
             padding: 0;
         }
 
-        /* Stats Overview Cards */
+        /* Ultra-Compact Stats Overview Cards */
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat {
             background: var(--dashboard-surface);
             border: 1px solid var(--dashboard-border);
-            border-radius: 10px;
-            min-height: 4.85rem;
+            border-radius: 8px;
+            min-height: 3.85rem;
             overflow: hidden;
             padding: 0 !important;
             position: relative;
@@ -211,6 +268,7 @@
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employee-snapshot-cards .fi-wi-stats-overview-stat,
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-leave-cards .fi-wi-stats-overview-stat,
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-stats-overview-stat {
             background: #000000 !important;
         }
@@ -227,135 +285,97 @@
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat:hover {
             border-color: var(--dashboard-blue);
             transform: translateY(-1px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);
+            box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.04);
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-content {
             justify-content: center;
-            padding: 0.65rem 0.95rem 0.65rem 1.05rem;
+            padding: 0.45rem 0.75rem 0.45rem 0.85rem;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-label {
             color: var(--dashboard-muted);
-            font-size: 0.6875rem;
-            font-weight: 700;
+            font-size: 0.65rem;
+            font-weight: 750;
             text-transform: uppercase;
             letter-spacing: 0.03em;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-value {
-            font-size: 1.45rem;
+            font-size: 1.35rem;
             font-weight: 800;
             line-height: 1.1;
-            margin-top: 0.2rem;
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-description {
-            font-size: 0.725rem;
             margin-top: 0.15rem;
         }
 
-        /* Analytics Mode Cards */
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) [data-dashboard-birthday] {
-            background: var(--dashboard-blue-soft);
-            border-color: var(--dashboard-blue);
-            min-height: 6.5rem;
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) [data-dashboard-birthday]::before {
-            width: 4px;
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) [data-dashboard-birthday] .fi-wi-stats-overview-stat-value {
-            color: var(--dashboard-blue-strong);
-            font-size: clamp(1.25rem, 2vw, 1.75rem);
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) [data-dashboard-birthday] .fi-icon {
-            color: var(--dashboard-blue);
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-description {
+            font-size: 0.6875rem;
+            margin-top: 0.1rem;
         }
 
         /* Chart Widgets */
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart {
             min-width: 0;
+            width: 100%;
         }
 
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart > .fi-section {
-            background: var(--dashboard-surface);
+        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section {
             border: 1px solid var(--dashboard-border);
             border-radius: 10px;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-            height: 100%;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
             overflow: hidden;
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart > .fi-section,
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart .fi-section-header,
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-employment-charts .fi-wi-chart .fi-section-content,
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart > .fi-section,
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart .fi-section-header,
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-attendance-leave-widgets .fi-wi-chart .fi-section-content {
             background: #000000 !important;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header {
-            background: #f8fafc;
+            background: #0a1122 !important;
             border-bottom: 1px solid var(--dashboard-border);
-            min-height: 2.75rem;
-            padding: 0.5rem 0.85rem;
+            min-height: 2.35rem;
+            padding: 0.4rem 0.75rem;
             align-items: center;
         }
 
         .dark .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header {
-            background: #1e293b;
+            background: #0a1122 !important;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-heading {
             color: var(--dashboard-blue-strong);
-            font-size: 0.875rem;
+            font-size: 0.8125rem;
             font-weight: 750;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-description {
-            font-size: 0.725rem;
+            font-size: 0.6875rem;
             color: var(--dashboard-muted);
-            margin-top: 0.1rem;
+            margin-top: 0.05rem;
         }
 
         /* Compact Chart Filter Form Elements */
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-actions {
             align-items: center;
-            gap: 0.4rem;
+            gap: 0.35rem;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-actions .fi-input-wrp {
-            min-height: 1.95rem !important;
-            height: 1.95rem !important;
+            background: #000000 !important;
+            border: 1px solid var(--dashboard-border) !important;
+            color: #f8fafc !important;
+            min-height: 1.85rem !important;
+            height: 1.85rem !important;
             border-radius: 6px !important;
-            font-size: 0.75rem !important;
+            font-size: 0.725rem !important;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-actions .fi-input-wrp input,
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-header-actions .fi-input-wrp select {
-            font-size: 0.75rem !important;
-            padding-block: 0.15rem !important;
-        }
-
-        .ppc-dashboard-summary-heading {
-            align-items: center;
-            display: inline-flex;
-            gap: 0.5rem;
-        }
-
-        .ppc-dashboard-summary-icon {
-            color: var(--dashboard-blue);
-            flex: 0 0 auto;
-            height: 1.05rem;
-            width: 1.05rem;
+            font-size: 0.725rem !important;
+            padding-block: 0.1rem !important;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart .fi-section-content {
-            padding: 0.75rem 0.85rem;
+            background: #000000 !important;
+            padding: 0.65rem 0.75rem;
         }
 
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-chart-canvas-ctn {
@@ -363,54 +383,66 @@
             max-width: 100%;
         }
 
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-attrition-card {
-            border-color: var(--dashboard-border) !important;
-            border-top: 3px solid var(--dashboard-blue) !important;
-        }
-
-        .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-attrition-title {
-            color: var(--dashboard-blue-strong) !important;
-        }
-
         .ppc-hr-dashboard-marker {
             display: none;
         }
 
-        @media (max-width: 767px) {
+        /* Tablet & Stacked Breakpoint (<= 1279px) */
+        @media (max-width: 1279px) {
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-master-grid > .fi-grid > div:last-child,
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-right-col,
+            .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .ppc-dashboard-shoutout {
+                position: static !important;
+                top: auto !important;
+                align-self: auto !important;
+            }
+
             .ppc-dashboard-group-header {
-                border-radius: 10px;
-                min-height: 3.75rem;
-                padding: 0.75rem 0.95rem;
+                min-height: 2.65rem;
+                padding: 0.45rem 0.85rem;
             }
 
             .ppc-dashboard-group-header h2 {
-                font-size: 1.1rem;
+                font-size: 0.975rem;
+            }
+        }
+
+        /* Mobile Phone Breakpoint (< 768px) */
+        @media (max-width: 767px) {
+            .ppc-dashboard-group-header {
+                border-radius: 8px;
+                min-height: 2.5rem;
+                padding: 0.45rem 0.75rem;
+            }
+
+            .ppc-dashboard-group-header h2 {
+                font-size: 0.925rem;
             }
 
             .ppc-dashboard-group-description {
-                font-size: 0.75rem;
-            }
-
-            .ppc-dashboard-header-action {
-                height: 1.95rem;
-                padding: 0 0.55rem;
                 font-size: 0.7rem;
             }
 
+            .ppc-dashboard-header-action {
+                height: 1.85rem;
+                padding: 0 0.55rem;
+                font-size: 0.6875rem;
+            }
+
             .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-header-widgets > .fi-grid {
-                gap: 0.65rem;
+                gap: 0.5rem;
             }
 
             .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat {
-                min-height: 4.5rem;
+                min-height: 3.5rem;
             }
 
             .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-content {
-                padding: 0.55rem 0.75rem;
+                padding: 0.4rem 0.6rem;
             }
 
             .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-wi-stats-overview-stat-value {
-                font-size: 1.25rem;
+                font-size: 1.2rem;
             }
         }
     </style>

@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Services\HolidayResolver;
 use BackedEnum;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Override;
@@ -22,6 +23,12 @@ class Dashboard extends Page
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Squares2x2;
 
     protected static ?int $navigationSort = 1;
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 
     #[Override]
     public function getHeading(): ?string

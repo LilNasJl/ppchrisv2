@@ -68,6 +68,16 @@ class EmployeeDetailsDeletionTest extends TestCase
         $this->assertFalse(Employee::withTrashed()->findOrFail($employee->id)->trashed());
     }
 
+    public function test_master_data_table_does_not_contain_created_at_column(): void
+    {
+        [$user, $employee] = $this->employeeAccount();
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+        $admin = User::query()->where('username', 'masteradmin')->firstOrFail();
+
+        $table = Livewire::actingAs($admin)->test(EmployeeDetailsTable::class);
+        $table->assertTableColumnDoesNotExist('created_at');
+    }
+
     /** @return array{User, Employee} */
     private function employeeAccount(): array
     {

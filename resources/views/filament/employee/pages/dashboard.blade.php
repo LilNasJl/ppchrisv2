@@ -23,30 +23,43 @@
             display: none !important;
         }
 
-        .employee-dashboard {
-            --ed-surface: #ffffff;
-            --ed-surface-muted: #f8fafc;
-            --ed-text: #0f172a;
-            --ed-muted: #64748b;
-            --ed-border: rgba(15, 23, 42, .12);
-            --ed-blue: #2563eb;
-            --ed-blue-dark: #1e3a8a;
-            --ed-blue-soft: #eff6ff;
+        /* Full Width Container Enforcement */
+        .fi-page,
+        .fi-page-header-main-ctn,
+        .fi-page-main,
+        .fi-page-content,
+        .employee-dashboard,
+        .employee-dashboard-master-grid {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
 
-            color: var(--ed-text);
-            display: grid;
-            gap: 18px;
+        .employee-dashboard {
+            --ed-surface: #000000;
+            --ed-surface-muted: #0a1122;
+            --ed-card-surface: #0a1122;
+            --ed-text: #f8fafc;
+            --ed-muted: #94a3b8;
+            --ed-border: #1e293b;
+            --ed-blue: #60a5fa;
+            --ed-blue-dark: #93c5fd;
+            --ed-blue-soft: rgba(30, 64, 175, 0.2);
+
+            color: #f8fafc;
+            display: block;
+            width: 100%;
         }
 
         .dark .employee-dashboard {
-            --ed-surface: #0f172a;
-            --ed-surface-muted: #111827;
+            --ed-surface: #000000;
+            --ed-surface-muted: #0a1122;
+            --ed-card-surface: #0a1122;
             --ed-text: #f8fafc;
             --ed-muted: #94a3b8;
-            --ed-border: rgba(148, 163, 184, .24);
+            --ed-border: #1e293b;
             --ed-blue: #60a5fa;
-            --ed-blue-dark: #bfdbfe;
-            --ed-blue-soft: rgba(37, 99, 235, .16);
+            --ed-blue-dark: #93c5fd;
+            --ed-blue-soft: rgba(30, 64, 175, 0.2);
         }
 
         .employee-dashboard *,
@@ -54,24 +67,75 @@
             box-sizing: border-box;
         }
 
-        .employee-dashboard-panel,
-        .employee-dashboard-birthday {
-            background: var(--ed-surface);
-            border: 1px solid var(--ed-border);
-            border-radius: 8px;
+        /* Master Split Layout */
+        .employee-dashboard-master-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+            align-items: start;
+            width: 100%;
         }
 
+        .employee-dashboard-left-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-width: 0;
+            width: 100%;
+        }
+
+        .employee-dashboard-right-col {
+            min-width: 0;
+            width: 100%;
+        }
+
+        /* Desktop 2-Column Split & Sticky Side Panel (>= 1280px) */
+        @media (min-width: 1280px) {
+            .employee-dashboard-master-grid {
+                grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+            }
+
+            .employee-dashboard-right-col,
+            .employee-dashboard-shoutout {
+                position: sticky !important;
+                top: 5rem !important;
+                align-self: start !important;
+                height: fit-content !important;
+            }
+
+            .employee-dashboard-shoutout-feed {
+                max-height: calc(100vh - 12rem);
+                min-height: 500px;
+            }
+        }
+
+        /* Tablet & Stacked Layout (<= 1279px) */
+        @media (max-width: 1279px) {
+            .employee-dashboard-right-col,
+            .employee-dashboard-shoutout {
+                position: static !important;
+                top: auto !important;
+                align-self: auto !important;
+            }
+
+            .employee-dashboard-shoutout-feed {
+                max-height: 340px;
+            }
+        }
+
+        /* Gradient Header Banner */
         .employee-dashboard-header {
             align-items: center;
-            background: linear-gradient(108deg, #075bc3 0%, #123f7b 54%, #102b55 100%);
-            border: 1px solid rgba(96, 165, 250, .58);
-            border-radius: 8px;
+            background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
+            border: 1px solid rgba(147, 197, 253, 0.35);
+            border-radius: 10px;
             color: #fff;
             display: flex;
             flex-wrap: wrap;
-            gap: 16px 24px;
+            gap: 12px 20px;
             justify-content: space-between;
-            padding: 18px 22px;
+            padding: 14px 20px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
         }
 
         .employee-dashboard-header-copy {
@@ -79,25 +143,26 @@
         }
 
         .employee-dashboard-header-eyebrow {
-            color: #d9f75a;
-            font-size: 11px;
+            color: #93c5fd;
+            font-size: 10px;
             font-weight: 800;
-            margin: 0 0 5px;
+            letter-spacing: 0.05em;
+            margin: 0 0 4px;
             text-transform: uppercase;
         }
 
         .employee-dashboard-header h1 {
-            color: #fff;
-            font-size: 26px;
+            color: #ffffff;
+            font-size: 22px;
             font-weight: 800;
-            line-height: 1.15;
+            line-height: 1.2;
             margin: 0;
         }
 
         .employee-dashboard-header-description {
-            color: #e0ecff;
-            font-size: 14px;
-            margin: 6px 0 0;
+            color: #dbeafe;
+            font-size: 13px;
+            margin: 4px 0 0;
         }
 
         .employee-dashboard-header-actions {
@@ -108,28 +173,37 @@
 
         .employee-dashboard-header-actions button {
             align-items: center;
-            background: rgba(10, 31, 68, .52);
-            border: 1px solid rgba(191, 219, 254, .45);
-            border-radius: 8px;
-            color: #fff;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            border-radius: 6px;
+            color: #ffffff;
             display: inline-flex;
             font-size: 12px;
-            font-weight: 750;
-            gap: 7px;
-            min-height: 36px;
-            padding: 7px 11px;
+            font-weight: 700;
+            gap: 6px;
+            min-height: 32px;
+            padding: 6px 12px;
+            transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+        }
+
+        .employee-dashboard-header-actions button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.24);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-1px);
         }
 
         .employee-dashboard-header-actions button:disabled {
             cursor: not-allowed;
-            opacity: .76;
+            opacity: 0.7;
         }
 
         .employee-dashboard-header-actions svg {
-            height: 16px;
-            width: 16px;
+            color: #93c5fd;
+            height: 15px;
+            width: 15px;
         }
 
+        /* Summary Cards */
         .employee-dashboard-summary {
             display: grid;
             gap: 10px;
@@ -138,34 +212,32 @@
 
         .employee-dashboard-summary-item {
             appearance: none;
-            background: var(--ed-surface-muted);
-            border: 1px solid var(--ed-border);
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
             border-radius: 8px;
             color: inherit;
             display: grid;
-            gap: 7px;
-            min-height: 92px;
-            padding: 13px;
+            gap: 6px;
+            min-height: 84px;
+            padding: 12px 14px;
             text-align: left;
             width: 100%;
-        }
-
-        button.employee-dashboard-summary-item {
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
             cursor: pointer;
-            transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+            transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
         }
 
-        button.employee-dashboard-summary-item:hover,
-        button.employee-dashboard-summary-item:focus-visible {
-            background: var(--ed-blue-soft);
-            border-color: var(--ed-blue);
+        .employee-dashboard-summary-item:hover,
+        .employee-dashboard-summary-item:focus-visible {
+            border-color: #3b82f6 !important;
             outline: none;
             transform: translateY(-1px);
+            box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.6);
         }
 
         .employee-dashboard-summary-top {
             align-items: center;
-            color: var(--ed-blue);
+            color: #60a5fa;
             display: flex;
             justify-content: space-between;
         }
@@ -176,53 +248,358 @@
         }
 
         .employee-dashboard-summary-item strong {
-            color: var(--ed-blue-dark);
-            font-size: 25px;
+            color: #f8fafc;
+            font-size: 24px;
             font-weight: 850;
             line-height: 1;
         }
 
         .employee-dashboard-summary-item span {
-            color: var(--ed-muted);
+            color: #94a3b8;
             font-size: 12px;
             font-weight: 700;
             line-height: 1.25;
         }
 
+        /* Birthday Card */
         .employee-dashboard-birthday {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-left: 4px solid #3b82f6 !important;
+            border-radius: 8px;
             align-items: center;
-            border-left: 4px solid var(--ed-blue);
             display: flex;
             gap: 14px;
-            padding: clamp(16px, 2.4vw, 22px);
+            padding: 16px 20px;
             width: 100%;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
         }
 
         .employee-dashboard-birthday h3 {
-            color: var(--ed-text);
-            font-size: clamp(21px, 2.8vw, 32px);
+            color: #f8fafc;
+            font-size: clamp(18px, 2.4vw, 24px);
             font-weight: 850;
-            line-height: 1.12;
+            line-height: 1.15;
             margin: 0;
-            overflow-wrap: anywhere;
         }
 
         .employee-dashboard-birthday p {
-            color: var(--ed-muted);
-            font-size: 14px;
-            margin: 6px 0 0;
+            color: #94a3b8;
+            font-size: 13px;
+            margin: 4px 0 0;
         }
 
-        .employee-dashboard-main {
+        .employee-dashboard-icon {
+            align-items: center;
+            background: rgba(30, 64, 175, 0.2);
+            border-radius: 8px;
+            color: #60a5fa;
+            display: inline-flex;
+            flex: 0 0 38px;
+            height: 38px;
+            justify-content: center;
+            width: 38px;
+        }
+
+        .employee-dashboard-icon svg {
+            height: 20px;
+            width: 20px;
+        }
+
+        /* Chart Grid Layout */
+        .employee-dashboard-charts {
             display: grid;
-            gap: 18px;
+            gap: 1rem;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
+        @media (max-width: 1100px) {
+            .employee-dashboard-charts {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Chart Widgets Dark Theme */
+        .employee-dashboard .fi-wi-chart {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section {
+            border: 1px solid #1e293b !important;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+            background: #000000 !important;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-header {
+            background: #0a1122 !important;
+            border-bottom: 1px solid #1e293b !important;
+            min-height: 2.35rem;
+            padding: 0.5rem 0.85rem;
+            align-items: center;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-header-heading {
+            color: #93c5fd !important;
+            font-size: 0.875rem !important;
+            font-weight: 750 !important;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-header-description {
+            font-size: 0.75rem !important;
+            color: #94a3b8 !important;
+            margin-top: 0.05rem !important;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-content {
+            background: #000000 !important;
+            padding: 0.75rem;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-header-actions .fi-input-wrp {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            color: #f8fafc !important;
+            min-height: 1.85rem !important;
+            height: 1.85rem !important;
+            border-radius: 6px !important;
+            font-size: 0.725rem !important;
+        }
+
+        .employee-dashboard .fi-wi-chart .fi-section-header-actions .fi-input-wrp input,
+        .employee-dashboard .fi-wi-chart .fi-section-header-actions .fi-input-wrp select {
+            font-size: 0.725rem !important;
+            padding-block: 0.1rem !important;
+        }
+
+        /* Shout Out Hall Side Panel */
+        .employee-dashboard-shoutout {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .employee-dashboard-shoutout-header {
+            align-items: center;
+            background: #0a1122 !important;
+            border-bottom: 1px solid #1e293b !important;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 12px;
+            flex: 0 0 auto;
+        }
+
+        .employee-dashboard-shoutout-header-title {
+            align-items: center;
+            display: flex;
+            gap: 6px;
+        }
+
+        .employee-dashboard-shoutout-header-title > svg {
+            color: #60a5fa;
+            height: 16px;
+            width: 16px;
+        }
+
+        .employee-dashboard-shoutout-header h2 {
+            color: #93c5fd !important;
+            font-size: 0.8125rem;
+            font-weight: 750;
+            margin: 0;
+        }
+
+        .employee-dashboard-shoutout-tag {
+            background: rgba(59, 130, 246, 0.2) !important;
+            color: #60a5fa !important;
+            font-size: 0.625rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .employee-dashboard-shoutout-action {
+            align-items: center;
+            background: #1d4ed8;
+            border: 1px solid #2563eb;
+            border-radius: 6px;
+            color: #fff;
+            display: inline-flex;
+            font-size: 0.6875rem;
+            font-weight: 750;
+            gap: 5px;
+            min-height: 24px;
+            height: 24px;
+            padding: 2px 8px;
+            opacity: 0.9;
+            transition: opacity 150ms ease;
+        }
+
+        .employee-dashboard-shoutout-action:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .employee-dashboard-shoutout-action svg {
+            color: currentColor;
+            height: 11px;
+            width: 11px;
+        }
+
+        .employee-dashboard-shoutout-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .employee-dashboard-shoutout-feed::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .employee-dashboard-shoutout-feed::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .employee-dashboard-shoutout-feed::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 9999px;
+        }
+
+        .employee-dashboard-shoutout-item {
+            background: #0a1122 !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: border-color 150ms ease;
+        }
+
+        .employee-dashboard-shoutout-item:hover {
+            border-color: rgba(59, 130, 246, 0.4) !important;
+        }
+
+        .employee-dashboard-shoutout-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .employee-dashboard-shoutout-person {
+            align-items: center;
+            display: flex;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .employee-dashboard-shoutout-avatar {
+            align-items: center;
+            background: linear-gradient(135deg, #1d4ed8, #2563eb);
+            border: 1px solid rgba(147, 197, 253, 0.5);
+            border-radius: 50%;
+            color: #fff;
+            display: inline-flex;
+            flex: 0 0 24px;
+            font-size: 9px;
+            font-weight: 750;
+            height: 24px;
+            width: 24px;
+            justify-content: center;
+        }
+
+        .employee-dashboard-shoutout-meta {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+
+        .employee-dashboard-shoutout-meta strong {
+            color: #f8fafc !important;
+            font-size: 0.75rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .employee-dashboard-shoutout-meta small {
+            color: #94a3b8 !important;
+            font-size: 0.65rem;
+        }
+
+        .employee-dashboard-shoutout-sent-at {
+            align-items: center;
+            color: #94a3b8 !important;
+            display: flex;
+            font-size: 0.625rem;
+            gap: 3px;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+
+        .employee-dashboard-shoutout-sent-at svg {
+            height: 10px;
+            width: 10px;
+        }
+
+        .employee-dashboard-shoutout-message {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 6px;
+            color: #f8fafc !important;
+            font-size: 0.75rem;
+            line-height: 1.35;
+            padding: 6px 9px;
+        }
+
+        .employee-dashboard-shoutout-message p {
+            margin: 0;
+        }
+
+        .employee-dashboard-shoutout-footer {
+            align-items: center;
+            border-top: 1px solid #1e293b !important;
+            background: #000000 !important;
+            color: #94a3b8 !important;
+            display: flex;
+            font-size: 0.65rem;
+            gap: 5px;
+            padding: 6px 10px;
+            flex: 0 0 auto;
+        }
+
+        .employee-dashboard-shoutout-dot {
+            background: #22c55e;
+            border-radius: 50%;
+            display: inline-block;
+            height: 6px;
+            width: 6px;
+            box-shadow: 0 0 6px #22c55e;
+        }
+
+        /* Modals & Panels */
         .employee-dashboard-panel {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 8px;
             display: grid;
             gap: 15px;
             min-width: 0;
-            padding: clamp(16px, 2vw, 20px);
+            padding: 16px 20px;
         }
 
         .employee-dashboard-panel-header {
@@ -232,25 +609,8 @@
             min-width: 0;
         }
 
-        .employee-dashboard-icon {
-            align-items: center;
-            background: var(--ed-blue-soft);
-            border-radius: 8px;
-            color: var(--ed-blue);
-            display: inline-flex;
-            flex: 0 0 40px;
-            height: 40px;
-            justify-content: center;
-            width: 40px;
-        }
-
-        .employee-dashboard-icon svg {
-            height: 21px;
-            width: 21px;
-        }
-
         .employee-dashboard-panel-header h3 {
-            color: var(--ed-text);
+            color: #f8fafc;
             font-size: 16px;
             font-weight: 850;
             line-height: 1.25;
@@ -258,7 +618,7 @@
         }
 
         .employee-dashboard-panel-header p {
-            color: var(--ed-muted);
+            color: #94a3b8;
             font-size: 12px;
             margin: 3px 0 0;
         }
@@ -270,8 +630,8 @@
         }
 
         .employee-dashboard-item {
-            background: var(--ed-surface-muted);
-            border: 1px solid var(--ed-border);
+            background: #0a1122 !important;
+            border: 1px solid #1e293b !important;
             border-radius: 8px;
             display: grid;
             gap: 9px;
@@ -280,7 +640,7 @@
         }
 
         .employee-dashboard-item h4 {
-            color: var(--ed-text);
+            color: #f8fafc !important;
             font-size: 14px;
             font-weight: 800;
             line-height: 1.35;
@@ -289,7 +649,7 @@
         }
 
         .employee-dashboard-item p {
-            color: var(--ed-muted);
+            color: #94a3b8 !important;
             font-size: 13px;
             line-height: 1.5;
             margin: 6px 0 0;
@@ -298,7 +658,7 @@
 
         .employee-dashboard-meta {
             align-items: center;
-            color: var(--ed-muted);
+            color: #94a3b8;
             display: inline-flex;
             font-size: 12px;
             font-weight: 700;
@@ -307,17 +667,17 @@
         }
 
         .employee-dashboard-meta svg {
-            color: var(--ed-blue);
+            color: #60a5fa;
             height: 15px;
             width: 15px;
         }
 
         .employee-dashboard-empty {
             align-items: center;
-            background: var(--ed-surface-muted);
-            border: 1px dashed var(--ed-border);
+            background: #0a1122 !important;
+            border: 1px dashed #1e293b !important;
             border-radius: 8px;
-            color: var(--ed-muted);
+            color: #94a3b8 !important;
             display: flex;
             font-size: 13px;
             font-weight: 700;
@@ -332,8 +692,8 @@
 
         .employee-holiday-modal-item {
             align-items: center;
-            background: #f8fafc;
-            border: 1px solid rgba(15, 23, 42, .12);
+            background: #0a1122 !important;
+            border: 1px solid #1e293b !important;
             border-radius: 8px;
             display: flex;
             gap: 12px;
@@ -341,216 +701,29 @@
             padding: 12px 14px;
         }
 
-        .dark .employee-holiday-modal-item {
-            background: #111827;
-            border-color: rgba(148, 163, 184, .24);
-        }
-
         .employee-holiday-modal-item h4 {
+            color: #f8fafc !important;
             font-size: 14px;
             font-weight: 800;
             margin: 0;
         }
 
         .employee-holiday-modal-date {
-            color: #2563eb;
+            color: #60a5fa !important;
             font-size: 12px;
             font-weight: 750;
             white-space: nowrap;
         }
 
-        .dark .employee-holiday-modal-date {
-            color: #60a5fa;
-        }
-
-        .employee-dashboard-charts {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .employee-dashboard-charts > * {
-            min-width: 0;
-        }
-
-        .employee-dashboard-shoutout {
-            background: var(--ed-surface);
-            border: 1px solid var(--ed-border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .dark .employee-dashboard-shoutout {
-            background: #111827;
-            border-color: rgba(255, 255, 255, 0.08);
-        }
-
-        .employee-dashboard-shoutout-header {
-            align-items: center;
-            background: var(--ed-surface-muted);
-            border-bottom: 1px solid var(--ed-border);
-            display: flex;
-            gap: 8px;
-            padding: 9px 12px;
-        }
-
-        .dark .employee-dashboard-shoutout-header {
-            background: #182234;
-            border-bottom-color: rgba(255, 255, 255, 0.08);
-        }
-
-        .employee-dashboard-shoutout-header svg {
-            color: var(--ed-blue);
-            height: 17px;
-            width: 17px;
-        }
-
-        .employee-dashboard-shoutout-header h2 {
-            color: var(--ed-text);
-            font-size: 14px;
-            font-weight: 800;
-            margin: 0;
-        }
-
-        .employee-dashboard-shoutout-action {
-            align-items: center;
-            background: var(--ed-blue);
-            border: 1px solid var(--ed-blue);
-            border-radius: 6px;
-            color: #fff;
-            display: inline-flex;
-            font-size: 11px;
-            font-weight: 750;
-            gap: 6px;
-            min-height: 30px;
-            margin-left: auto;
-            padding: 5px 9px;
-        }
-
-        .employee-dashboard-shoutout-action:disabled {
-            cursor: not-allowed;
-            opacity: .75;
-        }
-
-        .employee-dashboard-shoutout-action svg {
-            color: currentColor;
-            height: 14px;
-            width: 14px;
-        }
-
-        .employee-dashboard-shoutout table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        .employee-dashboard-shoutout tbody,
-        .employee-dashboard-shoutout tbody tr {
-            background: var(--ed-surface) !important;
-        }
-
-        .dark .employee-dashboard-shoutout tbody,
-        .dark .employee-dashboard-shoutout tbody tr {
-            background: #111827 !important;
-        }
-
-        .employee-dashboard-shoutout td {
-            background: transparent !important;
-        }
-
-        .employee-dashboard-shoutout tr + tr {
-            border-top: 1px solid var(--ed-border);
-        }
-
-        .employee-dashboard-shoutout td {
-            padding: 7px 12px;
-            vertical-align: middle;
-        }
-
-        .employee-dashboard-shoutout td:first-child {
-            width: 190px;
-        }
-
-        .employee-dashboard-shoutout-person {
-            align-items: center;
-            display: flex;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .employee-dashboard-shoutout-avatar {
-            align-items: center;
-            background: #1d4ed8;
-            border: 1px solid #60a5fa;
-            border-radius: 50%;
-            color: #fff;
-            display: inline-flex;
-            flex: 0 0 28px;
-            font-size: 10px;
-            font-weight: 800;
-            height: 28px;
-            justify-content: center;
-        }
-
-        .employee-dashboard-shoutout-person strong,
-        .employee-dashboard-shoutout-person small {
-            display: block;
-            overflow-wrap: anywhere;
-        }
-
-        .employee-dashboard-shoutout-person strong {
-            color: var(--ed-text);
-            font-size: 12px;
-        }
-
-        .employee-dashboard-shoutout-person small {
-            color: var(--ed-muted);
-            font-size: 10px;
-        }
-
-        .employee-dashboard-shoutout-message {
-            background: var(--ed-surface-muted);
-            border: 1px solid var(--ed-border);
-            border-radius: 8px;
-            color: var(--ed-text);
-            font-size: 12px;
-            line-height: 1.35;
-            padding: 7px 10px;
-        }
-
-        .employee-dashboard-shoutout-sent-at {
-            align-items: center;
-            color: var(--ed-muted);
-            display: flex;
-            font-size: 10px;
-            gap: 5px;
-            justify-content: flex-end;
-            margin-top: 4px;
-            white-space: nowrap;
-        }
-
-        .employee-dashboard-shoutout-sent-at svg {
-            height: 12px;
-            width: 12px;
-        }
-
-        @media (max-width: 1024px) {
-            .employee-dashboard-charts {
-                grid-template-columns: 1fr;
-            }
-        }
-
+        /* Mobile Adjustments */
         @media (max-width: 640px) {
-            .employee-dashboard {
-                gap: 14px;
-            }
-
             .employee-dashboard-header {
                 align-items: stretch;
-                padding: 16px;
+                padding: 14px;
             }
 
             .employee-dashboard-header h1 {
-                font-size: 23px;
+                font-size: 20px;
             }
 
             .employee-dashboard-header-actions {
@@ -567,12 +740,12 @@
             }
 
             .employee-dashboard-summary-item {
-                min-height: 82px;
+                min-height: 76px;
                 padding: 10px;
             }
 
             .employee-dashboard-summary-item strong {
-                font-size: 21px;
+                font-size: 20px;
             }
 
             .employee-dashboard-summary-item span {
@@ -581,27 +754,6 @@
 
             .employee-dashboard-list {
                 grid-template-columns: 1fr;
-            }
-
-            .employee-dashboard-shoutout tr {
-                display: grid;
-            }
-
-            .employee-dashboard-shoutout tr + tr {
-                border-top: 1px solid var(--ed-border);
-            }
-
-            .employee-dashboard-shoutout td {
-                display: block;
-                padding: 7px 10px 0;
-            }
-
-            .employee-dashboard-shoutout td:first-child {
-                width: auto;
-            }
-
-            .employee-dashboard-shoutout td:last-child {
-                padding-bottom: 8px;
             }
 
             .employee-dashboard-birthday {
@@ -616,118 +768,130 @@
     </style>
 
     <div class="employee-dashboard">
-        <header class="employee-dashboard-header">
-            <div class="employee-dashboard-header-copy">
-                <p class="employee-dashboard-header-eyebrow">Employee Self Service</p>
-                <h1>My Dashboard</h1>
-                <p class="employee-dashboard-header-description">Updates, attendance, and development in one place.</p>
-            </div>
-            <div class="employee-dashboard-header-actions" aria-label="Request forms">
-                <button type="button" disabled title="Coming soon">
-                    <x-filament::icon icon="heroicon-o-document-text" />
-                    Leave Form
-                </button>
-                <button type="button" disabled title="Coming soon">
-                    <x-filament::icon icon="heroicon-o-clock" />
-                    OT Form
-                </button>
-                <button type="button" disabled title="Coming soon">
-                    <x-filament::icon icon="heroicon-o-arrows-right-left" />
-                    Change Shift
-                </button>
-            </div>
-        </header>
-
-        <section class="employee-dashboard-summary" aria-label="Dashboard summary">
-                <button type="button" class="employee-dashboard-summary-item" wire:click="showAnnouncements" aria-label="View announcements">
-                    <div class="employee-dashboard-summary-top">
-                        <x-filament::icon icon="heroicon-o-megaphone" />
-                        <x-filament::icon icon="heroicon-m-chevron-right" />
+        <div class="employee-dashboard-master-grid">
+            <!-- Left Column: Core Employee Self Service & Analytics -->
+            <div class="employee-dashboard-left-col">
+                <header class="employee-dashboard-header">
+                    <div class="employee-dashboard-header-copy">
+                        <p class="employee-dashboard-header-eyebrow">Employee Self Service</p>
+                        <h1>My Dashboard</h1>
+                        <p class="employee-dashboard-header-description">Updates, attendance, and development in one place.</p>
                     </div>
-                    <strong>{{ $announcements->count() }}</strong>
-                    <span>Announcements</span>
-                </button>
-
-                <button
-                    type="button"
-                    class="employee-dashboard-summary-item"
-                    wire:click="showUpcomingHolidays"
-                    wire:loading.attr="disabled"
-                    wire:target="showUpcomingHolidays"
-                    aria-label="View upcoming holidays"
-                >
-                    <div class="employee-dashboard-summary-top">
-                        <x-filament::icon icon="heroicon-o-calendar-days" />
-                        <x-filament::icon icon="heroicon-m-chevron-right" />
+                    <div class="employee-dashboard-header-actions" aria-label="Request forms">
+                        <button type="button" disabled title="Coming soon">
+                            <x-filament::icon icon="heroicon-o-document-text" />
+                            Leave Form
+                        </button>
+                        <button type="button" disabled title="Coming soon">
+                            <x-filament::icon icon="heroicon-o-clock" />
+                            OT Form
+                        </button>
+                        <button type="button" disabled title="Coming soon">
+                            <x-filament::icon icon="heroicon-o-arrows-right-left" />
+                            Change Shift
+                        </button>
                     </div>
-                    <strong>{{ $upcomingHolidays->count() }}</strong>
-                    <span>Upcoming holidays</span>
-                </button>
+                </header>
 
-                <button type="button" class="employee-dashboard-summary-item" wire:click="showUpcomingActivities" aria-label="View upcoming activities">
-                    <div class="employee-dashboard-summary-top">
-                        <x-filament::icon icon="heroicon-o-clipboard-document-list" />
-                        <x-filament::icon icon="heroicon-m-chevron-right" />
-                    </div>
-                    <strong>{{ $upcomingActivities->count() }}</strong>
-                    <span>Upcoming activities</span>
-                </button>
-        </section>
+                <section class="employee-dashboard-summary" aria-label="Dashboard summary">
+                    <button type="button" class="employee-dashboard-summary-item" wire:click="showAnnouncements" aria-label="View announcements">
+                        <div class="employee-dashboard-summary-top">
+                            <x-filament::icon icon="heroicon-o-megaphone" />
+                            <x-filament::icon icon="heroicon-m-chevron-right" />
+                        </div>
+                        <strong>{{ $announcements->count() }}</strong>
+                        <span>Announcements</span>
+                    </button>
 
-        <section class="employee-dashboard-shoutout" aria-labelledby="employee-shoutout-title">
-            <header class="employee-dashboard-shoutout-header">
-                <x-filament::icon icon="heroicon-o-chat-bubble-left-right" />
-                <h2 id="employee-shoutout-title">Shout Out Hall</h2>
-                <button type="button" class="employee-dashboard-shoutout-action" disabled title="Coming soon">
-                    <x-filament::icon icon="heroicon-o-paper-airplane" />
-                    Send Message
-                </button>
-            </header>
-            <table aria-label="Shout Out Hall Sample posts">
-                <tbody>
-                    @foreach (array_slice($shoutOutSamples, 0, 5) as $shoutOut)
-                        <tr>
-                            <td>
-                                <div class="employee-dashboard-shoutout-person">
-                                    <span class="employee-dashboard-shoutout-avatar" aria-hidden="true">{{ $shoutOut['initials'] }}</span>
-                                    <span>
-                                        <strong>{{ $shoutOut['name'] }}</strong>
-                                        <small>{{ $shoutOut['role'] }}</small>
-                                    </span>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="employee-dashboard-shoutout-message">{{ $shoutOut['message'] }}</div>
-                                <time class="employee-dashboard-shoutout-sent-at" datetime="{{ $shoutOut['sent_at']->toIso8601String() }}">
-                                    <x-filament::icon icon="heroicon-o-clock" />
-                                    {{ $shoutOut['sent_at']->format('M d, Y, g:i A') }}
-                                </time>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </section>
+                    <button
+                        type="button"
+                        class="employee-dashboard-summary-item"
+                        wire:click="showUpcomingHolidays"
+                        wire:loading.attr="disabled"
+                        wire:target="showUpcomingHolidays"
+                        aria-label="View upcoming holidays"
+                    >
+                        <div class="employee-dashboard-summary-top">
+                            <x-filament::icon icon="heroicon-o-calendar-days" />
+                            <x-filament::icon icon="heroicon-m-chevron-right" />
+                        </div>
+                        <strong>{{ $upcomingHolidays->count() }}</strong>
+                        <span>Upcoming holidays</span>
+                    </button>
 
-        <div class="employee-dashboard-charts">
-            @livewire(\App\Filament\Employee\Widgets\EmployeeLatesAbsencesChart::class)
-            @livewire(\App\Filament\Employee\Widgets\EmployeeDevelopmentStagePerformanceChart::class)
-            @livewire(\App\Filament\Employee\Widgets\EmployeePersonalKpiRatingsChart::class)
-            @livewire(\App\Filament\Employee\Widgets\EmployeeEvaluationTrainingModulesChart::class)
-        </div>
+                    <button type="button" class="employee-dashboard-summary-item" wire:click="showUpcomingActivities" aria-label="View upcoming activities">
+                        <div class="employee-dashboard-summary-top">
+                            <x-filament::icon icon="heroicon-o-clipboard-document-list" />
+                            <x-filament::icon icon="heroicon-m-chevron-right" />
+                        </div>
+                        <strong>{{ $upcomingActivities->count() }}</strong>
+                        <span>Upcoming activities</span>
+                    </button>
+                </section>
 
-        @if ($hasBirthdayToday)
-            <section class="employee-dashboard-birthday">
-                <span class="employee-dashboard-icon">
-                    <x-filament::icon icon="heroicon-o-cake" />
-                </span>
-                <div>
-                    <h3>Happy Birthday, {{ $employee?->firstname ?: $userName }}</h3>
-                    <p>Wishing you a wonderful birthday today.</p>
+                @if ($hasBirthdayToday)
+                    <section class="employee-dashboard-birthday">
+                        <span class="employee-dashboard-icon">
+                            <x-filament::icon icon="heroicon-o-cake" />
+                        </span>
+                        <div>
+                            <h3>Happy Birthday, {{ $employee?->firstname ?: $userName }}</h3>
+                            <p>Wishing you a wonderful birthday today.</p>
+                        </div>
+                    </section>
+                @endif
+
+                <div class="employee-dashboard-charts">
+                    @livewire(\App\Filament\Employee\Widgets\EmployeeLatesAbsencesChart::class)
+                    @livewire(\App\Filament\Employee\Widgets\EmployeeDevelopmentStagePerformanceChart::class)
+                    @livewire(\App\Filament\Employee\Widgets\EmployeePersonalKpiRatingsChart::class)
+                    @livewire(\App\Filament\Employee\Widgets\EmployeeEvaluationTrainingModulesChart::class)
                 </div>
-            </section>
-        @endif
+            </div>
 
+            <!-- Right Column: Tall Side Panel (Shout Out Hall) -->
+            <div class="employee-dashboard-right-col">
+                <section class="employee-dashboard-shoutout" aria-labelledby="employee-shoutout-title">
+                    <header class="employee-dashboard-shoutout-header">
+                        <div class="employee-dashboard-shoutout-header-title">
+                            <x-filament::icon icon="heroicon-o-chat-bubble-left-right" />
+                            <h2 id="employee-shoutout-title">Shout Out Hall</h2>
+                            <span class="employee-dashboard-shoutout-tag">Live Feed</span>
+                        </div>
+                        <button type="button" class="employee-dashboard-shoutout-action" disabled title="Coming soon">
+                            <x-filament::icon icon="heroicon-o-paper-airplane" />
+                            <span>Send Message</span>
+                        </button>
+                    </header>
+                    <div class="employee-dashboard-shoutout-feed" role="feed" aria-label="Recent Shout Out posts and Sample posts">
+                        @foreach (array_slice($shoutOutSamples, 0, 5) as $shoutOut)
+                            <article class="employee-dashboard-shoutout-item">
+                                <div class="employee-dashboard-shoutout-top">
+                                    <div class="employee-dashboard-shoutout-person">
+                                        <span class="employee-dashboard-shoutout-avatar" aria-hidden="true">{{ $shoutOut['initials'] }}</span>
+                                        <div class="employee-dashboard-shoutout-meta">
+                                            <strong>{{ $shoutOut['name'] }}</strong>
+                                            <small>{{ $shoutOut['role'] }}</small>
+                                        </div>
+                                    </div>
+                                    <time class="employee-dashboard-shoutout-sent-at" datetime="{{ $shoutOut['sent_at']->toIso8601String() }}">
+                                        <x-filament::icon icon="heroicon-o-clock" />
+                                        {{ $shoutOut['sent_at']->format('M d, g:i A') }}
+                                    </time>
+                                </div>
+                                <div class="employee-dashboard-shoutout-message">
+                                    <p>{{ $shoutOut['message'] }}</p>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                    <footer class="employee-dashboard-shoutout-footer">
+                        <span class="employee-dashboard-shoutout-dot" aria-hidden="true"></span>
+                        <span>Recent employee shout-outs and team recognitions</span>
+                    </footer>
+                </section>
+            </div>
+        </div>
     </div>
 
     <x-filament::modal id="employee-announcements" width="2xl">
@@ -818,7 +982,9 @@
                     </div>
                 </article>
             @empty
-                <div class="employee-dashboard-empty">No upcoming holidays.</div>
+                <div class="employee-holiday-modal-item">
+                    <div class="employee-dashboard-empty">No upcoming holidays.</div>
+                </div>
             @endforelse
         </div>
     </x-filament::modal>

@@ -157,4 +157,19 @@ class EmployeeDashboardChartTest extends TestCase
 
         $this->assertSame(5, substr_count($page->html(), 'class="employee-dashboard-shoutout-message"'));
     }
+
+    public function test_employee_dashboard_renders_two_column_layout_and_dark_sticky_shoutout(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'employee']));
+
+        Livewire::test(Dashboard::class)
+            ->assertSuccessful()
+            ->assertSee('employee-dashboard-master-grid')
+            ->assertSee('employee-dashboard-left-col')
+            ->assertSee('employee-dashboard-right-col')
+            ->assertSee('position: sticky')
+            ->assertSee('Live Feed')
+            ->assertSee('#000000')
+            ->assertSee('Recent employee shout-outs and team recognitions');
+    }
 }

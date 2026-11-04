@@ -24,6 +24,7 @@ use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Size;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\View\PanelsRenderHook;
 use Livewire\Attributes\Url;
@@ -49,6 +50,12 @@ class Dashboard extends Page
         if (request()->hasAny(['attendanceFilters', 'overtimeFilters'])) {
             $this->redirect(static::getUrl($this->viewMode === 'analytics' ? ['view' => 'analytics'] : []), navigate: false);
         }
+    }
+
+    #[Override]
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
     }
 
     #[Override]
@@ -99,6 +106,10 @@ class Dashboard extends Page
             EmployeeStatusSummary::class,
             DepartmentEmployeeCountChart::class,
             MonthlyEmployeeMovementChart::class,
+            LeaveRequestStatusSummary::class,
+            OverallDailyAttendanceSummaryChart::class,
+            OvertimeLogHoursChart::class,
+            HolidayCalendarHighlights::class,
         ];
     }
 
@@ -131,34 +142,68 @@ class Dashboard extends Page
 
         return $schema->components([
             RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_START),
-            View::make('filament.pages.partials.employee-snapshot-header')
-                ->viewData([
-                    'eyebrow' => 'Workforce Overview',
-                    'title' => 'Dashboard: Employee Snapshot',
-                    'description' => 'Workforce status, pending tickets, and monthly movement.',
-                    'dashboardActionUrl' => static::getUrl(['view' => 'analytics']),
+            Grid::make([
+                'default' => 1,
+                'xl' => 12,
+            ])
+                ->schema([
+                    // Left Column (Core Analytics)
+                    Grid::make(1)
+                        ->schema([
+                            View::make('filament.pages.partials.employee-snapshot-header')
+                                ->viewData([
+                                    'eyebrow' => 'Workforce Overview',
+                                    'title' => 'Dashboard: Employee Snapshot',
+                                    'description' => 'Workforce status, pending tickets, and monthly movement.',
+                                    'dashboardActionUrl' => static::getUrl(['view' => 'analytics']),
+                                ]),
+                            Grid::make(1)
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents([EmployeeStatusSummary::class]))
+                                ->extraAttributes(['class' => 'ppc-dashboard-employee-snapshot-cards']),
+                            Grid::make(1)
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getEmployeeSnapshotChartWidgets()))
+                                ->extraAttributes(['class' => 'ppc-dashboard-employment-charts']),
+                            View::make('filament.pages.partials.employee-snapshot-header')
+                                ->viewData([
+                                    'eyebrow' => 'Attendance Overview',
+                                    'title' => 'Attendance & Leave Overview',
+                                    'description' => 'Daily attendance, overtime activity, and leave request status.',
+                                ]),
+                            Grid::make(1)
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents([LeaveRequestStatusSummary::class]))
+                                ->extraAttributes(['class' => 'ppc-dashboard-leave-cards']),
+                            Grid::make([
+                                'default' => 1,
+                                'md' => 2,
+                            ])
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents([
+                                    OverallDailyAttendanceSummaryChart::class,
+                                    OvertimeLogHoursChart::class,
+                                ]))
+                                ->extraAttributes(['class' => 'ppc-dashboard-attendance-charts']),
+                            Grid::make(1)
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents([HolidayCalendarHighlights::class]))
+                                ->extraAttributes(['class' => 'ppc-dashboard-holiday-highlights']),
+                        ])
+                        ->columnSpan([
+                            'default' => 12,
+                            'xl' => 8,
+                        ])
+                        ->extraAttributes(['class' => 'ppc-dashboard-left-col']),
+
+                    // Right Column (Tall Side Panel: Shout Out Hall)
+                    Grid::make(1)
+                        ->schema([
+                            View::make('filament.pages.partials.dashboard-shoutout-hall'),
+                        ])
+                        ->columnSpan([
+                            'default' => 12,
+                            'xl' => 4,
+                        ])
+                        ->extraAttributes(['class' => 'ppc-dashboard-right-col']),
                 ])
-                ->columnSpanFull(),
-            Grid::make($this->getHeaderWidgetsColumns())
-                ->schema(fn (): array => $this->getWidgetsSchemaComponents([EmployeeStatusSummary::class]))
                 ->columnSpanFull()
-                ->extraAttributes(['class' => 'ppc-dashboard-employee-snapshot-cards']),
-            View::make('filament.pages.partials.dashboard-shoutout-hall')
-                ->columnSpanFull(),
-            Grid::make($this->getHeaderWidgetsColumns())
-                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getEmployeeSnapshotChartWidgets()))
-                ->columnSpanFull()
-                ->extraAttributes(['class' => 'ppc-dashboard-employment-charts']),
-            View::make('filament.pages.partials.employee-snapshot-header')
-                ->viewData([
-                    'eyebrow' => 'Attendance Overview',
-                    'title' => 'Attendance & Leave Overview',
-                    'description' => 'Daily attendance, overtime activity, and leave request status.',
-                ])
-                ->columnSpanFull(),
-            Grid::make($this->getHeaderWidgetsColumns())
-                ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getAttendanceLeaveWidgets()))
-                ->extraAttributes(['class' => 'ppc-dashboard-attendance-leave-widgets']),
+                ->extraAttributes(['class' => 'ppc-dashboard-master-grid']),
             RenderHook::make(PanelsRenderHook::PAGE_HEADER_WIDGETS_END),
         ])->hidden(fn (): bool => empty($this->cachedHeaderWidgetsSchemaComponents ??= $this->getWidgetsSchemaComponents($this->getHeaderWidgets())));
     }

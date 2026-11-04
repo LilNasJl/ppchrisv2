@@ -18,6 +18,8 @@ class EmployeeStatusSummary extends StatsOverviewWidget
     {
         return [
             'default' => 2,
+            'sm' => 2,
+            'md' => 4,
             'lg' => 4,
             'xl' => 4,
         ];
@@ -48,22 +50,18 @@ class EmployeeStatusSummary extends StatsOverviewWidget
 
         return [
             Stat::make('Active Employees', number_format($activeEmployees))
-                ->description('Active Employee Headcount')
                 ->icon(Heroicon::Users)
                 ->color('success'),
 
             Stat::make('Probationary', number_format($probationaryEmployees))
-                ->description('Current probationary employees')
                 ->icon(Heroicon::Clock)
                 ->color('warning'),
 
             Stat::make('Resigned', number_format($resignedEmployees))
-                ->description('Resigned Employee Count')
                 ->icon(Heroicon::UserMinus)
                 ->color('danger'),
 
             Stat::make('Pending Tickets', number_format($pendingTickets))
-                ->description('Pending tickets request')
                 ->icon(Heroicon::ChatBubbleLeftRight)
                 ->color('warning'),
         ];

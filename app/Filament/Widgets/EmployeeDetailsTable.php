@@ -636,13 +636,6 @@ class EmployeeDetailsTable extends TableWidget
                             : ($state ?: 'N/A')
                     )
                     ->color(fn (User $record): string => $record->employee?->hasEndedEmployment() ? 'danger' : 'success'),
-
-                TextColumn::make('created_at')
-                    ->label('Created At')
-                    ->searchable(query: fn (Builder $query, string $search): Builder => $query
-                        ->where('users.created_at', 'like', "%{$search}%"))
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
-                        ->orderBy('users.created_at', $direction)),
             ])
             ->filters([
                 TrashedFilter::make(),
