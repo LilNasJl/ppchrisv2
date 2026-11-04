@@ -6,6 +6,7 @@ use App\Filament\Resources\HolidayTypes\HolidayTypeResource;
 use App\Models\Holiday;
 use App\Models\HolidayType;
 use App\Services\HolidayResolver;
+use App\Services\PhilippineHolidayService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
@@ -174,66 +175,31 @@ class HolidayCalendar extends Page
             ->send();
     }
 
-    public function fetchPhilippineHolidays(): void
+    public function fetchPhilippineHolidays(?PhilippineHolidayService $holidayService = null): void
     {
         $year = Carbon::parse($this->calendarMonth)->year;
+        $holidayService = $holidayService ?? app(PhilippineHolidayService::class);
 
         try {
-            $response = Http::timeout(20)
-                ->get("https://date.nager.at/api/v3/PublicHolidays/{$year}/PH");
+            $result = $holidayService->syncHolidaysForYear($year);
+
+            $msg = "Saved {$result['saved']} holidays for {$year}.";
+            if ($result['merged_duplicates'] > 0) {
+                $msg .= " Resolved {$result['merged_duplicates']} duplicate records.";
+            }
+
+            Notification::make()
+                ->title('Philippine holidays updated')
+                ->body($msg)
+                ->success()
+                ->send();
         } catch (\Throwable $exception) {
             Notification::make()
                 ->title('Unable to fetch Philippine holidays')
-                ->body('Please check internet connection and try again.')
+                ->body($exception->getMessage())
                 ->danger()
                 ->send();
-
-            return;
         }
-
-        if (! $response->successful()) {
-            Notification::make()
-                ->title('Unable to fetch Philippine holidays')
-                ->body("The holiday service returned HTTP {$response->status()}.")
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        $createdOrUpdated = 0;
-
-        foreach ($response->json() as $holiday) {
-            $date = Carbon::parse($holiday['date']);
-            $title = $holiday['localName'] ?? $holiday['name'] ?? 'Philippine Holiday';
-            $isRecurring = (bool) ($holiday['fixed'] ?? false);
-            $attributes = [
-                'branch_id' => null,
-                'is_recurring' => $isRecurring,
-            ];
-
-            if ($isRecurring) {
-                $attributes['month_day'] = $date->format('m-d');
-            } else {
-                $attributes['date'] = $date->toDateString();
-            }
-
-            Holiday::query()->updateOrCreate($attributes, [
-                'date' => $date->toDateString(),
-                'month_day' => $date->format('m-d'),
-                'holiday_type_id' => $this->getHolidayTypeIdForPhilippineHoliday($title),
-                'title' => $title,
-                'source' => 'philippines-api',
-            ]);
-
-            $createdOrUpdated++;
-        }
-
-        Notification::make()
-            ->title('Philippine holidays fetched')
-            ->body("Saved {$createdOrUpdated} holidays for {$year}.")
-            ->success()
-            ->send();
     }
 
     public function createHolidayType(): void
@@ -410,41 +376,7 @@ class HolidayCalendar extends Page
             return;
         }
 
-        $regularHolidayTypeId = HolidayType::query()
-            ->where('type', 'Regular Holiday')
-            ->value('id');
-        $specialHolidayTypeId = HolidayType::query()
-            ->where('type', 'Special Holiday')
-            ->value('id');
-
-        foreach ([
-            ['month_day' => '01-01', 'title' => "New Year's Day", 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '04-09', 'title' => 'Araw ng Kagitingan', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '05-01', 'title' => 'Labor Day', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '06-12', 'title' => 'Independence Day', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '11-30', 'title' => 'Bonifacio Day', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '12-25', 'title' => 'Christmas Day', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '12-30', 'title' => 'Rizal Day', 'type_id' => $regularHolidayTypeId],
-            ['month_day' => '08-21', 'title' => 'Ninoy Aquino Day', 'type_id' => $specialHolidayTypeId],
-            ['month_day' => '11-01', 'title' => "All Saints' Day", 'type_id' => $specialHolidayTypeId],
-            ['month_day' => '12-08', 'title' => 'Feast of the Immaculate Conception', 'type_id' => $specialHolidayTypeId],
-            ['month_day' => '12-31', 'title' => 'Last Day of the Year', 'type_id' => $specialHolidayTypeId],
-        ] as $holiday) {
-            if (blank($holiday['type_id'])) {
-                continue;
-            }
-
-            Holiday::query()->updateOrCreate([
-                'branch_id' => null,
-                'is_recurring' => true,
-                'month_day' => $holiday['month_day'],
-            ], [
-                'date' => now()->year.'-'.$holiday['month_day'],
-                'holiday_type_id' => $holiday['type_id'],
-                'title' => $holiday['title'],
-                'source' => 'philippines-fixed-default',
-            ]);
-        }
+        app(PhilippineHolidayService::class)->ensureDefaultFixedHolidays();
     }
 
     protected function loadHolidayTypeEdits(): void
@@ -496,29 +428,10 @@ class HolidayCalendar extends Page
 
     protected function getHolidayTypeIdForPhilippineHoliday(string $title): ?int
     {
-        $normalizedTitle = str($title)->lower()->toString();
-        $regularKeywords = [
-            'new year',
-            'maundy',
-            'good friday',
-            'valor',
-            'kagitingan',
-            'labor',
-            'independence',
-            'national heroes',
-            'bonifacio',
-            'christmas',
-            'rizal',
-            'eid',
-        ];
-
-        $typeName = collect($regularKeywords)
-            ->contains(fn (string $keyword): bool => str_contains($normalizedTitle, $keyword))
-                ? 'Regular Holiday'
-                : 'Special Holiday';
+        $classification = app(PhilippineHolidayService::class)->classifyHoliday($title);
 
         return HolidayType::query()
-            ->where('type', $typeName)
+            ->where('type', $classification['type'])
             ->value('id')
             ?: $this->getDefaultHolidayTypeId();
     }

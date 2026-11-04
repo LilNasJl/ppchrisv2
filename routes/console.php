@@ -90,6 +90,18 @@ Artisan::command('auth:sync-masteradmin', function (): void {
     $this->info("Master admin account [{$account->username}] synced successfully.");
 })->purpose('Synchronize masteradmin account credentials from environment/configuration');
 
+Artisan::command('holidays:sync-ph {--year=} {--clean}', function (\App\Services\PhilippineHolidayService $service): void {
+    $year = filled($this->option('year')) ? (int) $this->option('year') : now()->year;
+
+    if ($this->option('clean')) {
+        $cleaned = $service->cleanupDuplicateHolidays($year);
+        $this->info("Cleaned and merged {$cleaned} duplicate holiday records for {$year}.");
+    }
+
+    $result = $service->syncHolidaysForYear($year);
+    $this->info("Successfully synced {$result['saved']} Philippine holidays for {$year}. Merged {$result['merged_duplicates']} duplicates.");
+})->purpose('Synchronize statutory and proclaimed Philippine holidays and resolve duplicates');
+
 Schedule::command('payroll-period:ensure-current')->hourly();
 Schedule::command('payroll-period:auto-lock-due')->hourly();
 Schedule::command('employment:promote-eligible')
