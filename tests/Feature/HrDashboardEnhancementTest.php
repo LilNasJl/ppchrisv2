@@ -119,4 +119,57 @@ class HrDashboardEnhancementTest extends TestCase
             ->set('filters.payroll_period_id', $period->id)
             ->assertSet('filters.payroll_period_id', $period->id);
     }
+
+    public function test_dashboard_renders_current_employee_birthday_below_snapshot_cards(): void
+    {
+        $today = now('Asia/Manila');
+
+        $branch = Branch::query()->create([
+            'branch_name' => 'Main Branch',
+            'branch_address' => '123 Main St',
+        ]);
+
+        $employeeUser = User::withoutEvents(fn (): User => User::query()->create([
+            'name' => 'Jesica Bucog',
+            'username' => 'jesica.bucog',
+            'email' => 'jesica@example.test',
+            'password' => 'password',
+            'role' => 'employee',
+        ]));
+
+        \App\Models\Employee::query()->create([
+            'user_id' => $employeeUser->id,
+            'branch_id' => $branch->id,
+            'firstname' => 'Jesica',
+            'lastname' => 'Bucog',
+            'middlename' => 'Martinote',
+            'birthdate' => $today->copy()->subYears(21)->format('Y-m-d'),
+            'employment_type' => 'REGULAR',
+            'hired_date' => $today->copy()->subYears(2)->toDateString(),
+        ]);
+
+        $this->actingAs($this->user);
+
+        Livewire::test(Dashboard::class)
+            ->assertSuccessful()
+            ->assertSee('ppc-dashboard-birthday-highlights-grid');
+
+        Livewire::test(\App\Filament\Widgets\BirthdayGreetingCard::class)
+            ->assertSuccessful()
+            ->assertSee('ppc-birthday-highlights')
+            ->assertSee("Today's Birthday Celebrant", false)
+            ->assertSee('Bucog, Martinote. Jesica')
+            ->assertSee('Happy Birthday!')
+            ->assertSee('Turning 21 today');
+    }
+
+    public function test_dashboard_shows_empty_birthday_state_when_none_today(): void
+    {
+        $this->actingAs($this->user);
+
+        Livewire::test(\App\Filament\Widgets\BirthdayGreetingCard::class)
+            ->assertSuccessful()
+            ->assertSee('ppc-birthday-highlights')
+            ->assertSee('No employee birthdays today.');
+    }
 }

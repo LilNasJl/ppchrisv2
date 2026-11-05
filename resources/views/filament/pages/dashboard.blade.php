@@ -243,6 +243,245 @@
             padding-top: 0.35rem;
         }
 
+        /* Birthday Highlights Widget */
+        .ppc-birthday-highlights {
+            --dashboard-surface: #000000;
+            --dashboard-muted: #94a3b8;
+            --dashboard-blue-strong: #93c5fd;
+            background: #000000 !important;
+            border: 1px solid var(--dashboard-border) !important;
+            border-radius: 8px;
+            color: #f8fafc;
+            padding: 0.65rem 0.85rem;
+            width: 100%;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        }
+
+        .ppc-birthday-highlights-header {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+            justify-content: space-between;
+        }
+
+        .ppc-birthday-highlights-title-wrap {
+            align-items: center;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .ppc-birthday-highlights-title-wrap svg {
+            color: #f59e0b;
+            height: 16px;
+            width: 16px;
+            flex-shrink: 0;
+        }
+
+        .ppc-birthday-highlights-header h3 {
+            color: var(--dashboard-blue-strong);
+            font-size: 0.8125rem;
+            font-weight: 750;
+            margin: 0;
+        }
+
+        .ppc-birthday-highlights-tag {
+            color: var(--dashboard-muted);
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .ppc-birthday-highlights-link {
+            align-items: center;
+            color: #60a5fa;
+            display: inline-flex;
+            font-size: 0.7rem;
+            font-weight: 700;
+            gap: 0.3rem;
+            text-decoration: none;
+            transition: color 150ms ease;
+        }
+
+        .ppc-birthday-highlights-link:hover {
+            color: #93c5fd;
+            text-decoration: underline;
+        }
+
+        .ppc-birthday-cards-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            margin-top: 0.45rem;
+        }
+
+        .ppc-birthday-card {
+            background: #0a1122;
+            border: 1px solid var(--dashboard-border);
+            border-left: 3.5px solid #f59e0b;
+            border-radius: 6px;
+            padding: 0.55rem 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            transition: border-color 150ms ease, transform 150ms ease;
+        }
+
+        .ppc-birthday-card:hover {
+            border-color: rgba(245, 158, 11, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .ppc-birthday-person {
+            align-items: center;
+            display: flex;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+
+        .ppc-birthday-avatar {
+            align-items: center;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 50%;
+            color: #ffffff;
+            display: inline-flex;
+            flex: 0 0 34px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            height: 34px;
+            justify-content: center;
+            width: 34px;
+            overflow: hidden;
+        }
+
+        .ppc-birthday-avatar img {
+            height: 100%;
+            width: 100%;
+            object-fit: cover;
+        }
+
+        .ppc-birthday-meta {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.25;
+        }
+
+        .ppc-birthday-name-wrap {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+
+        .ppc-birthday-name-wrap strong {
+            color: #f8fafc;
+            font-size: 0.8125rem;
+            font-weight: 750;
+        }
+
+        .ppc-birthday-age-pill {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 999px;
+            color: #fcd34d;
+            font-size: 0.625rem;
+            font-weight: 700;
+            padding: 0.05rem 0.45rem;
+        }
+
+        .ppc-birthday-meta p {
+            color: var(--dashboard-muted);
+            font-size: 0.7rem;
+            margin: 0.15rem 0 0;
+        }
+
+        .ppc-birthday-badge-today {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 999px;
+            color: #86efac;
+            flex: 0 0 auto;
+            font-size: 0.65rem;
+            font-weight: 750;
+            padding: 0.15rem 0.55rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .ppc-birthday-badge-today svg {
+            color: #f59e0b;
+            height: 12px;
+            width: 12px;
+        }
+
+        .ppc-birthday-empty-row {
+            align-items: center;
+            border-top: 1px solid var(--dashboard-border);
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.4rem;
+            padding-top: 0.4rem;
+        }
+
+        .ppc-birthday-empty-info {
+            align-items: center;
+            display: flex;
+            gap: 0.45rem;
+        }
+
+        .ppc-birthday-empty {
+            color: var(--dashboard-muted);
+            font-size: 0.725rem;
+            margin: 0;
+        }
+
+        .ppc-birthday-upcoming-strip {
+            border-top: 1px solid var(--dashboard-border);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.45rem;
+            margin-top: 0.45rem;
+            padding-top: 0.45rem;
+            font-size: 0.7rem;
+            color: var(--dashboard-muted);
+        }
+
+        .ppc-birthday-upcoming-title {
+            color: #93c5fd;
+            font-weight: 750;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .ppc-birthday-upcoming-pill {
+            background: #0a1122;
+            border: 1px solid var(--dashboard-border);
+            border-radius: 999px;
+            padding: 0.1rem 0.5rem;
+            font-size: 0.65rem;
+            color: #e2e8f0;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .ppc-birthday-upcoming-pill strong {
+            color: #f8fafc;
+            font-weight: 700;
+        }
+
+        .ppc-birthday-upcoming-pill span {
+            color: #94a3b8;
+        }
+
         /* Widgets Grid and Section Alignment */
         .fi-panel-hr .fi-page:has(.ppc-hr-dashboard-marker) .fi-page-header-widgets > .fi-grid {
             align-items: stretch;

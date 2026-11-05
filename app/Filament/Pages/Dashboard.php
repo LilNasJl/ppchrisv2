@@ -104,6 +104,7 @@ class Dashboard extends Page
 
         return [
             EmployeeStatusSummary::class,
+            BirthdayGreetingCard::class,
             DepartmentEmployeeCountChart::class,
             MonthlyEmployeeMovementChart::class,
             LeaveRequestStatusSummary::class,
@@ -160,6 +161,9 @@ class Dashboard extends Page
                             Grid::make(1)
                                 ->schema(fn (): array => $this->getWidgetsSchemaComponents([EmployeeStatusSummary::class]))
                                 ->extraAttributes(['class' => 'ppc-dashboard-employee-snapshot-cards']),
+                            Grid::make(1)
+                                ->schema(fn (): array => $this->getWidgetsSchemaComponents([BirthdayGreetingCard::class]))
+                                ->extraAttributes(['class' => 'ppc-dashboard-birthday-highlights-grid']),
                             Grid::make(1)
                                 ->schema(fn (): array => $this->getWidgetsSchemaComponents($this->getEmployeeSnapshotChartWidgets()))
                                 ->extraAttributes(['class' => 'ppc-dashboard-employment-charts']),
