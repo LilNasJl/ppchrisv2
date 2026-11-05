@@ -78,49 +78,6 @@ Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', 
     $this->info("Synchronized {$count} station D.T.R record(s) to official HR D.T.R.");
 })->purpose('Reconcile and synchronize all station D.T.R records to the official HR D.T.R table');
 
-Artisan::command('dtr:reconcile-holidays {--period=} {--branch=}', function (\App\Services\AutomaticAbsenceService $absenceService, \App\Services\SaturdayWfhDtrService $wfhService, \App\Services\PhilippineHolidayService $holidayService): void {
-    $periodId = filled($this->option('period')) ? (int) $this->option('period') : null;
-    $branchId = filled($this->option('branch')) ? (int) $this->option('branch') : null;
-
-    $periods = $periodId
-        ? \App\Models\PayrollPeriod::where('id', $periodId)->get()
-        : \App\Models\PayrollPeriod::where('is_locked', false)->get();
-
-    if ($periods->isEmpty()) {
-        $this->warn('No active payroll period found to reconcile.');
-
-        return;
-    }
-
-    $years = $periods
-        ->flatMap(fn (\App\Models\PayrollPeriod $p): array => array_filter([
-            $p->start_date ? \Carbon\Carbon::parse($p->start_date)->year : null,
-            $p->end_date ? \Carbon\Carbon::parse($p->end_date)->year : null,
-            now('Asia/Manila')->year,
-        ]))
-        ->unique()
-        ->values();
-
-    foreach ($years as $year) {
-        $syncResult = $holidayService->syncHolidaysForYear((int) $year);
-        $this->info("Synced {$syncResult['saved']} Philippine holidays for {$year} (merged {$syncResult['merged_duplicates']} duplicates).");
-    }
-
-    $totalHolidayReconciled = 0;
-    $totalWfhCreated = 0;
-
-    foreach ($periods as $period) {
-        $totalHolidayReconciled += $absenceService->reconcileForScope($period->id, $branchId);
-
-        $branches = $branchId ? [$branchId] : \App\Models\Branch::pluck('id')->all();
-        foreach ($branches as $bId) {
-            $totalWfhCreated += $wfhService->materializeScope($period->id, (int) $bId);
-        }
-    }
-
-    $this->info("Reconciled {$totalHolidayReconciled} holiday D.T.R record(s) and materialized {$totalWfhCreated} Saturday WFH record(s).");
-})->purpose('Sync Philippine holidays, override holiday absences, and materialize Saturday WFH entries for payroll periods');
-
 Artisan::command('auth:sync-masteradmin', function (): void {
     $account = User::syncMasterAdminFromConfig();
 

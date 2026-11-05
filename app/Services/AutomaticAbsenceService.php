@@ -357,8 +357,8 @@ class AutomaticAbsenceService
         if (! app()->runningUnitTests() && Schema::hasTable('holiday_types')) {
             $years = $unlockedPeriods
                 ->flatMap(fn (PayrollPeriod $p): array => array_filter([
-                    $p->start_date ? Carbon::parse($p->start_date)->year : null,
-                    $p->end_date ? Carbon::parse($p->end_date)->year : null,
+                    $p->date_start ? Carbon::parse($p->date_start)->year : null,
+                    $p->date_end ? Carbon::parse($p->date_end)->year : null,
                     now('Asia/Manila')->year,
                 ]))
                 ->unique()
@@ -366,12 +366,14 @@ class AutomaticAbsenceService
 
             foreach ($years as $yr) {
                 $officialDates = array_keys(app(PhilippineHolidayService::class)->getOfficialHolidays((int) $yr));
-                $existingCount = Holiday::query()
+                $foundDates = Holiday::query()
                     ->whereNull('branch_id')
                     ->whereIn('date', $officialDates)
-                    ->count();
+                    ->pluck('date')
+                    ->map(fn ($d) => Carbon::parse($d)->toDateString())
+                    ->all();
 
-                if ($existingCount < count($officialDates)) {
+                if (count(array_diff($officialDates, $foundDates)) > 0) {
                     app(PhilippineHolidayService::class)->syncHolidaysForYear((int) $yr);
                 }
             }

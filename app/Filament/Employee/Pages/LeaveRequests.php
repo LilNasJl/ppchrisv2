@@ -383,7 +383,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
                                 ->default(fn (Get $get): ?string => $get('leave_from'))
                                 ->disabled(fn (Get $get): bool => $get('leave_type') === Leave::HALF_DAY_LEAVE)
                                 ->dehydrated(true)
-                                ->helperText(fn (Get $get): ?string => $get('leave_type') === Leave::HALF_DAY_LEAVE ? 'Same as Leave From for half-day leave.' : null)
+                                ->helperText(fn (Get $get): ?string => $get('leave_type') === Leave::HALF_DAY_LEAVE ? 'Same as Leave From for half-day leave.' : 'Tip: For leaves spanning across different payroll cutoffs, separate applications per cutoff are recommended.')
                                 ->rules([
                                     fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
                                         if ($get('leave_type') !== Leave::HALF_DAY_LEAVE) {

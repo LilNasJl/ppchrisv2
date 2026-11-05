@@ -36,7 +36,18 @@ class LeaveReviewActions
                     ->helperText('Paid leave uses leave credits. Unpaid leave is approved time off without pay.') : null,
                 $hr ? Select::make('payroll_period_id')->label('Payroll Period')->required()->searchable()
                     ->options(fn () => PayrollPeriod::where('is_locked', false)
-                        ->whereDate('date_start', '<=', $leave->leave_from)->whereDate('date_end', '>=', $leave->leave_to)
+                        ->where(function ($q) use ($leave) {
+                            $q->where(function ($sub) use ($leave) {
+                                $sub->whereDate('date_start', '<=', $leave->leave_from)
+                                    ->whereDate('date_end', '>=', $leave->leave_to);
+                            })->orWhere(function ($sub) use ($leave) {
+                                $sub->whereDate('date_start', '<=', $leave->leave_from)
+                                    ->whereDate('date_end', '>=', $leave->leave_from);
+                            })->orWhere(function ($sub) use ($leave) {
+                                $sub->whereDate('date_start', '<=', $leave->leave_to)
+                                    ->whereDate('date_end', '>=', $leave->leave_to);
+                            });
+                        })
                         ->orderByDesc('date_start')->pluck('title', 'id')->all()) : null,
                 Textarea::make('remarks')->label('Remarks')->maxLength(2000)->rows(3),
             ]))->action(function (array $data) use ($leave, $hr): void {

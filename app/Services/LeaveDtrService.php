@@ -78,8 +78,22 @@ class LeaveDtrService
             throw new RuntimeException('Half-day leave must have a valid morning or afternoon period.');
         }
 
-        if ($leaveFrom->lt($periodStart) || $leaveTo->gt($periodEnd)) {
-            throw new RuntimeException('Leave dates must be inside the selected payroll period range.');
+        if ($leaveFrom->gt($periodEnd) || $leaveTo->lt($periodStart)) {
+            throw new RuntimeException('Selected payroll period does not overlap with leave dates.');
+        }
+
+        foreach (CarbonPeriod::create($leaveFrom, $leaveTo) as $date) {
+            $dateString = $date->toDateString();
+            $periodExists = ($date->gte($periodStart) && $date->lte($periodEnd))
+                || PayrollPeriod::query()
+                    ->where('is_locked', false)
+                    ->whereDate('date_start', '<=', $dateString)
+                    ->whereDate('date_end', '>=', $dateString)
+                    ->exists();
+
+            if (! $periodExists) {
+                throw new RuntimeException("No active payroll period found covering leave date {$dateString}.");
+            }
         }
 
         if (! $leave->employee) {
@@ -112,7 +126,6 @@ class LeaveDtrService
         $recordsByDate = collect();
         foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
             $recordsByDate = $recordsByDate->concat($model::query()
-                ->where('payroll_period_id', $payrollPeriod->id)
                 ->where('branch_id', $employee->branch_id)
                 ->whereIn('fingerprint_id', $variants ?: [(string) $this->fingerprintId($employee)])
                 ->whereBetween('date_in', [$dates[0], end($dates)])
@@ -142,6 +155,14 @@ class LeaveDtrService
 
         foreach (CarbonPeriod::create($leave->leave_from, $leave->leave_to ?: $leave->leave_from) as $date) {
             $dateString = $date->toDateString();
+            $targetPeriod = ($date->gte($payrollPeriod->date_start) && $date->lte($payrollPeriod->date_end))
+                ? $payrollPeriod
+                : (PayrollPeriod::query()
+                    ->where('is_locked', false)
+                    ->whereDate('date_start', '<=', $dateString)
+                    ->whereDate('date_end', '>=', $dateString)
+                    ->first() ?? $payrollPeriod);
+
             $effectiveSchedule = $date->isSaturday()
                 ? [
                     'start' => '08:00:00',
@@ -160,8 +181,9 @@ class LeaveDtrService
                 ->payableMinutes($dateString, $scheduleStart, $scheduleEnd, $effectiveSchedule['deduct_noon_break']);
 
             $dtr = Dtr::query()->create([
+                'employee_id' => $employee->id,
                 'leave_id' => $leave->id,
-                'payroll_period_id' => $payrollPeriod->id,
+                'payroll_period_id' => $targetPeriod->id,
                 'branch_id' => $employee->branch_id,
                 'fingerprint_id' => $this->fingerprintId($employee),
                 'date_in' => $dateString,
@@ -199,7 +221,7 @@ class LeaveDtrService
             app(AutomaticAbsenceService::class)->supersede($dtr);
             if ($date->isSaturday()) {
                 app(SaturdayWfhDtrService::class)->supersedeForActualImport([
-                    'payroll_period_id' => $payrollPeriod->id,
+                    'payroll_period_id' => $targetPeriod->id,
                     'branch_id' => $employee->branch_id,
                     'employee_id' => $employee->id,
                     'fingerprint_id' => $this->fingerprintId($employee),

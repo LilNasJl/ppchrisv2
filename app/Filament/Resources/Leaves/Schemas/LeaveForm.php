@@ -94,6 +94,7 @@ class LeaveForm
                             DatePicker::make('leave_to')
                                 ->label('Leave To')
                                 ->required()
+                                ->helperText('Tip: For leaves spanning across different payroll cutoffs, separate applications per cutoff are recommended.')
                                 ->rules([
                                     fn (Get $get): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get): void {
                                         if (! (bool) $get('is_half_day')) {

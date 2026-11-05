@@ -330,6 +330,50 @@ class LeaveAbsencePayrollReconciliationTest extends TestCase
         $this->assertSame('12:00:00', $row->schedule_end);
     }
 
+    public function test_approved_leave_creates_dtr_with_employee_id_populated(): void
+    {
+        $leave = $this->approve('whole_day', Leave::PAID);
+        $row = Dtr::where('leave_id', $leave->id)->sole();
+
+        $this->assertNotNull($row->employee_id);
+        $this->assertSame($this->employee->id, $row->employee_id);
+    }
+
+    public function test_leave_spanning_across_payroll_periods_assigns_correct_period_to_each_date(): void
+    {
+        $secondPeriod = PayrollPeriod::create([
+            'title' => 'Late October',
+            'date_start' => '2026-10-16',
+            'date_end' => '2026-10-31',
+            'date_payout' => '2026-11-05',
+            'is_locked' => false,
+        ]);
+
+        $leave = Leave::create([
+            'employee_id' => $this->employee->id,
+            'leave_type' => 'Vacation Leave',
+            'leave_from' => '2026-10-15',
+            'leave_to' => '2026-10-16',
+            'reason' => 'Cross-period vacation',
+            'status' => 'Pending',
+            'is_half_day' => false,
+            'pay_treatment' => Leave::PAID,
+        ]);
+
+        app(LeaveApprovalService::class)->decideHr($leave, $this->hr, true, $this->period, 'Approved cross period', Leave::PAID);
+
+        $dtrs = Dtr::where('leave_id', $leave->id)->orderBy('date_in')->get();
+        $this->assertCount(2, $dtrs);
+
+        $this->assertSame('2026-10-15', Carbon::parse($dtrs[0]->date_in)->toDateString());
+        $this->assertSame($this->period->id, $dtrs[0]->payroll_period_id);
+        $this->assertSame($this->employee->id, $dtrs[0]->employee_id);
+
+        $this->assertSame('2026-10-16', Carbon::parse($dtrs[1]->date_in)->toDateString());
+        $this->assertSame($secondPeriod->id, $dtrs[1]->payroll_period_id);
+        $this->assertSame($this->employee->id, $dtrs[1]->employee_id);
+    }
+
     private function approve(string $part, string $pay): Leave
     {
         $leave = $this->pending($part, $pay);
