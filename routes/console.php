@@ -78,6 +78,35 @@ Artisan::command('dtr:sync-station {--branch=} {--period=} {--include-locked}', 
     $this->info("Synchronized {$count} station D.T.R record(s) to official HR D.T.R.");
 })->purpose('Reconcile and synchronize all station D.T.R records to the official HR D.T.R table');
 
+Artisan::command('dtr:reconcile-holidays {--period=} {--branch=}', function (\App\Services\AutomaticAbsenceService $absenceService, \App\Services\SaturdayWfhDtrService $wfhService): void {
+    $periodId = filled($this->option('period')) ? (int) $this->option('period') : null;
+    $branchId = filled($this->option('branch')) ? (int) $this->option('branch') : null;
+
+    $periods = $periodId
+        ? \App\Models\PayrollPeriod::where('id', $periodId)->get()
+        : \App\Models\PayrollPeriod::where('is_locked', false)->get();
+
+    if ($periods->isEmpty()) {
+        $this->warn('No active payroll period found to reconcile.');
+
+        return;
+    }
+
+    $totalHolidayReconciled = 0;
+    $totalWfhCreated = 0;
+
+    foreach ($periods as $period) {
+        $totalHolidayReconciled += $absenceService->reconcileForScope($period->id, $branchId);
+
+        $branches = $branchId ? [$branchId] : \App\Models\Branch::pluck('id')->all();
+        foreach ($branches as $bId) {
+            $totalWfhCreated += $wfhService->materializeScope($period->id, (int) $bId);
+        }
+    }
+
+    $this->info("Reconciled {$totalHolidayReconciled} holiday D.T.R record(s) and materialized {$totalWfhCreated} Saturday WFH record(s).");
+})->purpose('Override holiday absences and materialize Saturday WFH entries for payroll periods');
+
 Artisan::command('auth:sync-masteradmin', function (): void {
     $account = User::syncMasterAdminFromConfig();
 
