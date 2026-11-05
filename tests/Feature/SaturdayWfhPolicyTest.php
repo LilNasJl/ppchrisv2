@@ -586,7 +586,7 @@ class SaturdayWfhPolicyTest extends TestCase
         $this->assertSame(['2026-10-10'], $policy->completedWfhDates($this->employee, $this->period, collect([$overtime])));
     }
 
-    public function test_approved_leave_and_holiday_do_not_gain_duplicate_wfh_credit(): void
+    public function test_approved_leave_does_not_gain_duplicate_wfh_credit_while_saturday_holiday_still_creates_wfh(): void
     {
         $policy = app(SaturdayWfhPolicyService::class);
         $policy->activate('2026-10-10');
@@ -596,14 +596,14 @@ class SaturdayWfhPolicyTest extends TestCase
             'leave_from' => '2026-10-10', 'leave_to' => '2026-10-10',
             'reason' => 'Approved leave', 'status' => 'Approved',
         ]);
-        $type = HolidayType::query()->create(['title' => 'Regular Holiday', 'type' => 'regular', 'rate' => 2]);
+        $type = HolidayType::query()->firstOrCreate(['type' => 'Regular Holiday'], ['rate' => 200]);
         Holiday::query()->create([
             'branch_id' => $this->branch->id, 'holiday_type_id' => $type->id,
             'date' => '2026-10-17', 'title' => 'Holiday', 'is_recurring' => false,
         ]);
         Carbon::setTestNow(Carbon::parse('2026-10-24 11:01:00', 'Asia/Manila'));
 
-        $this->assertSame(['2026-10-24'], $policy->completedWfhDates($this->employee, $this->period, collect()));
+        $this->assertSame(['2026-10-17', '2026-10-24'], $policy->completedWfhDates($this->employee, $this->period, collect()));
     }
 
     public function test_non_regular_employee_cannot_receive_saturday_wfh_exemption(): void
@@ -611,6 +611,74 @@ class SaturdayWfhPolicyTest extends TestCase
         $this->employee->update(['rate_type' => 'daily', 'daily_rate' => 800]);
         $this->expectException(InvalidArgumentException::class);
         app(SaturdayWfhPolicyService::class)->addOnSiteExemption($this->employee, '2026-10-10', null, 'Irrelevant');
+    }
+
+    #[DataProvider('importers')]
+    public function test_employee_with_null_fingerprint_id_receives_saturday_wfh_via_uid_fallback(string $importer): void
+    {
+        $this->employee->update(['fingerprint_id' => null, 'uid' => '0025']);
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+
+        $candidate = [...$this->candidate(), 'fingerprint_id' => '25', 'source_session_id' => 'ABS-25-20261010-w'];
+        $result = app($importer)->importRows([$candidate], 'Saturday WFH UID fallback');
+
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(1, $result['wfh_created']);
+        $dtr = Dtr::query()->where('employee_id', $this->employee->id)->sole();
+        $this->assertSame(SaturdayWfhDtrService::SOURCE, $dtr->entry_source);
+        $this->assertSame('WFH', $dtr->schedule_type);
+        $this->assertEquals(180, $dtr->credited_work_hrs);
+        $this->assertFalse((bool) $dtr->is_absent);
+    }
+
+    #[DataProvider('importers')]
+    public function test_padded_fingerprint_id_wfh_is_superseded_by_unpadded_actual_saturday_punch(string $importer): void
+    {
+        $this->employee->update(['fingerprint_id' => '0024', 'uid' => '0024']);
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+
+        app(SaturdayWfhDtrService::class)->materializeScope($this->period->id, $this->branch->id);
+        $this->assertSame(1, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+
+        $actual = [
+            'batch_id' => 'SAT-ACTUAL', 'payroll_period_id' => $this->period->id,
+            'branch_id' => $this->branch->id, 'fingerprint_id' => '0024',
+            'date_in' => '2026-10-10', 'date_out' => '2026-10-10',
+            'time_in' => '08:00:00', 'time_out' => '11:00:00',
+            'schedule_type' => 'Saturday', 'schedule_start' => '08:00:00', 'schedule_end' => '11:00:00',
+            'source_session_id' => 'ACT-24-20261010',
+        ];
+        $result = app($importer)->importRows([$actual], 'Actual Saturday punch');
+
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $this->assertSame(0, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+        $this->assertSame(1, Dtr::query()->count());
+        $this->assertSame('Saturday', Dtr::query()->sole()->schedule_type);
+    }
+
+    public function test_holiday_added_on_saturday_preserves_existing_wfh_and_does_not_pay_holiday_premium(): void
+    {
+        app(SaturdayWfhPolicyService::class)->activate('2026-10-10');
+        Carbon::setTestNow(Carbon::parse('2026-10-10 11:01:00', 'Asia/Manila'));
+
+        app(SaturdayWfhDtrService::class)->materializeScope($this->period->id, $this->branch->id);
+        $this->assertSame(1, Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->count());
+
+        $type = HolidayType::query()->firstOrCreate(['type' => 'Regular Holiday'], ['rate' => 200]);
+        Holiday::query()->create([
+            'branch_id' => $this->branch->id, 'holiday_type_id' => $type->id,
+            'date' => '2026-10-10', 'title' => 'Saturday Regular Holiday', 'is_recurring' => false,
+        ]);
+
+        $wfhRow = Dtr::query()->where('entry_source', SaturdayWfhDtrService::SOURCE)->sole();
+        $this->assertSame('WFH', $wfhRow->schedule_type);
+        $this->assertTrue((bool) $wfhRow->is_holiday);
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(0, $pay['regular_holiday']);
+        $this->assertEquals(0, $pay['absent']);
+        $this->assertEquals(10400, $pay['gross_pay']);
     }
 
     private function candidate(): array

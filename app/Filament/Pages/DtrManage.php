@@ -41,6 +41,21 @@ class DtrManage extends Page
         $this->branchId = Branch::resolvePublicId(request()->query('branchId'));
         $this->periodId = PayrollPeriod::resolvePublicId(request()->query('periodId'));
         $this->search = request()->query('search');
+
+        if ($this->periodId) {
+            app(\App\Services\AutomaticAbsenceService::class)->reconcileForScope(
+                $this->periodId,
+                $this->branchId,
+                $this->employeeId,
+            );
+
+            if ($this->branchId) {
+                app(SaturdayWfhDtrService::class)->materializeScope(
+                    $this->periodId,
+                    $this->branchId,
+                );
+            }
+        }
     }
 
     #[Override]
@@ -182,7 +197,7 @@ class DtrManage extends Page
         $workRecords = $finalizedRecords
             ->filter(fn (DtrModel $r): bool => ! (bool) $r->is_absent
                 && blank($r->leave_id)
-                && ! in_array($r->schedule_type, ['Absent', 'Leave', 'Overtime'], true)
+                && ! in_array($r->schedule_type, ['Absent', 'Leave', 'Overtime', 'Holiday'], true)
                 && filled($r->date_in))
             ->values();
 

@@ -402,14 +402,15 @@ class PayrollCalculator
         $ratePerHour = $ratePerDay / $workHoursPerDay;
         $leaveTotals = app(LeavePayService::class)->totals($dtrs, $workHoursPerDay, $halfDayValue);
 
-        $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay);
-        $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue);
+        $wholeAbsenceMinutes = $this->wholeAbsenceMinutes($dtrs, $workHoursPerDay, $employee);
+        $halfDayAbsenceMinutes = $this->halfDayAbsenceMinutes($dtrs, $workHoursPerDay, $halfDayValue, $employee);
 
         if (! $isDaily) {
             $halfDayAbsenceMinutes += $this->inferredRegularHalfDayAbsenceMinutes(
                 $dtrs,
                 $workHoursPerDay,
                 $halfDayValue,
+                $employee,
             );
         }
 
@@ -421,7 +422,7 @@ class PayrollCalculator
 
         $basePay = $this->basePay($isDaily, $ratePerDay, $daysWorked, $monthlyRate, $workDaysPerMonth, $halfMonthDays);
 
-        $deductibleDtrs = $this->deductibleDtrs($dtrs);
+        $deductibleDtrs = $this->deductibleDtrs($dtrs, $employee, $isDaily);
         $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
         $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
@@ -848,7 +849,18 @@ class PayrollCalculator
             return $dtrs;
         }
 
+        $entitlement = app(HolidayEntitlementService::class);
+
         foreach ($dtrs as $dtr) {
+            if ($dtr->entry_source === SaturdayWfhDtrService::SOURCE) {
+                $dtr->is_holiday = false;
+                $dtr->holiday_id = null;
+                $dtr->holiday_type = null;
+                $dtr->holiday_rate = null;
+
+                continue;
+            }
+
             if ((bool) $dtr->is_holiday || (bool) $dtr->holiday_excluded || blank($dtr->date_in)) {
                 continue;
             }
@@ -860,10 +872,12 @@ class PayrollCalculator
                 continue;
             }
 
+            $excluded = $entitlement->isExcluded($holiday, $employee, $dateKey);
             $dtr->is_holiday = true;
             $dtr->holiday_id = $holiday->id;
             $dtr->holiday_type = $holiday->type?->type;
-            $dtr->holiday_rate = $holiday->type?->rate;
+            $dtr->holiday_rate = $excluded ? 0 : $holiday->type?->rate;
+            $dtr->holiday_excluded = $excluded;
             $dtr->setRelation('holiday', $holiday);
         }
 
@@ -923,25 +937,27 @@ class PayrollCalculator
         return app(DtrAttendanceUnitService::class)->dailyRatePayUnits($dtrs);
     }
 
-    protected function deductibleDtrs(Collection $dtrs): Collection
+    protected function deductibleDtrs(Collection $dtrs, ?Employee $employee = null, bool $isDaily = false): Collection
     {
         return $dtrs
             ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
             ->reject(fn (Dtr $dtr): bool => app(LeavePayService::class)->isLeave($dtr))
-            ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime');
+            ->reject(fn (Dtr $dtr): bool => Str::lower((string) $dtr->schedule_type) === 'overtime')
+            ->reject(fn (Dtr $dtr): bool => ! $isDaily && $this->isEffectiveHolidayDtr($dtr, $employee));
     }
 
-    protected function wholeAbsenceMinutes(Collection $dtrs, float $workHoursPerDay): float
+    protected function wholeAbsenceMinutes(Collection $dtrs, float $workHoursPerDay, ?Employee $employee = null): float
     {
-        return $this->absenceMinutesFor($dtrs, $workHoursPerDay, DtrDayPartService::WHOLE_DAY);
+        return $this->absenceMinutesFor($dtrs, $workHoursPerDay, DtrDayPartService::WHOLE_DAY, $employee);
     }
 
-    protected function halfDayAbsenceMinutes(Collection $dtrs, float $workHoursPerDay, float $halfDayValue): float
+    protected function halfDayAbsenceMinutes(Collection $dtrs, float $workHoursPerDay, float $halfDayValue, ?Employee $employee = null): float
     {
         $fallbackMinutes = $workHoursPerDay * 60 * $halfDayValue;
 
         return $dtrs
             ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->reject(fn (Dtr $dtr): bool => $this->isEffectiveHolidayDtr($dtr, $employee))
             ->reject(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === DtrDayPartService::WHOLE_DAY)
             ->sum(fn (Dtr $dtr): float => Carbon::parse($dtr->date_in)->isSaturday()
                 ? 180.0
@@ -952,6 +968,7 @@ class PayrollCalculator
         Collection $dtrs,
         float $workHoursPerDay,
         float $halfDayValue,
+        ?Employee $employee = null,
     ): float {
         $fallbackMinutes = $workHoursPerDay * 60 * $halfDayValue;
         $dayPartService = app(DtrDayPartService::class);
@@ -960,7 +977,11 @@ class PayrollCalculator
         return $dtrs
             ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in))
             ->groupBy(fn (Dtr $dtr): string => Carbon::parse($dtr->date_in)->toDateString())
-            ->sum(function (Collection $dateRecords) use ($fallbackMinutes, $dayPartService, $attendanceUnits): float {
+            ->sum(function (Collection $dateRecords) use ($fallbackMinutes, $dayPartService, $attendanceUnits, $employee): float {
+                if ($dateRecords->contains(fn (Dtr $dtr): bool => $this->isEffectiveHolidayDtr($dtr, $employee))) {
+                    return 0.0;
+                }
+
                 $workedRegularParts = $dateRecords
                     ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent || filled($dtr->leave_id))
                     ->filter(fn (Dtr $dtr): bool => $dayPartService->isRegularScheduleType($dtr->schedule_type))
@@ -1006,12 +1027,13 @@ class PayrollCalculator
             });
     }
 
-    protected function absenceMinutesFor(Collection $dtrs, float $workHoursPerDay, string $dayPart): float
+    protected function absenceMinutesFor(Collection $dtrs, float $workHoursPerDay, string $dayPart, ?Employee $employee = null): float
     {
         $fallbackMinutes = $workHoursPerDay * 60;
 
         return $dtrs
             ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+            ->reject(fn (Dtr $dtr): bool => $this->isEffectiveHolidayDtr($dtr, $employee))
             ->filter(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === $dayPart)
             ->sum(fn (Dtr $dtr): float => Carbon::parse($dtr->date_in)->isSaturday()
                 ? 180.0
@@ -1033,6 +1055,8 @@ class PayrollCalculator
         return $this->money(
             $dtrs
                 ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_holiday)
+                ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
+                ->reject(fn (Dtr $dtr): bool => $dtr->entry_source === SaturdayWfhDtrService::SOURCE)
                 ->reject(fn (Dtr $dtr): bool => app(LeavePayService::class)->isLeave($dtr))
                 ->reject(fn (Dtr $dtr): bool => $this->isHolidayExcludedForPayroll($employee, $dtr))
                 ->filter(function (Dtr $dtr) use ($type): bool {
@@ -1045,7 +1069,7 @@ class PayrollCalculator
 
                     return Str::contains($holidayType, 'special') || ($holidayRate > 0 && $holidayRate < 100);
                 })
-                ->sum(function (Dtr $dtr) use ($ratePerDay, $settings, $type): float {
+                ->sum(function (Dtr $dtr) use ($employee, $ratePerDay, $settings, $type): float {
                     $holidayRate = $this->holidayRate($dtr, $settings, $type);
                     $dailyRate = $this->rateType($employee) === 'Monthly' && (float) $employee->monthly_rate > 0
                         ? $ratePerDay : (float) ($dtr->daily_rate ?: $ratePerDay);
@@ -1057,9 +1081,11 @@ class PayrollCalculator
                     $premiumMultiplier = $holidayRate >= 100
                         ? max(0, ($holidayRate - 100) / 100)
                         : $holidayRate / 100;
+                    $otPremiumRate = $settings->value('holiday_overtime_premium_rate') / 100;
+                    $holidayOvertimeMultiplier = $premiumMultiplier + ((1 + $premiumMultiplier) * $otPremiumRate);
                     $holidayOvertimePremium = ($creditedOvertimeMinutes / 60)
                         * $ratePerHour
-                        * ($settings->value('holiday_overtime_premium_rate') / 100);
+                        * $holidayOvertimeMultiplier;
 
                     return ($baseWorkedPay * $premiumMultiplier) + $holidayOvertimePremium;
                 })
@@ -1072,10 +1098,25 @@ class PayrollCalculator
         $creditedOvertime = max(0, (float) ($dtr->credited_overtime ?? 0));
 
         if ($scheduleType === 'overtime') {
-            return max($creditedOvertime, $creditedWorkMinutes);
+            return (bool) $dtr->overtime_approved || $dtr->overtime_status === 'Approved'
+                ? max($creditedOvertime, $creditedWorkMinutes)
+                : $creditedOvertime;
         }
 
         return min($creditedWorkMinutes, $creditedOvertime);
+    }
+
+    protected function isEffectiveHolidayDtr(Dtr $dtr, ?Employee $employee = null): bool
+    {
+        if (! (bool) $dtr->is_holiday || (bool) $dtr->holiday_excluded) {
+            return false;
+        }
+
+        if ($employee && $this->isHolidayExcludedForPayroll($employee, $dtr)) {
+            return false;
+        }
+
+        return true;
     }
 
     protected function isHolidayExcludedForPayroll(Employee $employee, Dtr $dtr): bool
@@ -1113,6 +1154,8 @@ class PayrollCalculator
 
         $dtrDates = $dtrs
             ->filter(fn (Dtr $dtr): bool => filled($dtr->date_in))
+            ->reject(fn (Dtr $dtr): bool => (bool) $dtr->is_absent || $dtr->entry_source === SaturdayWfhDtrService::SOURCE)
+            ->filter(fn (Dtr $dtr): bool => (float) ($dtr->credited_work_hrs ?? 0) > 0 || app(LeavePayService::class)->isApproved($dtr))
             ->map(fn (Dtr $dtr): string => Carbon::parse($dtr->date_in)->toDateString())
             ->unique()
             ->values();

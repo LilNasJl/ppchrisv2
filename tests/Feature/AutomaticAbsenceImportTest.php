@@ -166,11 +166,17 @@ class AutomaticAbsenceImportTest extends TestCase
     #[DataProvider('services')]
     public function test_holidays_pending_requests_and_non_regular_profiles_are_not_automatically_absent(string $service): void
     {
-        $type = HolidayType::query()->create(['title' => 'Regular Holiday', 'type' => 'regular', 'rate' => 2]);
+        $type = HolidayType::query()->firstOrCreate(['type' => 'Regular Holiday'], ['rate' => 200]);
         Holiday::query()->create(['branch_id' => $this->branch->id, 'holiday_type_id' => $type->id,
             'date' => '2026-10-12', 'title' => 'Test holiday', 'is_recurring' => false]);
         $result = app($service)->importRows([$this->absence('whole_day')], 'Holiday');
-        $this->assertSame(1, $result['skipped'], json_encode($result));
+        $this->assertSame(1, $result['successful'], json_encode($result));
+        $holidayDtr = Dtr::query()->whereDate('date_in', '2026-10-12')->sole();
+        $this->assertSame('Holiday', $holidayDtr->schedule_type);
+        $this->assertFalse((bool) $holidayDtr->is_absent);
+        $this->assertSame(0, (int) $holidayDtr->absence_minutes);
+        $this->assertTrue((bool) $holidayDtr->is_holiday);
+
         $request = DtrChangeRequest::query()->create(['employee_id' => $this->employee->id, 'branch_id' => $this->branch->id,
             'payroll_period_id' => $this->period->id, 'dtr_date' => '2026-10-13',
             'employee_name_snapshot' => 'Regular Employee', 'branch_name_snapshot' => 'Absence test',
@@ -183,7 +189,7 @@ class AutomaticAbsenceImportTest extends TestCase
         $this->employee->update(['rate_type' => 'daily']);
         $result = app($service)->importRows([$this->absence('whole_day', '2026-10-13')], 'Other schedule');
         $this->assertSame(1, $result['skipped'], json_encode($result));
-        $this->assertSame(0, Dtr::query()->count());
+        $this->assertSame(0, Dtr::query()->where('is_absent', true)->count());
     }
 
     #[DataProvider('services')]
@@ -357,6 +363,62 @@ class AutomaticAbsenceImportTest extends TestCase
         $this->assertEquals(400, $pay['halfday']);
         $this->assertEquals(0, $pay['absent']);
         $this->assertSame($before, $legacy->fresh()->getAttributes());
+    }
+
+    public function test_holiday_added_after_sync_reconciles_auto_absence_and_restores_full_monthly_pay(): void
+    {
+        $this->employee->update(['monthly_rate' => 20800, 'daily_rate' => 800]);
+        $result = app(DtrImportService::class)->importRows([$this->absence('whole_day', '2026-10-12')], 'Sync before holiday');
+        $this->assertSame(1, $result['successful']);
+        $this->assertSame(1, Dtr::query()->where('is_absent', true)->count());
+
+        $type = HolidayType::query()->firstOrCreate(['type' => 'Regular Holiday'], ['rate' => 200]);
+        Holiday::query()->create([
+            'branch_id' => $this->branch->id, 'holiday_type_id' => $type->id,
+            'date' => '2026-10-12', 'title' => 'Late Added Holiday', 'is_recurring' => false,
+        ]);
+
+        $this->assertSame(0, Dtr::query()->where('is_absent', true)->count());
+        $reconciledDtr = Dtr::query()->whereDate('date_in', '2026-10-12')->sole();
+        $this->assertSame('Holiday', $reconciledDtr->schedule_type);
+        $this->assertFalse((bool) $reconciledDtr->is_absent);
+        $this->assertSame(0, (int) $reconciledDtr->absence_minutes);
+        $this->assertTrue((bool) $reconciledDtr->is_holiday);
+
+        $pay = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(0, $pay['absent']);
+        $this->assertEquals(10400, $pay['gross_pay']);
+    }
+
+    public function test_monthly_employee_working_on_holiday_receives_option1_holiday_pay_without_penalties(): void
+    {
+        $this->employee->update(['monthly_rate' => 20800, 'daily_rate' => 800]);
+        $type = HolidayType::query()->firstOrCreate(['type' => 'Regular Holiday'], ['rate' => 200]);
+        Holiday::query()->create([
+            'branch_id' => $this->branch->id, 'holiday_type_id' => $type->id,
+            'date' => '2026-10-12', 'title' => 'Weekday Regular Holiday', 'is_recurring' => false,
+        ]);
+
+        // Full 9-hour weekday schedule (08:00 to 18:00 minus 1h lunch = 540 mins) -> 9h * 100/hr = 900 holiday pay
+        app(DtrImportService::class)->importRows([$this->punch('08:00:00', '18:00:00', '2026-10-12')], '9h Holiday Work');
+        $pay9h = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(900, $pay9h['regular_holiday']);
+        $this->assertEquals(0, $pay9h['late']);
+        $this->assertEquals(0, $pay9h['undertime_amount']);
+        $this->assertEquals(0, $pay9h['halfday']);
+        $this->assertEquals(11300, $pay9h['gross_pay']);
+
+        // Partial 4-hour morning work on holiday (08:00 to 12:00 = 240 mins) -> 400 holiday pay, 0 half-day/undertime penalty
+        Dtr::query()->forceDelete();
+        EmployeeVisibleDtr::query()->forceDelete();
+        app()->forgetInstance(DtrImportService::class);
+        app(DtrImportService::class)->importRows([$this->punch('08:00:00', '12:00:00', '2026-10-12')], '4h Holiday Work');
+        $pay4h = app(PayrollCalculator::class)->row($this->employee->fresh(), $this->period);
+        $this->assertEquals(400, $pay4h['regular_holiday']);
+        $this->assertEquals(0, $pay4h['halfday']);
+        $this->assertEquals(0, $pay4h['late']);
+        $this->assertEquals(0, $pay4h['undertime_amount']);
+        $this->assertEquals(10800, $pay4h['gross_pay']);
     }
 
     private function absence(string $part, string $date = '2026-10-12'): array

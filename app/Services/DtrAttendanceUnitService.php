@@ -22,7 +22,8 @@ class DtrAttendanceUnitService
             ->filter(fn (Dtr $record): bool => (bool) $record->is_absent
                 || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
             ->reject(fn (Dtr $record): bool => filled($record->leave_id)
-                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE)
+                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+                || $this->isEffectiveHoliday($record))
             ->filter(fn (Dtr $record): bool => filled($record->date_in));
 
         $weekdayDays = 0.0;
@@ -50,6 +51,7 @@ class DtrAttendanceUnitService
         if (! ((bool) $record->is_absent || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
             || filled($record->leave_id)
             || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+            || $this->isEffectiveHoliday($record)
             || blank($record->date_in)) {
             return 0;
         }
@@ -76,10 +78,16 @@ class DtrAttendanceUnitService
             ->filter(fn (Dtr $record): bool => (bool) $record->is_absent
                 || strcasecmp(trim((string) $record->schedule_type), 'Absent') === 0)
             ->reject(fn (Dtr $record): bool => filled($record->leave_id)
-                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE)
+                || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+                || $this->isEffectiveHoliday($record))
             ->filter(fn (Dtr $record): bool => filled($record->date_in))
             ->unique(fn (Dtr $record): string => $this->dutyDate($record))
             ->count();
+    }
+
+    protected function isEffectiveHoliday(Dtr $record): bool
+    {
+        return (bool) $record->is_holiday && ! (bool) $record->holiday_excluded;
     }
 
     /**
@@ -196,7 +204,7 @@ class DtrAttendanceUnitService
             ->reject(function (Dtr $record): bool {
                 $scheduleType = Str::lower(trim((string) $record->schedule_type));
 
-                return in_array($scheduleType, ['absent', 'leave', 'overtime', 'forgot to punch'], true);
+                return in_array($scheduleType, ['absent', 'leave', 'overtime', 'forgot to punch', 'holiday'], true);
             })
             ->filter(fn (Dtr $record): bool => filled($record->date_in))
             ->values();

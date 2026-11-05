@@ -13,20 +13,33 @@ use App\Models\PayrollPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /** Firmware supplies candidates, not authority to deduct leave or holiday pay. */
 class AutomaticAbsenceService
 {
     public const SOURCE = 'auto_absence';
 
-    public function calculation(array $data): array
+    public function calculation(array $data, ?Employee $employee = null): array
     {
+        $resolvedHoliday = filled($data['date_in'] ?? null)
+            ? app(HolidayEntitlementService::class)->resolveForEmployeeDate(
+                $employee,
+                (string) $data['date_in'],
+                isset($data['branch_id']) ? (int) $data['branch_id'] : ($employee?->branch_id ? (int) $employee->branch_id : null),
+            )
+            : ['holiday' => null, 'excluded' => false];
+
+        $isApplicableHoliday = $resolvedHoliday['holiday'] !== null && ! $resolvedHoliday['excluded'];
+
         return [
-            'schedule_type' => 'Absent',
+            'schedule_type' => $isApplicableHoliday ? 'Holiday' : 'Absent',
             'entry_source' => self::SOURCE,
             'day_part' => $data['day_part'],
-            'is_absent' => true,
-            'absence_minutes' => app(DtrDayPartService::class)->absenceMinutes($data['date_in'], $data['day_part']),
+            'is_absent' => ! $isApplicableHoliday,
+            'absence_minutes' => $isApplicableHoliday
+                ? 0
+                : app(DtrDayPartService::class)->absenceMinutes($data['date_in'], $data['day_part']),
             'work_hrs' => 0, 'credited_work_hrs' => 0,
             'late' => 0, 'undertime' => 0, 'overtime' => 0, 'early_clock_in' => 0,
             'credited_overtime' => 0, 'credited_early_clock_in' => 0,
@@ -76,12 +89,6 @@ class AutomaticAbsenceService
         }
         if (now('Asia/Manila')->lte(Carbon::parse($data['date_in'].' '.$data['schedule_end'], 'Asia/Manila'))) {
             return 'Scheduled workday has not finished.';
-        }
-        $holiday = Holiday::query()->where(fn ($q) => $q->whereNull('branch_id')->orWhere('branch_id', $data['branch_id']))
-            ->where(fn ($q) => $q->whereDate('date', $data['date_in'])
-                ->orWhere(fn ($q) => $q->where('is_recurring', true)->where('month_day', $date->format('m-d'))))->exists();
-        if ($holiday) {
-            return 'Holiday/non-working date requires HRIS attendance rules.';
         }
         $leaves ??= $this->leavesForDate($employee, $data['date_in']);
         // Keep the original whole-day source when only part is approved leave.
@@ -147,7 +154,7 @@ class AutomaticAbsenceService
                 $exists |= $model::query()->where('branch_id', $attendance->branch_id)
                     ->where('payroll_period_id', $attendance->payroll_period_id)->where('fingerprint_id', $attendance->fingerprint_id)
                     ->where('date_in', $attendance->date_in)->when(! $approvedLeave, fn ($q) => $q->where('entry_source', self::SOURCE))
-                    ->where('is_absent', true)->exists();
+                    ->where(fn ($q) => $q->where('is_absent', true)->orWhere('entry_source', self::SOURCE))->exists();
             }
             if (! $exists) {
                 return;
@@ -179,7 +186,7 @@ class AutomaticAbsenceService
             $records = $model::query()->where('branch_id', $attendance->branch_id)
                 ->where('payroll_period_id', $attendance->payroll_period_id)->where('fingerprint_id', $attendance->fingerprint_id)
                 ->where('date_in', $attendance->date_in)->when(! $approvedLeave, fn ($q) => $q->where('entry_source', self::SOURCE))
-                ->where('is_absent', true)->lockForUpdate()->get();
+                ->where(fn ($q) => $q->where('is_absent', true)->orWhere('entry_source', self::SOURCE))->lockForUpdate()->get();
             foreach ($records as $record) {
                 if ($part !== 'whole_day' && $record->day_part !== 'whole_day' && $record->day_part !== $part) {
                     continue;
@@ -205,5 +212,264 @@ class AutomaticAbsenceService
                 ]);
             }
         }
+    }
+
+    /**
+     * Reconcile existing unlocked auto_absence DTRs when a holiday is added or updated.
+     */
+    public function reconcileForHoliday(Holiday $holiday): int
+    {
+        if (! Schema::hasTable('dtrs') || ! Schema::hasTable('payroll_periods') || ! Schema::hasTable('employees')) {
+            return 0;
+        }
+
+        $dateStr = $holiday->date ? Carbon::parse($holiday->date)->toDateString() : null;
+        $monthDay = $holiday->month_day ?: ($dateStr ? Carbon::parse($dateStr)->format('m-d') : null);
+        if (! $dateStr && ! $monthDay) {
+            return 0;
+        }
+
+        $unlockedPeriodIds = PayrollPeriod::query()
+            ->where('is_locked', false)
+            ->pluck('id')
+            ->all();
+        if ($unlockedPeriodIds === []) {
+            return 0;
+        }
+
+        $entitlement = app(HolidayEntitlementService::class);
+        $reconciled = 0;
+
+        foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
+            $table = (new $model)->getTable();
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $recordsOnDate = $model::query()
+                ->whereIn('payroll_period_id', $unlockedPeriodIds)
+                ->where('is_locked', false)
+                ->when(filled($holiday->branch_id), fn ($q) => $q->where('branch_id', $holiday->branch_id))
+                ->get()
+                ->filter(function ($record) use ($holiday, $dateStr, $monthDay): bool {
+                    if (blank($record->date_in)) {
+                        return false;
+                    }
+                    $recDate = Carbon::parse($record->date_in);
+
+                    return ($dateStr && $recDate->toDateString() === $dateStr)
+                        || ((bool) $holiday->is_recurring && $monthDay && $recDate->format('m-d') === $monthDay);
+                });
+
+            foreach ($recordsOnDate as $record) {
+                $employee = $this->resolveRecordEmployee($record);
+                $resolved = $entitlement->resolveForEmployeeDate(
+                    $employee,
+                    (string) $record->date_in,
+                    (int) $record->branch_id,
+                );
+
+                if (! $resolved['holiday']) {
+                    continue;
+                }
+
+                $matchedHoliday = $resolved['holiday'];
+                $excluded = (bool) $resolved['excluded'];
+
+                if ($record->entry_source === self::SOURCE) {
+                    if ($excluded) {
+                        continue;
+                    }
+
+                    $dateObj = Carbon::parse($record->date_in);
+                    if ($dateObj->isSaturday() && $employee && app(SaturdayWfhPolicyService::class)->isApprovedWfh($employee, $dateObj->toDateString())) {
+                        $record->delete();
+
+                        continue;
+                    }
+
+                    if ($record->is_absent || strcasecmp((string) $record->schedule_type, 'Holiday') !== 0 || ! (bool) $record->is_holiday) {
+                        $before = $record->getAttributes();
+                        $attributes = array_filter([
+                            'schedule_type' => 'Holiday',
+                            'is_absent' => false,
+                            'absence_minutes' => 0,
+                            'work_hrs' => 0,
+                            'credited_work_hrs' => 0,
+                            'is_holiday' => true,
+                            'holiday_id' => $matchedHoliday->id,
+                            'holiday_type' => $matchedHoliday->type?->type,
+                            'holiday_rate' => $matchedHoliday->type?->rate !== null ? (float) $matchedHoliday->type->rate : null,
+                            'holiday_excluded' => false,
+                        ], fn ($val, $col) => Schema::hasColumn($table, $col), ARRAY_FILTER_USE_BOTH);
+
+                        $record->forceFill($attributes)->saveQuietly();
+
+                        if (Schema::hasTable('action_histories')) {
+                            ActionHistory::query()->create([
+                                'actor_name' => auth()->user()?->name ?: 'Holiday calendar',
+                                'action' => 'holiday_reconciled_dtr',
+                                'model_type' => $model,
+                                'model_id' => $record->id,
+                                'summary' => 'Automatic absence entry overridden and marked as Holiday.',
+                                'before_data' => $before,
+                                'after_data' => $record->getAttributes(),
+                            ]);
+                        }
+                        $reconciled++;
+                    }
+
+                    continue;
+                }
+
+                if (! $record->is_absent) {
+                    $attributes = array_filter([
+                        'is_holiday' => ! $excluded,
+                        'holiday_id' => $excluded ? null : $matchedHoliday->id,
+                        'holiday_type' => $excluded ? null : $matchedHoliday->type?->type,
+                        'holiday_rate' => $excluded ? null : ($matchedHoliday->type?->rate !== null ? (float) $matchedHoliday->type->rate : null),
+                        'holiday_excluded' => $excluded,
+                    ], fn ($val, $col) => Schema::hasColumn($table, $col), ARRAY_FILTER_USE_BOTH);
+
+                    $record->forceFill($attributes)->saveQuietly();
+                }
+            }
+        }
+
+        return $reconciled;
+    }
+
+    public function reconcileForScope(?int $payrollPeriodId = null, ?int $branchId = null, ?int $employeeId = null): int
+    {
+        if (! Schema::hasTable('holidays') || ! Schema::hasTable('payroll_periods')) {
+            return 0;
+        }
+
+        $unlockedPeriodIds = PayrollPeriod::query()
+            ->where('is_locked', false)
+            ->when($payrollPeriodId, fn ($q) => $q->whereKey($payrollPeriodId))
+            ->pluck('id')
+            ->all();
+        if ($unlockedPeriodIds === []) {
+            return 0;
+        }
+
+        $entitlement = app(HolidayEntitlementService::class);
+        $reconciled = 0;
+
+        foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
+            $table = (new $model)->getTable();
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $records = $model::query()
+                ->whereIn('payroll_period_id', $unlockedPeriodIds)
+                ->where('is_locked', false)
+                ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+                ->when($employeeId && Schema::hasColumn($table, 'employee_id'), fn ($q) => $q->where('employee_id', $employeeId))
+                ->get();
+
+            foreach ($records as $record) {
+                if (blank($record->date_in)) {
+                    continue;
+                }
+
+                $employee = $this->resolveRecordEmployee($record);
+                $resolved = $entitlement->resolveForEmployeeDate(
+                    $employee,
+                    (string) $record->date_in,
+                    (int) $record->branch_id,
+                );
+
+                if (! $resolved['holiday']) {
+                    continue;
+                }
+
+                $matchedHoliday = $resolved['holiday'];
+                $excluded = (bool) $resolved['excluded'];
+
+                if ($record->entry_source === self::SOURCE) {
+                    if ($excluded) {
+                        continue;
+                    }
+
+                    $dateObj = Carbon::parse($record->date_in);
+                    if ($dateObj->isSaturday() && $employee && app(SaturdayWfhPolicyService::class)->isApprovedWfh($employee, $dateObj->toDateString())) {
+                        $record->delete();
+
+                        continue;
+                    }
+
+                    if ($record->is_absent || strcasecmp((string) $record->schedule_type, 'Holiday') !== 0 || ! (bool) $record->is_holiday) {
+                        $before = $record->getAttributes();
+                        $attributes = array_filter([
+                            'schedule_type' => 'Holiday',
+                            'is_absent' => false,
+                            'absence_minutes' => 0,
+                            'work_hrs' => 0,
+                            'credited_work_hrs' => 0,
+                            'is_holiday' => true,
+                            'holiday_id' => $matchedHoliday->id,
+                            'holiday_type' => $matchedHoliday->type?->type,
+                            'holiday_rate' => $matchedHoliday->type?->rate !== null ? (float) $matchedHoliday->type->rate : null,
+                            'holiday_excluded' => false,
+                        ], fn ($val, $col) => Schema::hasColumn($table, $col), ARRAY_FILTER_USE_BOTH);
+
+                        $record->forceFill($attributes)->saveQuietly();
+
+                        if (Schema::hasTable('action_histories')) {
+                            ActionHistory::query()->create([
+                                'actor_name' => auth()->user()?->name ?: 'Holiday calendar',
+                                'action' => 'holiday_reconciled_dtr',
+                                'model_type' => $model,
+                                'model_id' => $record->id,
+                                'summary' => 'Automatic absence entry overridden and marked as Holiday.',
+                                'before_data' => $before,
+                                'after_data' => $record->getAttributes(),
+                            ]);
+                        }
+                        $reconciled++;
+                    }
+
+                    continue;
+                }
+
+                if (! $record->is_absent) {
+                    if ((bool) $record->is_holiday !== (! $excluded) || (int) ($record->holiday_id ?? 0) !== (int) ($excluded ? 0 : $matchedHoliday->id)) {
+                        $attributes = array_filter([
+                            'is_holiday' => ! $excluded,
+                            'holiday_id' => $excluded ? null : $matchedHoliday->id,
+                            'holiday_type' => $excluded ? null : $matchedHoliday->type?->type,
+                            'holiday_rate' => $excluded ? null : ($matchedHoliday->type?->rate !== null ? (float) $matchedHoliday->type->rate : null),
+                            'holiday_excluded' => $excluded,
+                        ], fn ($val, $col) => Schema::hasColumn($table, $col), ARRAY_FILTER_USE_BOTH);
+
+                        $record->forceFill($attributes)->saveQuietly();
+                    }
+                }
+            }
+        }
+
+        return $reconciled;
+    }
+
+    protected function resolveRecordEmployee(Dtr $record): ?Employee
+    {
+        $employee = filled($record->employee_id ?? null)
+            ? Employee::query()->find($record->employee_id)
+            : null;
+
+        if (! $employee && filled($record->fingerprint_id ?? null)) {
+            $variants = app(SaturdayWfhDtrService::class)->fingerprintVariants($record->fingerprint_id);
+            $employee = Employee::query()
+                ->where('branch_id', $record->branch_id)
+                ->where(function ($q) use ($variants): void {
+                    $q->whereIn('fingerprint_id', $variants)->orWhereIn('uid', $variants);
+                })
+                ->first();
+        }
+
+        return $employee;
     }
 }

@@ -8,6 +8,7 @@ use App\Models\HolidayEmployeeExclusion;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class HolidayEntitlementService
@@ -70,7 +71,7 @@ class HolidayEntitlementService
     {
         $employeeId = $employee instanceof Employee ? $employee->id : $employee;
 
-        if (blank($employeeId)) {
+        if (blank($employeeId) || ! Schema::hasTable('holiday_employee_exclusions')) {
             return false;
         }
 

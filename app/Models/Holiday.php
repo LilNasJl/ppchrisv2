@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use App\Services\AutomaticAbsenceService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,6 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Holiday extends Model
 {
     use HasPublicUuid;
+
+    protected static function booted(): void
+    {
+        static::saved(function (Holiday $holiday): void {
+            app(AutomaticAbsenceService::class)->reconcileForHoliday($holiday);
+        });
+    }
 
     protected $fillable = [
         'branch_id',

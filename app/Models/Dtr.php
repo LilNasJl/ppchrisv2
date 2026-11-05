@@ -155,7 +155,7 @@ class Dtr extends Model
             return true;
         }
 
-        if (! $this->is_imported || in_array($scheduleType, ['absent', 'leave', 'overtime'], true)) {
+        if (! $this->is_imported || in_array($scheduleType, ['absent', 'leave', 'overtime', 'holiday'], true)) {
             return false;
         }
 
@@ -177,7 +177,7 @@ class Dtr extends Model
                 $query
                     ->whereNull('is_imported')
                     ->orWhere('is_imported', false)
-                    ->orWhereRaw("LOWER(COALESCE(schedule_type, '')) IN ('absent', 'leave', 'overtime')")
+                    ->orWhereRaw("LOWER(COALESCE(schedule_type, '')) IN ('absent', 'leave', 'overtime', 'holiday')")
                     ->orWhere(function (Builder $query): void {
                         $query
                             ->whereNotNull('date_in')

@@ -121,6 +121,10 @@ class Dtr extends Page implements HasForms
         if ($periodId !== null) {
             $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
             app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($branchId, $periodId);
+            app(\App\Services\AutomaticAbsenceService::class)->reconcileForScope($periodId, $branchId);
+            if ($branchId !== null) {
+                app(\App\Services\SaturdayWfhDtrService::class)->materializeScope($periodId, $branchId);
+            }
         }
     }
 

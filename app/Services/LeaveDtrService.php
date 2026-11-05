@@ -103,13 +103,18 @@ class LeaveDtrService
             ->all();
 
         $dayPart = $this->leaveDayPart($leave);
+        $variants = app(SaturdayWfhDtrService::class)->fingerprintVariants(
+            $this->fingerprintId($employee),
+            $employee->fingerprint_id,
+            $employee->uid,
+        );
         // Fetch the date range once instead of issuing one query for every leave day.
         $recordsByDate = collect();
         foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
             $recordsByDate = $recordsByDate->concat($model::query()
                 ->where('payroll_period_id', $payrollPeriod->id)
                 ->where('branch_id', $employee->branch_id)
-                ->where('fingerprint_id', $this->fingerprintId($employee))
+                ->whereIn('fingerprint_id', $variants ?: [(string) $this->fingerprintId($employee)])
                 ->whereBetween('date_in', [$dates[0], end($dates)])
                 ->lockForUpdate()->get());
         }
@@ -117,7 +122,8 @@ class LeaveDtrService
         $conflictingDates = collect($dates)
             ->filter(function (string $date) use ($recordsByDate, $dayPart): bool {
                 $records = ($recordsByDate->get($date) ?? collect())
-                    ->reject(fn (Dtr $record): bool => (bool) $record->is_absent);
+                    ->reject(fn (Dtr $record): bool => (bool) $record->is_absent)
+                    ->reject(fn (Dtr $record): bool => in_array($record->entry_source, [AutomaticAbsenceService::SOURCE, SaturdayWfhDtrService::SOURCE], true) && ! (bool) $record->is_locked);
 
                 return app(DtrDayPartService::class)->conflictsWith($records, $dayPart);
             })
@@ -191,6 +197,15 @@ class LeaveDtrService
 
             $dtr->setRelation('leave', $leave);
             app(AutomaticAbsenceService::class)->supersede($dtr);
+            if ($date->isSaturday()) {
+                app(SaturdayWfhDtrService::class)->supersedeForActualImport([
+                    'payroll_period_id' => $payrollPeriod->id,
+                    'branch_id' => $employee->branch_id,
+                    'employee_id' => $employee->id,
+                    'fingerprint_id' => $this->fingerprintId($employee),
+                    'date_in' => $dateString,
+                ]);
+            }
             app(DtrSynchronizationService::class)->syncOfficialToVisible(
                 $dtr,
                 'approved_leave',

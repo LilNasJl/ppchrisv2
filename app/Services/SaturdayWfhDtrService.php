@@ -40,18 +40,37 @@ class SaturdayWfhDtrService
             $employees = Employee::query()->activeEmployment()
                 ->where('branch_id', $branchId)
                 ->where('schedule_type', 'regular')
+                ->whereRaw("LOWER(TRIM(COALESCE(rate_type, ''))) = ?", ['monthly'])
                 ->whereNotNull('hired_date')
-                ->whereNotNull('fingerprint_id')
+                ->where(function ($query): void {
+                    $query->where(function ($q): void {
+                        $q->whereNotNull('fingerprint_id')->where('fingerprint_id', '!=', '');
+                    })->orWhere(function ($q): void {
+                        $q->whereNotNull('uid')->where('uid', '!=', '');
+                    });
+                })
                 ->lockForUpdate()
                 ->get();
 
             foreach ($employees as $employee) {
+                $fingerprintId = $this->employeeFingerprintId($employee);
+                if ($fingerprintId === null) {
+                    continue;
+                }
+
+                $variants = $this->fingerprintVariants($employee->fingerprint_id, $employee->uid);
                 $official = Dtr::query()->where('payroll_period_id', $periodId)
                     ->where('branch_id', $branchId)
-                    ->where('fingerprint_id', (string) $employee->fingerprint_id)->get();
+                    ->where(function ($query) use ($employee, $variants): void {
+                        $query->where('employee_id', $employee->id)
+                            ->orWhereIn('fingerprint_id', $variants);
+                    })->get();
                 $visible = Schema::hasTable('employee_visible_dtrs')
                     ? EmployeeVisibleDtr::query()->where('payroll_period_id', $periodId)
-                        ->where('employee_id', $employee->id)->get()
+                        ->where(function ($query) use ($employee, $variants): void {
+                            $query->where('employee_id', $employee->id)
+                                ->orWhereIn('fingerprint_id', $variants);
+                        })->get()
                     : collect();
                 $records = $official->concat($visible);
 
@@ -61,7 +80,7 @@ class SaturdayWfhDtrService
                         'employee_id' => $employee->id,
                         'branch_id' => $branchId,
                         'payroll_period_id' => $periodId,
-                        'fingerprint_id' => (string) $employee->fingerprint_id,
+                        'fingerprint_id' => $fingerprintId,
                         'batch_id' => 'SATURDAY-WFH-'.$periodId,
                         'import_name' => 'Saturday WFH policy',
                         'source_session_id' => 'WFH-'.$employee->id.'-'.$date,
@@ -109,6 +128,25 @@ class SaturdayWfhDtrService
             throw new \DomainException('A locked payroll period cannot replace Saturday WFH attendance.');
         }
 
+        $employee = filled($data['employee_id'] ?? null)
+            ? Employee::query()->find($data['employee_id'])
+            : null;
+        if (! $employee && filled($data['fingerprint_id'] ?? null)) {
+            $lookupVariants = $this->fingerprintVariants($data['fingerprint_id']);
+            $employee = Employee::query()->activeEmployment()
+                ->where('branch_id', $data['branch_id'])
+                ->where(function ($query) use ($lookupVariants): void {
+                    $query->whereIn('fingerprint_id', $lookupVariants)
+                        ->orWhereIn('uid', $lookupVariants);
+                })
+                ->first();
+        }
+        $variants = $this->fingerprintVariants(
+            $data['fingerprint_id'] ?? null,
+            $employee?->fingerprint_id,
+            $employee?->uid,
+        );
+
         foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
             if (! Schema::hasTable((new $model)->getTable())) {
                 continue;
@@ -116,7 +154,14 @@ class SaturdayWfhDtrService
 
             $records = $model::query()->where('payroll_period_id', $period->id)
                 ->where('branch_id', $data['branch_id'])
-                ->where('fingerprint_id', (string) $data['fingerprint_id'])
+                ->where(function ($query) use ($employee, $variants): void {
+                    if ($employee) {
+                        $query->where('employee_id', $employee->id)
+                            ->orWhereIn('fingerprint_id', $variants);
+                    } else {
+                        $query->whereIn('fingerprint_id', $variants);
+                    }
+                })
                 ->whereDate('date_in', $data['date_in'])
                 ->where('entry_source', self::SOURCE)
                 ->lockForUpdate()->get();
@@ -139,5 +184,33 @@ class SaturdayWfhDtrService
                 ]);
             }
         }
+    }
+
+    public function employeeFingerprintId(Employee $employee): ?string
+    {
+        $value = trim((string) ($employee->fingerprint_id ?: $employee->uid));
+
+        return $value !== '' ? $value : null;
+    }
+
+    /** @return array<int, string> */
+    public function fingerprintVariants(mixed ...$values): array
+    {
+        $variants = [];
+
+        foreach ($values as $value) {
+            $str = trim((string) $value);
+            if ($str === '') {
+                continue;
+            }
+            $variants[] = $str;
+            if (ctype_digit($str)) {
+                $unpadded = ltrim($str, '0') ?: '0';
+                $variants[] = $unpadded;
+                $variants[] = str_pad($unpadded, 4, '0', STR_PAD_LEFT);
+            }
+        }
+
+        return array_values(array_unique($variants));
     }
 }

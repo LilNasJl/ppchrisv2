@@ -29,7 +29,10 @@ class LeavePayService
             ->map(fn (Collection $rows): int => $this->coverage($rows));
 
         $actualDates = $records->filter(fn (Dtr $row): bool => filled($row->date_in)
-            && ! $row->is_absent && ! $this->isLeave($row))
+            && ! $row->is_absent
+            && ! $this->isLeave($row)
+            && $row->entry_source !== AutomaticAbsenceService::SOURCE
+            && Str::lower(trim((string) $row->schedule_type)) !== 'holiday')
             ->mapWithKeys(fn (Dtr $row): array => [Carbon::parse($row->date_in)->toDateString() => true]);
 
         return $records->reject(fn (Dtr $row): bool => $this->isLeave($row) && ! $this->isApproved($row))
@@ -75,7 +78,8 @@ class LeavePayService
                         $unpaid |= $this->mask($row->day_part);
                     }
                 } elseif (! $row->is_absent && ! $this->isLeave($row) && ! $row->requiresAttendanceApproval()
-                    && Str::lower((string) $row->schedule_type) !== 'overtime') {
+                    && $row->entry_source !== AutomaticAbsenceService::SOURCE
+                    && ! in_array(Str::lower(trim((string) $row->schedule_type)), ['overtime', 'holiday'], true)) {
                     $worked |= $this->mask(app(DtrAttendanceUnitService::class)->dayPartForRecord($row));
                 }
             }

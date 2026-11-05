@@ -77,6 +77,8 @@ class Dtr extends Page implements HasForms, HasTable
 
         $this->period_id = filled($periodId) ? (string) $periodId : null;
 
+        $this->reconcileCurrentPeriodDtr();
+
         $this->form->fill([
             'period_id' => $this->period_id,
         ]);
@@ -86,6 +88,8 @@ class Dtr extends Page implements HasForms, HasTable
     {
         $this->period_id = filled($value) ? (string) $value : null;
 
+        $this->reconcileCurrentPeriodDtr();
+
         if (isset($this->form)) {
             $this->form->fill([
                 'period_id' => $this->period_id,
@@ -94,6 +98,27 @@ class Dtr extends Page implements HasForms, HasTable
 
         unset($this->selectedPeriod, $this->overview);
         $this->resetTable();
+    }
+
+    protected function reconcileCurrentPeriodDtr(): void
+    {
+        $employee = auth()->user()?->employee;
+        $periodId = (int) ($this->period_id ?: 0);
+
+        if ($employee && $periodId > 0) {
+            app(\App\Services\AutomaticAbsenceService::class)->reconcileForScope(
+                $periodId,
+                $employee->branch_id ? (int) $employee->branch_id : null,
+                (int) $employee->id,
+            );
+
+            if ($employee->branch_id) {
+                app(SaturdayWfhDtrService::class)->materializeScope(
+                    $periodId,
+                    (int) $employee->branch_id,
+                );
+            }
+        }
     }
 
     #[Override]
@@ -176,6 +201,7 @@ class Dtr extends Page implements HasForms, HasTable
                 ->live()
                 ->afterStateUpdated(function (?string $state): void {
                     $this->period_id = filled($state) ? (string) $state : null;
+                    $this->reconcileCurrentPeriodDtr();
                     unset($this->selectedPeriod, $this->overview);
                     $this->resetTable();
                 })
@@ -206,7 +232,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'Absent' => 'danger',
-                        'Leave', 'WFH' => 'info',
+                        'Leave', 'WFH', 'Holiday' => 'info',
                         'For Approval' => 'warning',
                         'Overtime' => 'warning',
                         'Morning' => 'info',
@@ -298,7 +324,7 @@ class Dtr extends Page implements HasForms, HasTable
                     ->formatStateUsing(fn ($state): string => filled($state) ? str($state)->replace('_', ' ')->title()->toString() : '-')
                     ->color(fn (?string $state): string => match (str($state ?? '')->lower()->toString()) {
                         'regular', 'regular work' => 'gray',
-                        'saturday', 'sunday', 'rest_day', 'regular saturday', 'wfh' => 'info',
+                        'saturday', 'sunday', 'rest_day', 'regular saturday', 'wfh', 'holiday' => 'info',
                         'leave' => 'purple',
                         'overtime' => 'warning',
                         'absent', 'forgot to punch' => 'danger',
@@ -786,6 +812,10 @@ class Dtr extends Page implements HasForms, HasTable
     {
         if ($record->entry_source === SaturdayWfhDtrService::SOURCE) {
             return 'WFH';
+        }
+
+        if (strcasecmp((string) $record->schedule_type, 'Holiday') === 0) {
+            return 'Holiday';
         }
 
         if ($record->requiresAttendanceApproval()) {

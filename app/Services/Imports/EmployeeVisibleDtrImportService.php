@@ -154,6 +154,13 @@ class EmployeeVisibleDtrImportService extends DtrImportService
             }
 
             if ($rowsToImport === []) {
+                $firstData = $validatedRows[0]['data'] ?? [];
+                if (! empty($firstData['payroll_period_id'])) {
+                    app(AutomaticAbsenceService::class)->reconcileForScope(
+                        (int) $firstData['payroll_period_id'],
+                        isset($firstData['branch_id']) ? (int) $firstData['branch_id'] : null,
+                    );
+                }
                 $result['wfh_created'] = app(SaturdayWfhDtrService::class)->materializeForValidatedRows($validatedRows);
                 $result['message'] = $result['wfh_created'] > 0
                     ? "No new device rows were imported. {$result['wfh_created']} Saturday WFH D.T.R entries were created."
@@ -419,7 +426,7 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
         return $this->replacesSaturdayWfh($data)
             ? $records->reject(fn (Dtr $record): bool => $record->entry_source === SaturdayWfhDtrService::SOURCE
-                && $record->date_in === $data['date_in'] && ! $record->is_locked)->values()
+                && Carbon::parse($record->date_in)->toDateString() === Carbon::parse($data['date_in'])->toDateString() && ! $record->is_locked)->values()
             : $records;
     }
 
@@ -485,19 +492,24 @@ class EmployeeVisibleDtrImportService extends DtrImportService
 
     protected function applyEmployeeIdentity(Builder $query, array $data): Builder
     {
+        $employee = $this->getEmployee($data);
+        $variants = app(SaturdayWfhDtrService::class)->fingerprintVariants(
+            $data['fingerprint_id'] ?? null,
+            $employee?->fingerprint_id,
+            $employee?->uid,
+        );
+
         if (filled($data['employee_id'] ?? null)) {
-            return $query->where(function (Builder $query) use ($data): void {
+            return $query->where(function (Builder $query) use ($data, $variants): void {
                 $query
                     ->where('employee_id', $data['employee_id'])
-                    ->orWhere(function (Builder $query) use ($data): void {
-                        $query
-                            ->whereNull('employee_id')
-                            ->where('fingerprint_id', (string) $data['fingerprint_id']);
-                    });
+                    ->when($variants !== [], fn (Builder $query): Builder => $query->orWhereIn('fingerprint_id', $variants));
             });
         }
 
-        return $query->where('fingerprint_id', (string) $data['fingerprint_id']);
+        return $variants !== []
+            ? $query->whereIn('fingerprint_id', $variants)
+            : $query->where('fingerprint_id', (string) ($data['fingerprint_id'] ?? ''));
     }
 
     protected function resolveEmployeeByFingerprint(array $data): Employee

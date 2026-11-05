@@ -87,7 +87,7 @@ class SaturdayWfhPolicyService
         $start = Schema::hasTable('saturday_wfh_policy_periods')
             ? DB::table('saturday_wfh_policy_periods')->orderBy('effective_from')->value('effective_from')
             : null;
-        if ($start === null || $employee->schedule_type !== 'regular') {
+        if ($start === null || ! $this->isMonthlyRegularEmployee($employee)) {
             return [];
         }
 
@@ -103,11 +103,13 @@ class SaturdayWfhPolicyService
             ->where(fn ($query) => $query->whereNull('leave_to')
                 ->orWhereDate('leave_to', '>=', $from->toDateString()))
             ->get();
-        $holidays = Holiday::query()
-            ->where(fn ($query) => $query->whereNull('branch_id')->orWhere('branch_id', $employee->branch_id))
-            ->where(fn ($query) => $query->whereBetween('date', [$from->toDateString(), $through->toDateString()])
-                ->orWhere('is_recurring', true))
-            ->get();
+        $holidays = app(HolidayResolver::class)->holidaysForRange(
+            $from->toDateString(),
+            $through->toDateString(),
+            $employee->branch_id ? (int) $employee->branch_id : null,
+            includeNational: true,
+        );
+        $entitlement = app(HolidayEntitlementService::class);
         $recordDates = $records->filter(fn (Dtr $record): bool => filled($record->date_in)
             && strcasecmp(trim((string) $record->schedule_type), 'Overtime') !== 0)
             ->pluck('date_in')->map(fn ($date): string => Carbon::parse($date)->toDateString())->all();
@@ -123,10 +125,6 @@ class SaturdayWfhPolicyService
             }
             if ($leaves->contains(fn (Leave $leave): bool => $leave->leave_from->toDateString() <= $date
                 && ($leave->leave_to === null || $leave->leave_to->toDateString() >= $date))) {
-                continue;
-            }
-            if ($holidays->contains(fn (Holiday $holiday): bool => ($holiday->date?->toDateString() === $date)
-                || ($holiday->is_recurring && $holiday->month_day === $day->format('m-d')))) {
                 continue;
             }
 
@@ -191,7 +189,7 @@ class SaturdayWfhPolicyService
         if (! $this->isEnabled()) {
             throw new InvalidArgumentException('Saturday WFH is disabled. On-site assignments are unavailable.');
         }
-        if ($employee->schedule_type !== 'regular') {
+        if (! $this->isMonthlyRegularEmployee($employee)) {
             throw new InvalidArgumentException('Saturday WFH exemptions apply to regular-schedule employees only.');
         }
         $start = $this->date($from);
@@ -262,9 +260,15 @@ class SaturdayWfhPolicyService
         });
     }
 
-    protected function isWfhEligible(Employee $employee, string $date): bool
+    public function isMonthlyRegularEmployee(Employee $employee): bool
     {
         return $employee->schedule_type === 'regular'
+            && strcasecmp(trim((string) $employee->rate_type), 'monthly') === 0;
+    }
+
+    protected function isWfhEligible(Employee $employee, string $date): bool
+    {
+        return $this->isMonthlyRegularEmployee($employee)
             && Carbon::parse($date)->isSaturday()
             && Schema::hasTable('saturday_wfh_policy_periods')
             && DB::table('saturday_wfh_policy_periods')

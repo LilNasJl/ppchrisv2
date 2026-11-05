@@ -73,6 +73,10 @@ class DtrManageTable extends BaseWidget
                             return 'WFH';
                         }
 
+                        if (strcasecmp((string) $record->schedule_type, 'Holiday') === 0) {
+                            return 'Holiday';
+                        }
+
                         if ($record->requiresAttendanceApproval()) {
                             return 'For Approval';
                         }
@@ -93,7 +97,7 @@ class DtrManageTable extends BaseWidget
                         };
                     })
                     ->color(fn (string $state): string => match ($state) {
-                        'Leave', 'WFH' => 'info',
+                        'Leave', 'WFH', 'Holiday' => 'info',
                         'Absent' => 'danger',
                         'For Approval', 'Review Required' => 'warning',
                         default => 'success',
@@ -176,7 +180,7 @@ class DtrManageTable extends BaseWidget
                     ->badge()
                     ->placeholder('-')
                     ->color(fn (?string $state): string => match ($state) {
-                        'Saturday', 'Regular Saturday', 'WFH' => 'info',
+                        'Saturday', 'Regular Saturday', 'WFH', 'Holiday' => 'info',
                         'Leave' => 'purple',
                         'Overtime' => 'warning',
                         'Forgot to Punch', 'Absent' => 'danger',
@@ -274,9 +278,9 @@ class DtrManageTable extends BaseWidget
                     ->label('HOL.')
                     ->badge()
                     ->placeholder('-')
-                    ->color(fn (?string $state): string => match ($state) {
-                        'Regular' => 'danger',
-                        'Special' => 'warning',
+                    ->color(fn (?string $state): string => match (true) {
+                        str_contains(strtolower((string) $state), 'regular') => 'danger',
+                        str_contains(strtolower((string) $state), 'special') => 'warning',
                         default => 'gray',
                     }),
 
