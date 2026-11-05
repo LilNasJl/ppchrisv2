@@ -276,7 +276,7 @@ class AutomaticAbsenceService
                 $matchedHoliday = $resolved['holiday'];
                 $excluded = (bool) $resolved['excluded'];
 
-                if ($record->entry_source === self::SOURCE) {
+                if ($this->isAutomaticOrImportedAbsenceRecord($record)) {
                     if ($excluded) {
                         continue;
                     }
@@ -291,6 +291,7 @@ class AutomaticAbsenceService
                     if ($record->is_absent || strcasecmp((string) $record->schedule_type, 'Holiday') !== 0 || ! (bool) $record->is_holiday) {
                         $before = $record->getAttributes();
                         $attributes = array_filter([
+                            'entry_source' => $record->entry_source ?: self::SOURCE,
                             'schedule_type' => 'Holiday',
                             'is_absent' => false,
                             'absence_minutes' => 0,
@@ -345,14 +346,42 @@ class AutomaticAbsenceService
             return 0;
         }
 
-        $unlockedPeriodIds = PayrollPeriod::query()
+        $unlockedPeriods = PayrollPeriod::query()
             ->where('is_locked', false)
             ->when($payrollPeriodId, fn ($q) => $q->whereKey($payrollPeriodId))
-            ->pluck('id')
-            ->all();
-        if ($unlockedPeriodIds === []) {
+            ->get();
+        if ($unlockedPeriods->isEmpty()) {
             return 0;
         }
+
+        if (! app()->runningUnitTests() && Schema::hasTable('holiday_types')) {
+            $years = $unlockedPeriods
+                ->flatMap(fn (PayrollPeriod $p): array => array_filter([
+                    $p->start_date ? Carbon::parse($p->start_date)->year : null,
+                    $p->end_date ? Carbon::parse($p->end_date)->year : null,
+                    now('Asia/Manila')->year,
+                ]))
+                ->unique()
+                ->values();
+
+            foreach ($years as $yr) {
+                $officialDates = array_keys(app(PhilippineHolidayService::class)->getOfficialHolidays((int) $yr));
+                $existingCount = Holiday::query()
+                    ->whereNull('branch_id')
+                    ->whereIn('date', $officialDates)
+                    ->count();
+
+                if ($existingCount < count($officialDates)) {
+                    app(PhilippineHolidayService::class)->syncHolidaysForYear((int) $yr);
+                }
+            }
+        }
+
+        $unlockedPeriodIds = $unlockedPeriods->pluck('id')->all();
+        $targetEmployee = $employeeId ? Employee::query()->find($employeeId) : null;
+        $targetVariants = $targetEmployee
+            ? app(SaturdayWfhDtrService::class)->fingerprintVariants($targetEmployee->fingerprint_id ?: $targetEmployee->uid)
+            : [];
 
         $entitlement = app(HolidayEntitlementService::class);
         $reconciled = 0;
@@ -367,7 +396,16 @@ class AutomaticAbsenceService
                 ->whereIn('payroll_period_id', $unlockedPeriodIds)
                 ->where('is_locked', false)
                 ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
-                ->when($employeeId && Schema::hasColumn($table, 'employee_id'), fn ($q) => $q->where('employee_id', $employeeId))
+                ->when($employeeId, function ($q) use ($table, $employeeId, $targetVariants): void {
+                    $q->where(function ($sub) use ($table, $employeeId, $targetVariants): void {
+                        if (Schema::hasColumn($table, 'employee_id')) {
+                            $sub->where('employee_id', $employeeId);
+                        }
+                        if ($targetVariants !== [] && Schema::hasColumn($table, 'fingerprint_id')) {
+                            $sub->orWhereIn('fingerprint_id', $targetVariants);
+                        }
+                    });
+                })
                 ->get();
 
             foreach ($records as $record) {
@@ -389,7 +427,7 @@ class AutomaticAbsenceService
                 $matchedHoliday = $resolved['holiday'];
                 $excluded = (bool) $resolved['excluded'];
 
-                if ($record->entry_source === self::SOURCE) {
+                if ($this->isAutomaticOrImportedAbsenceRecord($record)) {
                     if ($excluded) {
                         continue;
                     }
@@ -404,6 +442,7 @@ class AutomaticAbsenceService
                     if ($record->is_absent || strcasecmp((string) $record->schedule_type, 'Holiday') !== 0 || ! (bool) $record->is_holiday) {
                         $before = $record->getAttributes();
                         $attributes = array_filter([
+                            'entry_source' => $record->entry_source ?: self::SOURCE,
                             'schedule_type' => 'Holiday',
                             'is_absent' => false,
                             'absence_minutes' => 0,
@@ -452,6 +491,22 @@ class AutomaticAbsenceService
         }
 
         return $reconciled;
+    }
+
+    protected function isAutomaticOrImportedAbsenceRecord(Dtr $record): bool
+    {
+        if ($record->entry_source === self::SOURCE) {
+            return true;
+        }
+
+        if (in_array((string) $record->entry_source, ['manual', 'absence'], true)) {
+            return false;
+        }
+
+        return blank($record->time_in)
+            && blank($record->time_out)
+            && ! $record->leave_id
+            && ((bool) $record->is_absent || in_array(strtolower((string) $record->schedule_type), ['absent', 'holiday'], true));
     }
 
     protected function resolveRecordEmployee(Dtr $record): ?Employee
