@@ -205,6 +205,7 @@ class DtrManage extends Page
         $workDayUnits = $attendanceUnits->attendanceDays($workRecords);
         $absence = $attendanceUnits->absenceBreakdown($finalizedRecords);
         $wfhCount = $finalizedRecords->where('entry_source', SaturdayWfhDtrService::SOURCE)->count();
+        $holidayCount = $finalizedRecords->filter(fn (DtrModel $r): bool => (bool) $r->is_holiday && ! (bool) $r->holiday_excluded)->unique('date_in')->count();
         $leaveDayCount = $finalizedRecords
             ->filter(fn (DtrModel $r): bool => filled($r->leave_id)
                 || $r->entry_source === DtrDayPartService::SOURCE_LEAVE
@@ -221,6 +222,7 @@ class DtrManage extends Page
         return [
             'total_entries' => $records->count(),
             'total_days_work' => (float) ($workDayUnits + $leaveDayCount),
+            'holiday_days' => $holidayCount,
             'absent_days' => $absence['weekday_days'],
             'saturday_absent_hours' => $absence['saturday_hours'],
             'saturday_wfh_days' => $wfhCount,

@@ -626,6 +626,9 @@
                         <x-filament::icon icon="heroicon-m-check-circle" class="w-3 h-3 text-blue-600 dark:text-blue-400" />
                         <span>{{ number_format($metrics['total_entries']) }} total DTR entries</span>
                     </div>
+                    @if (($metrics['holiday_days'] ?? 0) > 0)
+                        <div class="dtr-stat-meta" style="margin-top: 0.2rem;">{{ number_format($metrics['holiday_days']) }} paid regular holiday · 0.0 d unworked</div>
+                    @endif
                     @if (($metrics['saturday_wfh_days'] ?? 0) > 0)
                         <div class="dtr-stat-meta">{{ number_format($metrics['saturday_wfh_days']) }} approved Saturday WFH · no biometric punches required</div>
                     @endif

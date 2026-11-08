@@ -189,6 +189,50 @@ class DtrAttendanceUnitServiceTest extends TestCase
         $this->assertSame(1.0, $this->service()->attendanceDays(collect([$record])));
     }
 
+    public function test_straight_shift_with_partial_attendance_credits_half_day_or_zero(): void
+    {
+        $fullShift = (new Dtr)->forceFill([
+            'date_in' => '2026-07-21',
+            'time_in' => '04:30:00',
+            'date_out' => '2026-07-21',
+            'time_out' => '12:30:00',
+            'schedule_type' => 'Shift1',
+            'schedule_start' => '04:30:00',
+            'schedule_end' => '12:30:00',
+            'credited_work_hrs' => 480,
+            'is_absent' => false,
+        ]);
+        $halfShift = (new Dtr)->forceFill([
+            'date_in' => '2026-07-21',
+            'time_in' => '04:30:00',
+            'date_out' => '2026-07-21',
+            'time_out' => '08:30:00',
+            'schedule_type' => 'Shift1',
+            'schedule_start' => '04:30:00',
+            'schedule_end' => '12:30:00',
+            'credited_work_hrs' => 240,
+            'is_absent' => false,
+        ]);
+        $shortShift = (new Dtr)->forceFill([
+            'date_in' => '2026-07-21',
+            'time_in' => '04:30:00',
+            'date_out' => '2026-07-21',
+            'time_out' => '06:00:00',
+            'schedule_type' => 'Shift1',
+            'schedule_start' => '04:30:00',
+            'schedule_end' => '12:30:00',
+            'credited_work_hrs' => 90,
+            'is_absent' => false,
+        ]);
+
+        $this->assertSame(1.0, $this->service()->recordAttendanceUnits($fullShift));
+        $this->assertSame(0.5, $this->service()->recordAttendanceUnits($halfShift));
+        $this->assertSame(0.0, $this->service()->recordAttendanceUnits($shortShift));
+
+        $this->assertSame(0.5, $this->service()->attendanceDays(collect([$halfShift])));
+        $this->assertSame(0.5, $this->service()->dailyRatePayUnits(collect([$halfShift])));
+    }
+
     private function service(): DtrAttendanceUnitService
     {
         return new DtrAttendanceUnitService;

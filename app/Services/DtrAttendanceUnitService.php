@@ -100,20 +100,23 @@ class DtrAttendanceUnitService
         return (float) $this->payableRecords($records)
             ->groupBy(fn (Dtr $record): string => $this->dutyDate($record))
             ->sum(function (Collection $dateRecords): float {
-                $hasOtherFullDayRecord = $dateRecords->contains(
-                    fn (Dtr $record): bool => ! $this->isRegular($record)
-                        && ! $this->isSaturday($record)
-                        && $this->brokenSegment($record) === null,
-                );
+                $regularUnits = $this->regularUnits($dateRecords);
+                $brokenUnits = $this->brokenUnits($dateRecords);
+                $saturdayUnits = $this->saturdayUnits($dateRecords);
 
-                return $hasOtherFullDayRecord
-                    ? 1.0
-                    : min(
-                        1.0,
-                        $this->regularUnits($dateRecords)
-                            + $this->brokenUnits($dateRecords)
-                            + $this->saturdayUnits($dateRecords),
-                    );
+                $shiftUnits = $dateRecords
+                    ->filter(fn (Dtr $record): bool => $this->isShift($record))
+                    ->groupBy(fn (Dtr $record): string => $this->shiftKey($record))
+                    ->sum(fn (Collection $shiftRecords): float => $this->evaluateShiftRecords($shiftRecords));
+
+                $otherUnits = $dateRecords
+                    ->reject(fn (Dtr $record): bool => $this->isShift($record))
+                    ->reject(fn (Dtr $record): bool => $this->isRegular($record))
+                    ->reject(fn (Dtr $record): bool => $this->isSaturday($record))
+                    ->reject(fn (Dtr $record): bool => $this->brokenSegment($record) !== null)
+                    ->sum(fn (Dtr $record): float => $this->recordAttendanceUnits($record));
+
+                return min(1.0, $regularUnits + $brokenUnits + $saturdayUnits + $shiftUnits + $otherUnits);
             });
     }
 
@@ -128,22 +131,23 @@ class DtrAttendanceUnitService
         return (float) $this->payableRecords($records)
             ->groupBy(fn (Dtr $record): string => $this->dutyDate($record))
             ->sum(function (Collection $dateRecords): float {
-                $fullDayEntries = $dateRecords
-                    ->filter(fn (Dtr $record): bool => ! $this->isRegular($record)
-                        && ! $this->isSaturday($record)
-                        && $this->brokenSegment($record) === null);
-                $separateEntries = $fullDayEntries
-                    ->reject(fn (Dtr $record): bool => $this->isShift($record))
-                    ->count();
-                $assignedShifts = $fullDayEntries
-                    ->filter(fn (Dtr $record): bool => $this->isShift($record))
-                    ->unique(fn (Dtr $record): string => $this->shiftKey($record))
-                    ->count();
+                $regularUnits = $this->regularUnits($dateRecords);
+                $brokenUnits = $this->brokenUnits($dateRecords);
+                $saturdayUnits = $this->saturdayUnits($dateRecords);
 
-                return $separateEntries + $assignedShifts
-                    + $this->regularUnits($dateRecords)
-                    + $this->brokenUnits($dateRecords)
-                    + $this->saturdayUnits($dateRecords);
+                $shiftUnits = $dateRecords
+                    ->filter(fn (Dtr $record): bool => $this->isShift($record))
+                    ->groupBy(fn (Dtr $record): string => $this->shiftKey($record))
+                    ->sum(fn (Collection $shiftRecords): float => $this->evaluateShiftRecords($shiftRecords));
+
+                $otherUnits = $dateRecords
+                    ->reject(fn (Dtr $record): bool => $this->isShift($record))
+                    ->reject(fn (Dtr $record): bool => $this->isRegular($record))
+                    ->reject(fn (Dtr $record): bool => $this->isSaturday($record))
+                    ->reject(fn (Dtr $record): bool => $this->brokenSegment($record) !== null)
+                    ->sum(fn (Dtr $record): float => $this->recordAttendanceUnits($record));
+
+                return $regularUnits + $brokenUnits + $saturdayUnits + $shiftUnits + $otherUnits;
             });
     }
 
@@ -174,6 +178,38 @@ class DtrAttendanceUnitService
             return 0.0;
         }
 
+        $dutyWeight = $this->scheduledDutyWeight($record);
+
+        if (filled($record->time_in) && filled($record->time_out) && $record->credited_work_hrs !== null) {
+            $creditedMinutes = (int) $record->credited_work_hrs;
+
+            if ($dutyWeight >= 1.0) {
+                if ($creditedMinutes >= 360) {
+                    return 1.0;
+                }
+                if ($creditedMinutes >= 180) {
+                    return 0.5;
+                }
+
+                return 0.0;
+            }
+
+            return $creditedMinutes >= 100 ? 0.5 : 0.0;
+        }
+
+        return $dutyWeight;
+    }
+
+    public function scheduledDutyWeight(Dtr $record): float
+    {
+        if ($this->isSaturday($record)) {
+            return 0.5;
+        }
+
+        if ($this->brokenSegment($record) !== null) {
+            return 0.5;
+        }
+
         if ($this->isRegular($record)) {
             return match ($this->dayPartForRecord($record)) {
                 DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON => 0.5,
@@ -182,11 +218,40 @@ class DtrAttendanceUnitService
             };
         }
 
-        if ($this->isSaturday($record)) {
+        if (filled($record->schedule_start) && filled($record->schedule_end)) {
+            $date = $record->date_in ?: '2026-01-01';
+            $start = Carbon::parse("{$date} {$record->schedule_start}");
+            $end = Carbon::parse("{$date} {$record->schedule_end}");
+            if ($end->lessThanOrEqualTo($start)) {
+                $end->addDay();
+            }
+            if ($start->diffInMinutes($end) <= 270) {
+                return 0.5;
+            }
+        }
+
+        return 1.0;
+    }
+
+    protected function evaluateShiftRecords(Collection $shiftRecords): float
+    {
+        $hasPunches = $shiftRecords->contains(
+            fn (Dtr $record): bool => filled($record->time_in) && filled($record->time_out) && $record->credited_work_hrs !== null,
+        );
+
+        if (! $hasPunches) {
+            return 1.0;
+        }
+
+        $totalCredited = (int) $shiftRecords->sum('credited_work_hrs');
+        if ($totalCredited >= 360) {
+            return 1.0;
+        }
+        if ($totalCredited >= 180) {
             return 0.5;
         }
 
-        return $this->brokenSegment($record) === null ? 1.0 : 0.5;
+        return 0.0;
     }
 
     /**
@@ -239,12 +304,34 @@ class DtrAttendanceUnitService
 
     protected function regularUnits(Collection $records): float
     {
-        $parts = $records
-            ->filter(fn (Dtr $record): bool => $this->isRegular($record))
+        $regularRecords = $records->filter(fn (Dtr $record): bool => $this->isRegular($record));
+        if ($regularRecords->isEmpty()) {
+            return 0.0;
+        }
+
+        $parts = $regularRecords
             ->map(fn (Dtr $record): string => $this->dayPartForRecord($record))
             ->values();
 
         if ($parts->contains(DtrDayPartService::WHOLE_DAY)) {
+            $wholeRecords = $regularRecords->filter(
+                fn (Dtr $record): bool => $this->dayPartForRecord($record) === DtrDayPartService::WHOLE_DAY,
+            );
+            $hasPunches = $wholeRecords->contains(
+                fn (Dtr $record): bool => filled($record->time_in) && filled($record->time_out) && $record->credited_work_hrs !== null,
+            );
+            if ($hasPunches) {
+                $totalCredited = (int) $wholeRecords->sum('credited_work_hrs');
+                if ($totalCredited >= 360) {
+                    return 1.0;
+                }
+                if ($totalCredited >= 180) {
+                    return 0.5;
+                }
+
+                return 0.0;
+            }
+
             return 1.0;
         }
 

@@ -71,7 +71,10 @@ class HolidayEntitlementService
     {
         $employeeId = $employee instanceof Employee ? $employee->id : $employee;
 
-        if (blank($employeeId) || ! Schema::hasTable('holiday_employee_exclusions')) {
+        static $hasExclusionsTable = null;
+        $hasExclusionsTable ??= Schema::hasTable('holiday_employee_exclusions');
+
+        if (blank($employeeId) || ! $hasExclusionsTable) {
             return false;
         }
 

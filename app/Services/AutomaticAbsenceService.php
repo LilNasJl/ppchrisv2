@@ -386,7 +386,11 @@ class AutomaticAbsenceService
             : [];
 
         $entitlement = app(HolidayEntitlementService::class);
+        $holidayResolver = app(HolidayResolver::class);
         $reconciled = 0;
+
+        $employeeCache = [];
+        $holidayCache = [];
 
         foreach ([Dtr::class, EmployeeVisibleDtr::class] as $model) {
             $table = (new $model)->getTable();
@@ -410,24 +414,46 @@ class AutomaticAbsenceService
                 })
                 ->get();
 
+            $empIds = $records->pluck('employee_id')->filter()->unique()->all();
+            if (! empty($empIds)) {
+                $missingEmpIds = array_diff($empIds, array_keys($employeeCache));
+                if (! empty($missingEmpIds)) {
+                    $loaded = Employee::query()->whereIn('id', $missingEmpIds)->get()->keyBy('id');
+                    foreach ($loaded as $id => $emp) {
+                        $employeeCache[$id] = $emp;
+                    }
+                }
+            }
+
             foreach ($records as $record) {
                 if (blank($record->date_in)) {
                     continue;
                 }
 
-                $employee = $this->resolveRecordEmployee($record);
-                $resolved = $entitlement->resolveForEmployeeDate(
-                    $employee,
-                    (string) $record->date_in,
-                    (int) $record->branch_id,
-                );
+                $dateStr = (string) $record->date_in;
+                $bId = (int) $record->branch_id;
+                $holidayKey = $dateStr . '_' . $bId;
 
-                if (! $resolved['holiday']) {
+                if (! array_key_exists($holidayKey, $holidayCache)) {
+                    $holidayCache[$holidayKey] = $holidayResolver->resolveForDate($dateStr, $bId);
+                }
+
+                $matchedHoliday = $holidayCache[$holidayKey];
+                if (! $matchedHoliday) {
                     continue;
                 }
 
-                $matchedHoliday = $resolved['holiday'];
-                $excluded = (bool) $resolved['excluded'];
+                $employee = null;
+                if (filled($record->employee_id ?? null) && isset($employeeCache[$record->employee_id])) {
+                    $employee = $employeeCache[$record->employee_id];
+                } else {
+                    $employee = $this->resolveRecordEmployee($record);
+                    if ($employee) {
+                        $employeeCache[$employee->id] = $employee;
+                    }
+                }
+
+                $excluded = $employee ? $entitlement->isExcluded($matchedHoliday, $employee, $dateStr) : false;
 
                 if ($this->isAutomaticOrImportedAbsenceRecord($record)) {
                     if ($excluded) {

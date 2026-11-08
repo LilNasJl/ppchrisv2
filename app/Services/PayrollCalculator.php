@@ -959,9 +959,13 @@ class PayrollCalculator
             ->filter(fn (Dtr $dtr): bool => (bool) $dtr->is_absent)
             ->reject(fn (Dtr $dtr): bool => $this->isEffectiveHolidayDtr($dtr, $employee))
             ->reject(fn (Dtr $dtr): bool => app(DtrDayPartService::class)->normalize($dtr->day_part ?? null) === DtrDayPartService::WHOLE_DAY)
-            ->sum(fn (Dtr $dtr): float => Carbon::parse($dtr->date_in)->isSaturday()
-                ? 180.0
-                : (float) ($dtr->absence_minutes ?: $fallbackMinutes));
+            ->reject(fn (Dtr $dtr): bool => filled($dtr->date_in) && Carbon::parse($dtr->date_in)->isSaturday())
+            ->filter(function (Dtr $dtr): bool {
+                $dayPart = app(DtrDayPartService::class)->normalize($dtr->day_part ?? null);
+
+                return in_array($dayPart, [DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON], true);
+            })
+            ->sum(fn (Dtr $dtr): float => (float) ($dtr->absence_minutes ?: $fallbackMinutes));
     }
 
     protected function inferredRegularHalfDayAbsenceMinutes(

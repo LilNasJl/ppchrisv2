@@ -223,7 +223,7 @@ class DtrDailyAggregationService
         return [
             'date' => $dutyDate,
             'day_part' => $this->dayPartService->normalize($first->day_part),
-            'day_count' => preg_match('/^(brkn[12]|brokenshift[12]|saturday|wfh)$/', preg_replace('/[^a-z0-9]/', '', strtolower((string) $first->schedule_type))) ? 0.5 : 1.0,
+            'day_count' => app(DtrAttendanceUnitService::class)->scheduledDutyWeight($first),
             'schedule_start' => $first->schedule_start,
             'schedule_end' => $first->schedule_end,
             'first_time_in' => $first->time_in,

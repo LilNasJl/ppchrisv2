@@ -53,6 +53,8 @@ class Dtr extends Page implements HasForms
     #[Url(as: 'search', except: '')]
     public string $search = '';
 
+    protected ?int $cachedUnsyncedCount = null;
+
     #[Override]
     public function getMaxContentWidth(): Width|string|null
     {
@@ -100,18 +102,16 @@ class Dtr extends Page implements HasForms
         $this->periodId = $requestedPeriodId ? (int) $requestedPeriodId : ($defaultPeriodId ? (int) $defaultPeriodId : null);
         $this->branchId = $requestedBranchId ? (int) $requestedBranchId : null;
         $this->search = trim((string) ($this->search ?: request()->query('search', '')));
-
-        $this->reconcileUnsyncedIfAny();
     }
 
     public function updatedPeriodId(): void
     {
-        $this->reconcileUnsyncedIfAny();
+        $this->cachedUnsyncedCount = null;
     }
 
     public function updatedBranchId(): void
     {
-        $this->reconcileUnsyncedIfAny();
+        $this->cachedUnsyncedCount = null;
     }
 
     public function reconcileUnsyncedIfAny(): void
@@ -133,6 +133,15 @@ class Dtr extends Page implements HasForms
         $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
         $periodId = $this->normalizeOptionalId($this->periodId, 'periodId');
         $count = app(DtrSynchronizationService::class)->reconcileUnsyncedRecords($branchId, $periodId);
+
+        if ($periodId !== null) {
+            app(\App\Services\AutomaticAbsenceService::class)->reconcileForScope($periodId, $branchId);
+            if ($branchId !== null) {
+                app(\App\Services\SaturdayWfhDtrService::class)->materializeScope($periodId, $branchId);
+            }
+        }
+
+        $this->cachedUnsyncedCount = null;
         $this->recordManualSyncRun($count);
 
         if ($count > 0) {
@@ -150,10 +159,14 @@ class Dtr extends Page implements HasForms
 
     public function unsyncedStationRecordCount(): int
     {
+        if ($this->cachedUnsyncedCount !== null) {
+            return $this->cachedUnsyncedCount;
+        }
+
         $branchId = $this->normalizeOptionalId($this->branchId, 'branchId');
         $periodId = $this->normalizeOptionalId($this->periodId, 'periodId');
 
-        return app(DtrSynchronizationService::class)->countUnsyncedRecords($branchId, $periodId);
+        return $this->cachedUnsyncedCount = app(DtrSynchronizationService::class)->countUnsyncedRecords($branchId, $periodId);
     }
 
     private function normalizeOptionalId(mixed $value, string $field): ?int
@@ -175,6 +188,7 @@ class Dtr extends Page implements HasForms
 
     public function resetFilters(): void
     {
+        $this->cachedUnsyncedCount = null;
         $newestId = PayrollPeriod::query()->newestFirst()->value('id');
         $this->periodId = $newestId ? (int) $newestId : null;
         $this->branchId = null;

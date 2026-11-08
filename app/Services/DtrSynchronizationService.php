@@ -247,9 +247,83 @@ class DtrSynchronizationService
                 $q->whereHas('payrollPeriod', fn ($pq) => $pq->where('is_locked', false));
             });
 
+        if (! (clone $query)->exists()) {
+            return 0;
+        }
+
+        // Fast-path: Preload existing official Dtrs in scope to match in-memory without N+1 queries
+        $officialQuery = Dtr::withTrashed()
+            ->when(filled($branchId), fn ($q) => $q->where('branch_id', $branchId))
+            ->when(filled($periodId), fn ($q) => $q->where('payroll_period_id', $periodId))
+            ->when(! $includeLocked && Schema::hasTable('payroll_periods'), function ($q): void {
+                $q->whereHas('payrollPeriod', fn ($pq) => $pq->where('is_locked', false));
+            });
+
+        $officials = $officialQuery->get();
+
+        $bySession = [];
+        $byHash = [];
+        $byOnField = [];
+        $byLeave = [];
+        $byFingerprintDateTime = [];
+
+        foreach ($officials as $off) {
+            if ($off->source_session_id) {
+                $bySession[(string) $off->source_session_id] = true;
+            }
+            if ($off->source_row_hash) {
+                $byHash[(string) $off->source_row_hash] = true;
+            }
+            if ($off->on_field_dtr_submission_id) {
+                $byOnField[(string) $off->on_field_dtr_submission_id] = true;
+            }
+            if ($off->leave_id && $off->date_in) {
+                $normDate = $this->normalizeDate($off->date_in);
+                $key = $off->leave_id . '_' . $normDate . '_' . ($off->day_part ?: DtrDayPartService::WHOLE_DAY);
+                $byLeave[$key] = true;
+            }
+            if ($off->fingerprint_id && $off->date_in) {
+                $normDate = $this->normalizeDate($off->date_in);
+                $sourceKey = $off->entry_source === AutomaticAbsenceService::SOURCE ? 'abs' : 'norm';
+                $timeKey = $off->fingerprint_id . '_' . $normDate . '_' . ($off->time_in ?: 'NULL') . '_' . $sourceKey;
+                $byFingerprintDateTime[$timeKey] = true;
+            }
+        }
+
         $count = 0;
         foreach ($query->lazy(200) as $visible) {
-            if (! $this->findCounterpartOfficial($visible)) {
+            $matched = false;
+
+            if ($visible->source_session_id && isset($bySession[(string) $visible->source_session_id])) {
+                $matched = true;
+            } elseif ($visible->source_row_hash && isset($byHash[(string) $visible->source_row_hash])) {
+                $matched = true;
+            } elseif ($visible->on_field_dtr_submission_id && isset($byOnField[(string) $visible->on_field_dtr_submission_id])) {
+                $matched = true;
+            } elseif ($visible->leave_id && $visible->date_in) {
+                $normDate = $this->normalizeDate($visible->date_in);
+                $key = $visible->leave_id . '_' . $normDate . '_' . ($visible->day_part ?: DtrDayPartService::WHOLE_DAY);
+                if (isset($byLeave[$key])) {
+                    $matched = true;
+                }
+            } else {
+                $fId = $visible->fingerprint_id;
+                $normDate = $this->normalizeDate($visible->date_in);
+                if ($fId && $normDate) {
+                    $sourceKey = $visible->entry_source === AutomaticAbsenceService::SOURCE ? 'abs' : 'norm';
+                    $timeKey = $fId . '_' . $normDate . '_' . ($visible->time_in ?: 'NULL') . '_' . $sourceKey;
+                    if (isset($byFingerprintDateTime[$timeKey])) {
+                        $matched = true;
+                    }
+                }
+            }
+
+            // Fallback to detailed query check if not matched by hash sets
+            if (! $matched && $this->findCounterpartOfficial($visible)) {
+                $matched = true;
+            }
+
+            if (! $matched) {
                 $count++;
             }
         }
