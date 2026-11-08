@@ -483,6 +483,95 @@
             font-weight: 500;
         }
 
+        /* Overridden / Adjusted metric highlighting */
+        .employee-payroll-metric.is-overridden {
+            opacity: 1 !important;
+            background: rgba(245, 158, 11, 0.08);
+            border-left: 2px solid rgb(245, 158, 11);
+            padding-left: 8px;
+        }
+        .dark .employee-payroll-metric.is-overridden {
+            background: rgba(245, 158, 11, 0.12);
+            border-left-color: rgb(251, 191, 36);
+        }
+        .employee-payroll-metric-label-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            min-width: 0;
+        }
+        .employee-payroll-metric-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        .employee-payroll-adjusted-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 1px 5px;
+            border-radius: 9999px;
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            background: rgba(245, 158, 11, 0.18);
+            color: rgb(180, 83, 9);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+        .dark .employee-payroll-adjusted-badge {
+            background: rgba(245, 158, 11, 0.22);
+            color: rgb(252, 211, 77);
+            border-color: rgba(251, 191, 36, 0.4);
+        }
+        .employee-payroll-system-sub {
+            font-size: 0.65rem;
+            color: rgb(100, 116, 139);
+            font-variant-numeric: tabular-nums;
+        }
+        .dark .employee-payroll-system-sub {
+            color: rgb(148, 163, 184);
+        }
+        .employee-payroll-reset-inline {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 4px;
+            margin-left: 4px;
+            border-radius: 4px;
+            font-size: 0.63rem;
+            font-weight: 700;
+            color: rgb(225, 29, 72);
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.25);
+            cursor: pointer;
+            transition: background 0.12s ease;
+        }
+        .employee-payroll-reset-inline:hover {
+            background: rgba(244, 63, 94, 0.2);
+        }
+        .dark .employee-payroll-reset-inline {
+            color: rgb(251, 113, 133);
+            background: rgba(244, 63, 94, 0.18);
+            border-color: rgba(244, 63, 94, 0.35);
+        }
+        .employee-payroll-notes-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: rgb(146, 64, 14);
+        }
+        .dark .employee-payroll-notes-banner {
+            background: rgba(245, 158, 11, 0.12);
+            border-color: rgba(251, 191, 36, 0.3);
+            color: rgb(253, 230, 138);
+        }
+
         /* Column Footers / Subtotals */
         .employee-payroll-col-footer {
             margin-top: 10px;
@@ -633,6 +722,10 @@
             ? '-'
             : rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.');
         $isZero = static fn (mixed $value): bool => blank($value) || (float) $value == 0;
+        $overriddenFields = $payrollRow['overridden_fields'] ?? [];
+        $systemValues = $payrollRow['system_values'] ?? [];
+        $isOverridden = static fn (string $key) => in_array($key, $overriddenFields, true);
+        $canResetInline = (bool) $this->selectedPeriod && ! $this->selectedPeriod->is_locked;
 
         $remittancesTotal = 0;
         $deductionsSubtotal = 0;
@@ -723,6 +816,15 @@
                 {{ $this->form }}
             </div>
 
+            @if (filled($payrollRow['adjustment_notes'] ?? null))
+                <div class="employee-payroll-notes-banner">
+                    <x-filament::icon icon="heroicon-m-pencil-square" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <strong>Adjustment Reason / Audit Note:</strong> {{ $payrollRow['adjustment_notes'] }}
+                    </div>
+                </div>
+            @endif
+
             <div class="employee-payroll-statement">
                 <div class="employee-payroll-groups">
                     {{-- 1. Rate & Attendance --}}
@@ -737,11 +839,27 @@
                             <div class="employee-payroll-metric @if ($isZero($payrollRow['half_month_pay'] ?? null)) is-zero @endif"><dt>Half Month Pay</dt><dd>{{ $money($payrollRow['half_month_pay'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric @if ($isZero($payrollRow['rate_per_day'] ?? null)) is-zero @endif"><dt>Rate Per Day</dt><dd>{{ $money($payrollRow['rate_per_day'] ?? null) }}</dd></div>
                             <div class="employee-payroll-metric @if ($isZero($payrollRow['rate_per_hour'] ?? null)) is-zero @endif"><dt>Rate Per Hour</dt><dd>{{ $money($payrollRow['rate_per_hour'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['days_worked'] ?? null)) is-zero @endif"><dt>Days Worked</dt><dd>{{ $number($payrollRow['days_worked'] ?? null) }}</dd></div>
+                            <div class="employee-payroll-metric @if ($isOverridden('days_worked')) is-overridden @elseif ($isZero($payrollRow['days_worked'] ?? null)) is-zero @endif">
+                                <dt class="employee-payroll-metric-label-wrap">
+                                    <span class="employee-payroll-metric-title">
+                                        Days Worked
+                                        @if ($isOverridden('days_worked'))
+                                            <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                            @if ($canResetInline)
+                                                <button type="button" wire:click="clearOverride('days_worked')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                            @endif
+                                        @endif
+                                    </span>
+                                    @if ($isOverridden('days_worked'))
+                                        <span class="employee-payroll-system-sub">Auto: {{ $number($systemValues['days_worked'] ?? 0) }} days</span>
+                                    @endif
+                                </dt>
+                                <dd>{{ $number($payrollRow['days_worked'] ?? null) }}</dd>
+                            </div>
                         </dl>
                         <div class="employee-payroll-col-footer">
-                            <span>Payable Period</span>
-                            <strong>{{ $number($payrollRow['days_worked'] ?? null) }} Days</strong>
+                            <span>Base Pay ({{ $number($payrollRow['days_worked'] ?? null) }} Days)</span>
+                            <strong>₱ {{ $money($payrollRow['base_pay'] ?? null) }}</strong>
                         </div>
                     </section>
 
@@ -752,16 +870,48 @@
                             <h3>Earnings</h3>
                         </div>
                         <dl class="employee-payroll-metrics">
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['salary_adjustment'] ?? null)) is-zero @endif"><dt>Salary Adjustment</dt><dd>{{ $money($payrollRow['salary_adjustment'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['allowance'] ?? null)) is-zero @endif"><dt>Allowance</dt><dd>{{ $money($payrollRow['allowance'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['overtime_hours'] ?? null)) is-zero @endif"><dt>Overtime Hours</dt><dd>{{ $number($payrollRow['overtime_hours'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['overtime_amount'] ?? null)) is-zero @endif"><dt>Overtime Amount</dt><dd>{{ $money($payrollRow['overtime_amount'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['shift3_premium'] ?? null)) is-zero @endif"><dt>Shift 3 (10%)</dt><dd>{{ $money($payrollRow['shift3_premium'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['regular_holiday'] ?? null)) is-zero @endif"><dt>Regular Holiday</dt><dd>{{ $money($payrollRow['regular_holiday'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['special_holiday'] ?? null)) is-zero @endif"><dt>Special Holiday</dt><dd>{{ $money($payrollRow['special_holiday'] ?? null) }}</dd></div>
+                            <div class="employee-payroll-metric @if (! $isZero($payrollRow['salary_adjustment'] ?? null)) is-overridden @else is-zero @endif">
+                                <dt class="employee-payroll-metric-label-wrap">
+                                    <span class="employee-payroll-metric-title">
+                                        Salary Adjustment
+                                        @if (! $isZero($payrollRow['salary_adjustment'] ?? null))
+                                            <span class="employee-payroll-adjusted-badge">Manual</span>
+                                        @endif
+                                    </span>
+                                </dt>
+                                <dd>{{ $money($payrollRow['salary_adjustment'] ?? null) }}</dd>
+                            </div>
+                            @foreach ([
+                                'allowance' => 'Allowance',
+                                'overtime_amount' => 'Overtime Amount',
+                                'shift3_premium' => 'Shift 3 (10%)',
+                                'regular_holiday' => 'Regular Holiday',
+                                'special_holiday' => 'Special Holiday',
+                            ] as $earnKey => $earnLabel)
+                                @if ($earnKey === 'overtime_amount')
+                                    <div class="employee-payroll-metric @if ($isZero($payrollRow['overtime_hours'] ?? null)) is-zero @endif"><dt>Overtime Hours</dt><dd>{{ $number($payrollRow['overtime_hours'] ?? null) }}</dd></div>
+                                @endif
+                                <div class="employee-payroll-metric @if ($isOverridden($earnKey)) is-overridden @elseif ($isZero($payrollRow[$earnKey] ?? null)) is-zero @endif">
+                                    <dt class="employee-payroll-metric-label-wrap">
+                                        <span class="employee-payroll-metric-title">
+                                            {{ $earnLabel }}
+                                            @if ($isOverridden($earnKey))
+                                                <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                                @if ($canResetInline)
+                                                    <button type="button" wire:click="clearOverride('{{ $earnKey }}')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                                @endif
+                                            @endif
+                                        </span>
+                                        @if ($isOverridden($earnKey))
+                                            <span class="employee-payroll-system-sub">Auto: ₱{{ $money($systemValues[$earnKey] ?? 0) }}</span>
+                                        @endif
+                                    </dt>
+                                    <dd>{{ $money($payrollRow[$earnKey] ?? null) }}</dd>
+                                </div>
+                            @endforeach
                         </dl>
                         <div class="employee-payroll-col-footer positive">
-                            <span>Total Earnings</span>
+                            <span>Total Earnings (Gross)</span>
                             <strong>₱ {{ $money($payrollRow['gross_pay'] ?? null) }}</strong>
                         </div>
                     </section>
@@ -774,14 +924,80 @@
                         </div>
                         <dl class="employee-payroll-metrics">
                             <div class="employee-payroll-metric @if ($isZero($payrollRow['undertime_minutes'] ?? null)) is-zero @endif"><dt>Undertime Minutes</dt><dd>{{ $number($payrollRow['undertime_minutes'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['undertime_amount'] ?? null)) is-zero @endif"><dt>Undertime Amount</dt><dd>{{ $money($payrollRow['undertime_amount'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['halfday'] ?? null)) is-zero @endif"><dt>Half Day</dt><dd>{{ $money($payrollRow['halfday'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['absent'] ?? null)) is-zero @endif"><dt>Absent</dt><dd>{{ $money($payrollRow['absent'] ?? null) }}</dd></div>
+                            @foreach ([
+                                'undertime_amount' => 'Undertime Amount',
+                                'halfday' => 'Half Day',
+                                'absent' => 'Absent',
+                            ] as $dedKey => $dedLabel)
+                                <div class="employee-payroll-metric @if ($isOverridden($dedKey)) is-overridden @elseif ($isZero($payrollRow[$dedKey] ?? null)) is-zero @endif">
+                                    <dt class="employee-payroll-metric-label-wrap">
+                                        <span class="employee-payroll-metric-title">
+                                            {{ $dedLabel }}
+                                            @if ($isOverridden($dedKey))
+                                                <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                                @if ($canResetInline)
+                                                    <button type="button" wire:click="clearOverride('{{ $dedKey }}')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                                @endif
+                                            @endif
+                                        </span>
+                                        @if ($isOverridden($dedKey))
+                                            <span class="employee-payroll-system-sub">Auto: ₱{{ $money($systemValues[$dedKey] ?? 0) }}</span>
+                                        @endif
+                                    </dt>
+                                    <dd>{{ $money($payrollRow[$dedKey] ?? null) }}</dd>
+                                </div>
+                            @endforeach
                             <div class="employee-payroll-metric @if ($isZero($payrollRow['unpaid_leave'] ?? null)) is-zero @endif"><dt>Unpaid Leave</dt><dd>{{ $money($payrollRow['unpaid_leave'] ?? 0) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['late'] ?? null)) is-zero @endif"><dt>Late</dt><dd>{{ $money($payrollRow['late'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['shortages'] ?? null)) is-zero @endif"><dt>Shortages</dt><dd>{{ $money($payrollRow['shortages'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['uniform'] ?? null)) is-zero @endif"><dt>Uniform</dt><dd>{{ $money($payrollRow['uniform'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['other_deductions'] ?? null)) is-zero @endif"><dt>Other Deductions</dt><dd>{{ $money($payrollRow['other_deductions'] ?? null) }}</dd></div>
+                            <div class="employee-payroll-metric @if ($isOverridden('late')) is-overridden @elseif ($isZero($payrollRow['late'] ?? null)) is-zero @endif">
+                                <dt class="employee-payroll-metric-label-wrap">
+                                    <span class="employee-payroll-metric-title">
+                                        Late
+                                        @if ($isOverridden('late'))
+                                            <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                            @if ($canResetInline)
+                                                <button type="button" wire:click="clearOverride('late')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                            @endif
+                                        @endif
+                                    </span>
+                                    @if ($isOverridden('late'))
+                                        <span class="employee-payroll-system-sub">Auto: ₱{{ $money($systemValues['late'] ?? 0) }}</span>
+                                    @endif
+                                </dt>
+                                <dd>{{ $money($payrollRow['late'] ?? null) }}</dd>
+                            </div>
+                            <div class="employee-payroll-metric @if (! $isZero($payrollRow['shortages'] ?? null)) is-overridden @else is-zero @endif">
+                                <dt class="employee-payroll-metric-label-wrap">
+                                    <span class="employee-payroll-metric-title">
+                                        Shortages
+                                        @if (! $isZero($payrollRow['shortages'] ?? null))
+                                            <span class="employee-payroll-adjusted-badge">Manual</span>
+                                        @endif
+                                    </span>
+                                </dt>
+                                <dd>{{ $money($payrollRow['shortages'] ?? null) }}</dd>
+                            </div>
+                            @foreach ([
+                                'uniform' => 'Uniform',
+                                'other_deductions' => 'Other Deductions',
+                            ] as $compKey => $compLabel)
+                                <div class="employee-payroll-metric @if ($isOverridden($compKey)) is-overridden @elseif ($isZero($payrollRow[$compKey] ?? null)) is-zero @endif">
+                                    <dt class="employee-payroll-metric-label-wrap">
+                                        <span class="employee-payroll-metric-title">
+                                            {{ $compLabel }}
+                                            @if ($isOverridden($compKey))
+                                                <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                                @if ($canResetInline)
+                                                    <button type="button" wire:click="clearOverride('{{ $compKey }}')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                                @endif
+                                            @endif
+                                        </span>
+                                        @if ($isOverridden($compKey))
+                                            <span class="employee-payroll-system-sub">Auto: ₱{{ $money($systemValues[$compKey] ?? 0) }}</span>
+                                        @endif
+                                    </dt>
+                                    <dd>{{ $money($payrollRow[$compKey] ?? null) }}</dd>
+                                </div>
+                            @endforeach
                             @foreach ($this->loanTypeColumns() as $loanTypeId => $loanTypeName)
                                 <div class="employee-payroll-metric @if ($isZero($payrollRow['loan_type_'.$loanTypeId] ?? null)) is-zero @endif"><dt>{{ $loanTypeName }}</dt><dd>{{ $money($payrollRow['loan_type_'.$loanTypeId] ?? 0) }}</dd></div>
                             @endforeach
@@ -799,11 +1015,31 @@
                             <h3>Remittances</h3>
                         </div>
                         <dl class="employee-payroll-metrics">
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['sss_loan'] ?? null)) is-zero @endif"><dt>SSS Loan</dt><dd>{{ $money($payrollRow['sss_loan'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['sss_ee'] ?? null)) is-zero @endif"><dt>SSS EE</dt><dd>{{ $money($payrollRow['sss_ee'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['hdmf_loan'] ?? null)) is-zero @endif"><dt>HDMF Loan</dt><dd>{{ $money($payrollRow['hdmf_loan'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['hdmf_ee'] ?? null)) is-zero @endif"><dt>HDMF EE</dt><dd>{{ $money($payrollRow['hdmf_ee'] ?? null) }}</dd></div>
-                            <div class="employee-payroll-metric @if ($isZero($payrollRow['phic_ee'] ?? null)) is-zero @endif"><dt>PHIC EE</dt><dd>{{ $money($payrollRow['phic_ee'] ?? null) }}</dd></div>
+                            @foreach ([
+                                'sss_loan' => 'SSS Loan',
+                                'sss_ee' => 'SSS EE',
+                                'hdmf_loan' => 'HDMF Loan',
+                                'hdmf_ee' => 'HDMF EE',
+                                'phic_ee' => 'PHIC EE',
+                            ] as $remKey => $remLabel)
+                                <div class="employee-payroll-metric @if ($isOverridden($remKey)) is-overridden @elseif ($isZero($payrollRow[$remKey] ?? null)) is-zero @endif">
+                                    <dt class="employee-payroll-metric-label-wrap">
+                                        <span class="employee-payroll-metric-title">
+                                            {{ $remLabel }}
+                                            @if ($isOverridden($remKey))
+                                                <span class="employee-payroll-adjusted-badge">Adjusted</span>
+                                                @if ($canResetInline)
+                                                    <button type="button" wire:click="clearOverride('{{ $remKey }}')" class="employee-payroll-reset-inline" title="Reset to system value">× Reset</button>
+                                                @endif
+                                            @endif
+                                        </span>
+                                        @if ($isOverridden($remKey))
+                                            <span class="employee-payroll-system-sub">Auto: ₱{{ $money($systemValues[$remKey] ?? 0) }}</span>
+                                        @endif
+                                    </dt>
+                                    <dd>{{ $money($payrollRow[$remKey] ?? null) }}</dd>
+                                </div>
+                            @endforeach
                         </dl>
                         <div class="employee-payroll-col-footer remittances">
                             <span>Total Remittances</span>

@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollPeriodBranchExclusion;
 use App\Models\PayrollPeriodEmployeeExclusion;
+use App\Services\PayrollCalculator;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -152,8 +153,11 @@ class Payroll extends Page implements HasForms
 
         $employees = $query->limit(150)->get();
 
+        $calculator = app(PayrollCalculator::class);
         $dtrCountsByFingerprint = collect();
         if ($period && $employees->isNotEmpty()) {
+            $calculator->preloadEmployeesForPeriod($employees, $period);
+
             $fingerprints = $employees
                 ->map(fn (Employee $e): string => (string) ($e->fingerprint_id ?: $e->uid ?: ''))
                 ->filter()
@@ -170,9 +174,11 @@ class Payroll extends Page implements HasForms
             }
         }
 
-        return $employees->map(function (Employee $employee) use ($period, $dtrCountsByFingerprint): array {
+        return $employees->map(function (Employee $employee) use ($period, $dtrCountsByFingerprint, $calculator): array {
             $fp = (string) ($employee->fingerprint_id ?: $employee->uid ?: '');
             $dtrCount = $fp !== '' ? (int) ($dtrCountsByFingerprint->get($fp) ?? 0) : 0;
+
+            $payrollRow = $period ? $calculator->row($employee, $period) : null;
 
             $viewPayrollUrl = ($period && $employee->branch)
                 ? EmployeePayroll::getUrl([
@@ -192,6 +198,13 @@ class Payroll extends Page implements HasForms
             return [
                 'employee' => $employee,
                 'dtr_count' => $dtrCount,
+                'payroll_row' => $payrollRow,
+                'days_worked' => $payrollRow['days_worked'] ?? null,
+                'gross_pay' => $payrollRow['gross_pay'] ?? null,
+                'total_deductions' => $payrollRow['total_deductions'] ?? null,
+                'net_pay' => $payrollRow['net_pay'] ?? null,
+                'is_adjusted' => (bool) ($payrollRow['is_adjusted'] ?? false),
+                'overridden_count' => is_array($payrollRow['overridden_fields'] ?? null) ? count($payrollRow['overridden_fields']) : 0,
                 'view_payroll_url' => $viewPayrollUrl,
                 'payslip_url' => $payslipUrl,
             ];
@@ -232,7 +245,7 @@ class Payroll extends Page implements HasForms
     {
         $period = $this->selectedPeriod();
 
-        return $period
+        return $period && PayrollCalculation::canAccess()
             ? PayrollCalculation::getUrl(['periodId' => $period->publicKey()])
             : null;
     }

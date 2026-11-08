@@ -333,6 +333,31 @@
             border-color: rgb(51, 65, 85);
         }
 
+        .payroll-pill.warning {
+            background: rgba(245, 158, 11, 0.16);
+            color: rgb(252, 211, 77);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+        }
+
+        .payroll-num {
+            text-align: right !important;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+
+        .payroll-num.gross {
+            color: #34d399 !important;
+        }
+
+        .payroll-num.deductions {
+            color: #fb7185 !important;
+        }
+
+        .payroll-num.net {
+            color: #60a5fa !important;
+            font-weight: 800;
+        }
+
         .payroll-row-actions {
             display: inline-flex;
             flex-direction: row;
@@ -540,6 +565,16 @@
                             </x-filament::dropdown.list.item>
                         @endif
 
+                        @if ($this->payrollCalculationUrl())
+                            <x-filament::dropdown.list.item
+                                :href="$this->payrollCalculationUrl()"
+                                tag="a"
+                                icon="heroicon-o-calculator"
+                            >
+                                Period Calculation Rules
+                            </x-filament::dropdown.list.item>
+                        @endif
+
                         <x-filament::dropdown.list.item
                             :href="$this->managePayrollPeriodsUrl()"
                             tag="a"
@@ -609,9 +644,13 @@
                         <th scope="col">Employee</th>
                         <th scope="col">Company ID</th>
                         <th scope="col">Branch / Station</th>
-                        <th scope="col">Designation</th>
                         <th scope="col">Rate Type</th>
                         <th scope="col">DTR Rows</th>
+                        <th scope="col" class="payroll-num">Days Worked</th>
+                        <th scope="col" class="payroll-num">Gross Pay</th>
+                        <th scope="col" class="payroll-num">Deductions</th>
+                        <th scope="col" class="payroll-num">Net Pay</th>
+                        <th scope="col">Status</th>
                         <th scope="col">Actions</th>
                     </tr>
                 </thead>
@@ -625,15 +664,15 @@
                             <td class="payroll-col-idx">{{ $loop->iteration }}</td>
                             <td>
                                 <span class="payroll-emp-name">{{ $emp->full_name }}</span>
+                                @if ($emp->designation?->title)
+                                    <div class="payroll-cell-muted" style="font-size: 0.7rem;">{{ $emp->designation->title }}</div>
+                                @endif
                             </td>
                             <td>
                                 <span class="payroll-pill neutral">{{ $emp->company_id ?? 'N/A' }}</span>
                             </td>
                             <td>
                                 <span>{{ $emp->branch?->branch_name ?? 'Unassigned' }}</span>
-                            </td>
-                            <td>
-                                <span class="payroll-cell-muted">{{ $emp->designation?->title ?? '—' }}</span>
                             </td>
                             <td>
                                 <span class="payroll-cell-muted">{{ ucfirst((string) ($emp->rate_type ?: 'Monthly')) }}</span>
@@ -645,11 +684,32 @@
                                     <span class="payroll-pill neutral">0 entries</span>
                                 @endif
                             </td>
+                            <td class="payroll-num">
+                                {{ $row['days_worked'] !== null ? rtrim(rtrim(number_format((float) $row['days_worked'], 2, '.', ''), '0'), '.') : '—' }}
+                            </td>
+                            <td class="payroll-num gross">
+                                {{ $row['gross_pay'] !== null ? '₱' . number_format((float) $row['gross_pay'], 2) : '—' }}
+                            </td>
+                            <td class="payroll-num deductions">
+                                {{ $row['total_deductions'] !== null ? '₱' . number_format((float) $row['total_deductions'], 2) : '—' }}
+                            </td>
+                            <td class="payroll-num net">
+                                {{ $row['net_pay'] !== null ? '₱' . number_format((float) $row['net_pay'], 2) : '—' }}
+                            </td>
+                            <td>
+                                @if ($row['is_adjusted'] ?? false)
+                                    <span class="payroll-pill warning" title="Has manual calculation overrides or adjustments">
+                                        Adjusted @if (($row['overridden_count'] ?? 0) > 0) ({{ $row['overridden_count'] }}) @endif
+                                    </span>
+                                @else
+                                    <span class="payroll-pill neutral">Auto</span>
+                                @endif
+                            </td>
                             <td>
                                 <div class="payroll-row-actions">
                                     @if ($selectedPeriod)
                                         <a href="{{ $row['view_payroll_url'] }}" class="payroll-table-btn primary">
-                                            View Payroll
+                                            View / Edit Payroll
                                         </a>
                                         @if ($row['payslip_url'])
                                             <a href="{{ $row['payslip_url'] }}" target="_blank" class="payroll-table-btn outline">
@@ -664,7 +724,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" style="text-align: center; padding: 1.5rem; font-weight: 500; color: rgb(100, 116, 139);">
+                            <td colspan="12" style="text-align: center; padding: 1.5rem; font-weight: 500; color: rgb(100, 116, 139);">
                                 No matching employees found for the selected filters.
                             </td>
                         </tr>

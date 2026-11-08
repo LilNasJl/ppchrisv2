@@ -374,6 +374,10 @@ class PayrollCalculator
             'paid_leave_days' => 0.0,
             'unpaid_leave_days' => 0.0,
             'unpaid_leave' => 0.0,
+            'system_values' => [],
+            'overridden_fields' => [],
+            'is_adjusted' => false,
+            'adjustment_notes' => '',
             ...$data,
         ];
     }
@@ -416,36 +420,87 @@ class PayrollCalculator
 
         $absenceDayValue = ($wholeAbsenceMinutes + $halfDayAbsenceMinutes + $leaveTotals['unpaid_minutes']) / ($workHoursPerDay * 60);
         $dtrWorkDays = $isDaily ? $this->workedDtrEntries($dtrs) + $leaveTotals['paid_days'] : $this->workedDtrDays($dtrs);
-        $daysWorked = $isDaily
+        $rawDaysWorked = $this->number($isDaily
             ? max(0, $dtrWorkDays)
-            : max(0, $halfMonthDays - $absenceDayValue);
-
-        $basePay = $this->basePay($isDaily, $ratePerDay, $daysWorked, $monthlyRate, $workDaysPerMonth, $halfMonthDays);
+            : max(0, $halfMonthDays - $absenceDayValue));
 
         $deductibleDtrs = $this->deductibleDtrs($dtrs, $employee, $isDaily);
         $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
         $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
-        $overtimeAmount = $this->minutePay($overtimeMinutes, $ratePerHour, $overtimeMultiplier);
-        $shift3Premium = app(Shift3PremiumService::class)->total($dtrs, $ratePerDay, $workHoursPerDay, ! $isDaily);
-        $regularHolidayAmount = $this->money(
+        $rawOvertimeAmount = $this->minutePay($overtimeMinutes, $ratePerHour, $overtimeMultiplier);
+        $rawShift3Premium = app(Shift3PremiumService::class)->total($dtrs, $ratePerDay, $workHoursPerDay, ! $isDaily);
+        $rawRegularHolidayAmount = $this->money(
             $this->holidayAmount($employee, $dtrs, $ratePerDay, 'regular', $settings)
             + $this->unworkedRegularHolidayAmount($employee, $period, $dtrs, $ratePerDay, $settings)
         );
-        $specialHolidayAmount = $this->holidayAmount($employee, $dtrs, $ratePerDay, 'special', $settings);
-        $allowance = $this->money($employee->allowance ?? 0);
+        $rawSpecialHolidayAmount = $this->holidayAmount($employee, $dtrs, $ratePerDay, 'special', $settings);
+        $rawAllowance = $this->money($employee->allowance ?? 0);
         $payrollAdjustment = $this->payrollAdjustment($employee, $period);
         $salaryAdjustment = $this->money($payrollAdjustment?->salary_adjustment ?? 0);
         $shortages = $this->money($payrollAdjustment?->shortages ?? 0);
 
-        $undertimeAmount = $this->minutePay($undertimeMinutes, $ratePerHour);
-        $lateAmount = $this->minutePay($lateMinutes, $ratePerHour);
-        $halfDayAmount = $isDaily ? 0.0 : $this->money(($halfDayAbsenceMinutes / 60) * $ratePerHour);
-        $absentAmount = $isDaily ? 0.0 : $this->money(($wholeAbsenceMinutes / 60) * $ratePerHour);
+        $rawUndertimeAmount = $this->minutePay($undertimeMinutes, $ratePerHour);
+        $rawLateAmount = $this->minutePay($lateMinutes, $ratePerHour);
+        $rawHalfDayAmount = $isDaily ? 0.0 : $this->money(($halfDayAbsenceMinutes / 60) * $ratePerHour);
+        $rawAbsentAmount = $isDaily ? 0.0 : $this->money(($wholeAbsenceMinutes / 60) * $ratePerHour);
         $unpaidLeaveAmount = $isDaily ? 0.0 : $this->money(($leaveTotals['unpaid_minutes'] / 60) * $ratePerHour);
         $deductions = $this->deductions($employee);
         $loanPayment = $this->loanPaymentDeduction($employee, $period);
+
+        $systemValues = [
+            'days_worked' => $rawDaysWorked,
+            'allowance' => $rawAllowance,
+            'overtime_amount' => $rawOvertimeAmount,
+            'shift3_premium' => $rawShift3Premium,
+            'regular_holiday' => $rawRegularHolidayAmount,
+            'special_holiday' => $rawSpecialHolidayAmount,
+            'undertime_amount' => $rawUndertimeAmount,
+            'late' => $rawLateAmount,
+            'absent' => $rawAbsentAmount,
+            'halfday' => $rawHalfDayAmount,
+            'uniform' => $deductions['uniform'],
+            'other_deductions' => $deductions['other_deductions'],
+            'sss_loan' => $deductions['sss_loan'],
+            'sss_ee' => $deductions['sss_ee'],
+            'hdmf_loan' => $deductions['hdmf_loan'],
+            'hdmf_ee' => $deductions['hdmf_ee'],
+            'phic_ee' => $deductions['phic_ee'],
+        ];
+
+        $overriddenFields = [];
+        $resolved = $systemValues;
+
+        if ($payrollAdjustment) {
+            foreach (PayrollPeriodEmployeeAdjustment::OVERRIDABLE_FIELDS as $rowKey => $column) {
+                if ($payrollAdjustment->{$column} !== null) {
+                    $resolved[$rowKey] = $rowKey === 'days_worked'
+                        ? $this->number($payrollAdjustment->{$column})
+                        : $this->money($payrollAdjustment->{$column});
+                    $overriddenFields[] = $rowKey;
+                }
+            }
+        }
+
+        $daysWorked = $resolved['days_worked'];
+        $basePay = $this->basePay($isDaily, $ratePerDay, $daysWorked, $monthlyRate, $workDaysPerMonth, $halfMonthDays);
+        $allowance = $resolved['allowance'];
+        $overtimeAmount = $resolved['overtime_amount'];
+        $shift3Premium = $resolved['shift3_premium'];
+        $regularHolidayAmount = $resolved['regular_holiday'];
+        $specialHolidayAmount = $resolved['special_holiday'];
+        $undertimeAmount = $resolved['undertime_amount'];
+        $lateAmount = $resolved['late'];
+        $absentAmount = $resolved['absent'];
+        $halfDayAmount = $resolved['halfday'];
+        $uniformAmount = $resolved['uniform'];
+        $otherDeductionsAmount = $resolved['other_deductions'];
+        $sssLoanAmount = $resolved['sss_loan'];
+        $sssEeAmount = $resolved['sss_ee'];
+        $hdmfLoanAmount = $resolved['hdmf_loan'];
+        $hdmfEeAmount = $resolved['hdmf_ee'];
+        $phicEeAmount = $resolved['phic_ee'];
 
         $grossPay = $this->money(
             $basePay
@@ -464,13 +519,13 @@ class PayrollCalculator
             + $unpaidLeaveAmount
             + $lateAmount
             + $shortages
-            + $deductions['uniform']
-            + $deductions['other_deductions']
-            + $deductions['sss_loan']
-            + $deductions['sss_ee']
-            + $deductions['hdmf_loan']
-            + $deductions['hdmf_ee']
-            + $deductions['phic_ee']
+            + $uniformAmount
+            + $otherDeductionsAmount
+            + $sssLoanAmount
+            + $sssEeAmount
+            + $hdmfLoanAmount
+            + $hdmfEeAmount
+            + $phicEeAmount
             + $loanPayment
         );
 
@@ -491,6 +546,7 @@ class PayrollCalculator
             'rate_per_day' => $ratePerDay,
             'rate_per_hour' => $ratePerHour,
             'days_worked' => $this->number($daysWorked),
+            'base_pay' => $basePay,
             'total_pay' => $isDaily ? $basePay : null,
             'salary_adjustment' => $salaryAdjustment,
             'allowance' => $allowance,
@@ -510,17 +566,21 @@ class PayrollCalculator
             'unpaid_leave' => $unpaidLeaveAmount,
             'late' => $lateAmount,
             'shortages' => $shortages,
-            'uniform' => $deductions['uniform'],
-            'other_deductions' => $deductions['other_deductions'],
-            'sss_loan' => $deductions['sss_loan'],
-            'sss_ee' => $deductions['sss_ee'],
-            'hdmf_loan' => $deductions['hdmf_loan'],
-            'hdmf_ee' => $deductions['hdmf_ee'],
-            'phic_ee' => $deductions['phic_ee'],
+            'uniform' => $uniformAmount,
+            'other_deductions' => $otherDeductionsAmount,
+            'sss_loan' => $sssLoanAmount,
+            'sss_ee' => $sssEeAmount,
+            'hdmf_loan' => $hdmfLoanAmount,
+            'hdmf_ee' => $hdmfEeAmount,
+            'phic_ee' => $phicEeAmount,
             'loan_payment' => $loanPayment,
             'total_deductions' => $totalDeductions,
             'net_pay' => $this->money($grossPay - $totalDeductions),
             'signature' => '',
+            'system_values' => $systemValues,
+            'overridden_fields' => $overriddenFields,
+            'is_adjusted' => $salaryAdjustment > 0 || $shortages > 0 || $overriddenFields !== [],
+            'adjustment_notes' => (string) ($payrollAdjustment?->notes ?? ''),
         ];
     }
 
