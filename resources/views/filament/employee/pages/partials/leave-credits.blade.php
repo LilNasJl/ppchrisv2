@@ -19,8 +19,8 @@
         }
 
         .dark .credit-stat-card {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #1e293b;
         }
 
         .credit-stat-card.primary {
@@ -29,8 +29,8 @@
         }
 
         .dark .credit-stat-card.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08));
+            border-color: rgba(59, 130, 246, 0.35);
         }
 
         .credit-icon {
@@ -45,8 +45,8 @@
         }
 
         .dark .credit-icon {
-            background: #1e293b;
-            border-color: #334155;
+            background: #070b12;
+            border-color: #1e293b;
         }
 
         .credit-body {

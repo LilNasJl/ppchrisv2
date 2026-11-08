@@ -107,9 +107,9 @@
         }
 
         .dark .dtr-filter-bar {
-            border-color: rgb(51, 65, 85);
-            background: linear-gradient(180deg, rgb(30, 41, 59) 0%, rgb(15, 23, 42) 100%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border-color: #1e293b;
+            background: #000000;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
         }
 
         .dtr-filter-heading {
@@ -241,8 +241,8 @@
         }
 
         .dark .dtr-native-select {
-            border-color: rgb(71, 85, 105);
-            background-color: rgb(30, 41, 59);
+            border-color: #1e293b;
+            background-color: #070b12;
             color: #ffffff;
             box-shadow: none;
         }
@@ -253,7 +253,7 @@
         }
 
         .dark .dtr-native-select option {
-            background-color: rgb(30, 41, 59);
+            background-color: #070b12;
             color: #ffffff;
         }
 
@@ -358,8 +358,8 @@
         }
 
         .dark .dtr-stat-card {
-            border-color: rgb(51, 65, 85);
-            background: rgb(15, 23, 42);
+            border-color: #1e293b;
+            background: #000000;
         }
 
         .dtr-stat-card::before {
@@ -488,8 +488,8 @@
 
         .dark .fi-page .fi-ta,
         .dark .fi-page .fi-ta-ctn {
-            border-color: rgb(51, 65, 85);
-            background: rgb(15, 23, 42);
+            border-color: #1e293b;
+            background: #000000;
         }
 
         .fi-page .fi-ta-header {
@@ -500,8 +500,8 @@
         }
 
         .dark .fi-page .fi-ta-header {
-            background: rgb(30, 41, 59);
-            border-bottom-color: rgb(51, 65, 85);
+            background: #070b12;
+            border-bottom-color: #1e293b;
         }
 
         .fi-page .fi-ta-heading {
@@ -558,9 +558,9 @@
         }
 
         .dark .fi-page .fi-ta-header-cell {
-            color: rgb(203, 213, 225) !important;
-            background: rgb(30, 41, 59) !important;
-            border-bottom-color: rgb(71, 85, 105) !important;
+            color: #93c5fd !important;
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
         }
 
         .fi-page .fi-ta-cell,
@@ -575,7 +575,8 @@
 
         .dark .fi-page .fi-ta-cell,
         .dark .fi-page .fi-ta table tbody td {
-            border-bottom-color: rgb(51, 65, 85) !important;
+            border-bottom-color: #161f2e !important;
+            color: #f8fafc !important;
         }
 
         .fi-page .fi-ta-row,
@@ -626,7 +627,7 @@
         }
 
         .dark .fi-page .fi-ta table tbody tr:nth-child(even) {
-            background-color: rgba(30, 41, 59, 0.35) !important;
+            background-color: #050811 !important;
         }
 
         .fi-page .fi-ta table tbody tr:hover {
@@ -634,7 +635,7 @@
         }
 
         .dark .fi-page .fi-ta table tbody tr:hover {
-            background-color: rgba(51, 65, 85, 0.5) !important;
+            background-color: #0c1424 !important;
         }
 
         .fi-page .fi-ta .fi-badge {
@@ -704,7 +705,25 @@
 
         @media (max-width: 820px) {
             .dtr-summary-strip {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.5rem !important;
+            }
+
+            .dtr-stat-card {
+                padding: 0.6rem 0.75rem !important;
+            }
+
+            .dtr-stat-label {
+                font-size: 0.65rem !important;
+            }
+
+            .dtr-stat-value {
+                font-size: 1.15rem !important;
+            }
+
+            .dtr-stat-meta {
+                font-size: 0.65rem !important;
+                flex-wrap: wrap !important;
             }
 
             .dtr-filter-bar {

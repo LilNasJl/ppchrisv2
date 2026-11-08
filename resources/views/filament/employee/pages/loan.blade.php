@@ -47,8 +47,8 @@
         }
 
         .dark .emp-loan-kpi {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #1e293b;
         }
 
         .dark .emp-loan-kpi:hover {
@@ -61,8 +61,8 @@
         }
 
         .dark .emp-loan-kpi.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08));
+            border-color: rgba(59, 130, 246, 0.35);
         }
 
         .emp-loan-icon {
@@ -77,8 +77,8 @@
         }
 
         .dark .emp-loan-icon {
-            background: #1e293b;
-            border-color: #334155;
+            background: #070b12;
+            border-color: #1e293b;
         }
 
         .emp-loan-body {
@@ -175,8 +175,8 @@
         }
 
         .dark .emp-loan-nav {
-            background: #0f172a;
-            border-color: #334155;
+            background: #070b12;
+            border-color: #1e293b;
         }
 
         .emp-loan-tab {
@@ -253,8 +253,8 @@
         }
 
         .dark .emp-loan-page .fi-ta-ctn {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #1e293b;
             border-top-color: #3b82f6;
         }
 
@@ -270,8 +270,8 @@
         }
 
         .dark .emp-loan-page .fi-ta-header-cell {
-            background: #1e293b;
-            border-bottom-color: #334155;
+            background: #070b12;
+            border-bottom-color: #1e293b;
             color: #94a3b8;
         }
 
@@ -286,7 +286,7 @@
         }
 
         .dark .emp-loan-page .fi-ta-table tbody tr {
-            border-bottom-color: #1e293b;
+            border-bottom-color: #161f2e;
         }
 
         .emp-loan-page .fi-ta-table tbody tr:hover {
@@ -294,7 +294,7 @@
         }
 
         .dark .emp-loan-page .fi-ta-table tbody tr:hover {
-            background-color: #1e293b !important;
+            background-color: #0c1424 !important;
         }
 
         .emp-loan-page .fi-ta-actions {
@@ -309,7 +309,37 @@
 
         @media (max-width: 640px) {
             .emp-loan-kpis {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.5rem !important;
+            }
+
+            .emp-loan-kpi {
+                padding: 0.55rem 0.65rem !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-loan-icon {
+                padding: 0.35rem !important;
+            }
+
+            .emp-loan-icon svg {
+                width: 1.15rem !important;
+                height: 1.15rem !important;
+            }
+
+            .emp-loan-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-loan-val {
+                font-size: 1rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-loan-subtext,
+            .emp-loan-badge {
+                font-size: 0.6rem !important;
             }
         }
     </style>

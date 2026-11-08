@@ -10,6 +10,11 @@
         width: 100%;
     }
 
+    .dark .fi-page-header-main-ctn > header.fi-header {
+        border-color: #1e293b !important;
+        background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+    }
+
     .fi-page-header-main-ctn > header.fi-header .fi-header-heading {
         color: #fff !important;
         font-size: 1.55rem;

@@ -26,14 +26,14 @@
         }
 
         .dark .employee-profile-form {
-            --emp-border: #334155;
-            --emp-border-subtle: #1e293b;
+            --emp-border: #1e293b;
+            --emp-border-subtle: #161f2e;
             --emp-blue: #3b82f6;
             --emp-blue-strong: #60a5fa;
-            --emp-blue-soft: rgba(59, 130, 246, 0.14);
-            --emp-blue-ring: rgba(59, 130, 246, 0.25);
-            --emp-surface: #0f172a;
-            --emp-surface-muted: #1e293b;
+            --emp-blue-soft: rgba(59, 130, 246, 0.16);
+            --emp-blue-ring: rgba(59, 130, 246, 0.3);
+            --emp-surface: #000000;
+            --emp-surface-muted: #070b12;
             --emp-text-primary: #f8fafc;
             --emp-text-secondary: #cbd5e1;
             --emp-text-muted: #94a3b8;
@@ -73,8 +73,77 @@
             white-space: nowrap;
         }
 
+        .dark .employee-profile-form .fi-tabs {
+            background: #070b12 !important;
+            border-color: #1e293b !important;
+        }
+
         .dark .employee-profile-form .fi-tabs-item {
-            color: var(--emp-text-secondary);
+            color: #94a3b8 !important;
+        }
+
+        .dark .employee-profile-form .fi-tabs-item:hover,
+        .dark .employee-profile-form .fi-tabs-item:focus-visible {
+            background: #0c1424 !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .employee-profile-form .fi-tabs-item.fi-active {
+            background: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        .dark .employee-profile-form :is(.fi-section, .fi-sc-section) {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .employee-profile-form :is(.fi-section-header, .fi-sc-section-header) {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+        }
+
+        .dark .employee-profile-form :is(.fi-section-header-heading, .fi-sc-section-header-title) {
+            color: #f8fafc !important;
+        }
+
+        .dark .employee-profile-form :is(.fi-section-header-description, .fi-sc-section-header-description) {
+            color: #94a3b8 !important;
+        }
+
+        .dark .employee-profile-form :is(.fi-fieldset, .fi-sc-fieldset) {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .employee-profile-form .fi-fo-field-wrp-label {
+            color: #cbd5e1 !important;
+        }
+
+        .dark .employee-profile-form .fi-input-wrp {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .employee-profile-form .fi-input-wrp input,
+        .dark .employee-profile-form .fi-input-wrp select {
+            background: transparent !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .employee-profile-form .fi-input-wrp.fi-disabled {
+            background: #070b12 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .employee-profile-form .fi-input-wrp.fi-disabled input {
+            color: #cbd5e1 !important;
+        }
+
+        .dark .employee-profile-form textarea {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            color: #f8fafc !important;
         }
 
         .employee-profile-form .fi-tabs-item:hover,
@@ -101,7 +170,7 @@
         }
 
         /* Sections */
-        .employee-profile-form .fi-sc-section {
+        .employee-profile-form :is(.fi-section, .fi-sc-section) {
             background: var(--emp-surface);
             border: 1px solid var(--emp-border);
             border-radius: 0.55rem;
@@ -110,32 +179,33 @@
             overflow: hidden;
         }
 
-        .employee-profile-form .fi-sc-section-header {
+        .employee-profile-form :is(.fi-section-header, .fi-sc-section-header) {
             background: var(--emp-surface-muted);
             border-bottom: 1px solid var(--emp-border-subtle);
             padding: 0.5rem 0.85rem;
         }
 
-        .employee-profile-form .fi-sc-section-header-title {
+        .employee-profile-form :is(.fi-section-header-heading, .fi-sc-section-header-title) {
             color: var(--emp-text-primary);
             font-size: 0.84rem;
             font-weight: 800;
             line-height: 1.25;
         }
 
-        .employee-profile-form .fi-sc-section-header-description {
+        .employee-profile-form :is(.fi-section-header-description, .fi-sc-section-header-description) {
             color: var(--emp-text-muted);
             font-size: 0.71rem;
             margin-top: 0.1rem;
         }
 
-        .employee-profile-form .fi-sc-section-content {
+        .employee-profile-form :is(.fi-section-content, .fi-sc-section-content),
+        .employee-profile-form .fi-section > .fi-section-content-ctn > .fi-section-content {
             gap: 0.6rem;
             padding: 0.75rem 0.85rem;
         }
 
         /* Fieldsets */
-        .employee-profile-form .fi-sc-fieldset {
+        .employee-profile-form :is(.fi-fieldset, .fi-sc-fieldset) {
             background: var(--emp-surface);
             border: 1px solid var(--emp-border);
             border-radius: 0.45rem;
@@ -144,7 +214,7 @@
             padding: 0.6rem 0.75rem 0.7rem;
         }
 
-        .employee-profile-form .fi-sc-fieldset-legend {
+        .employee-profile-form :is(.fi-fieldset > legend, .fi-sc-fieldset-legend) {
             color: var(--emp-blue);
             font-size: 0.71rem;
             font-weight: 800;
@@ -153,7 +223,7 @@
             text-transform: uppercase;
         }
 
-        .dark .employee-profile-form .fi-sc-fieldset-legend {
+        .dark .employee-profile-form :is(.fi-fieldset > legend, .fi-sc-fieldset-legend) {
             color: var(--emp-blue-strong);
         }
 
@@ -251,9 +321,9 @@
         }
 
         .dark .emp-account-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.55), rgba(15, 23, 42, 0.75));
-            border-color: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
         }
 
         .emp-avatar-block {
@@ -261,6 +331,7 @@
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
+            width: 96px;
         }
 
         .emp-avatar-frame {
@@ -271,17 +342,22 @@
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.06);
             display: flex;
             height: 96px;
+            width: 96px;
+            min-height: 96px;
+            min-width: 96px;
+            max-height: 96px;
+            max-width: 96px;
             justify-content: center;
             overflow: hidden;
             position: relative;
             transition: all 180ms ease;
-            width: 96px;
+            flex-shrink: 0;
         }
 
         .dark .emp-avatar-frame {
-            background: rgba(30, 41, 59, 0.7);
-            border-color: #1e293b;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+            background: #070b12 !important;
+            border-color: #1e293b !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
         }
 
         .emp-avatar-frame.emp-avatar-clickable {
@@ -452,23 +528,23 @@
         }
 
         .dark .emp-chip {
-            background: rgba(255, 255, 255, 0.04);
-            border-color: rgba(255, 255, 255, 0.08);
-            color: #cbd5e1;
+            background: #070b12 !important;
+            border-color: #1e293b !important;
+            color: #cbd5e1 !important;
         }
 
         .dark .emp-chip svg {
-            color: #94a3b8;
+            color: #94a3b8 !important;
         }
 
         .dark .emp-chip:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.16);
-            color: #f8fafc;
+            background: #0c1424 !important;
+            border-color: #3b82f6 !important;
+            color: #f8fafc !important;
         }
 
         .dark .emp-chip:hover svg {
-            color: #e2e8f0;
+            color: #e2e8f0 !important;
         }
 
         .emp-chip.emp-chip-id {
@@ -588,9 +664,28 @@
             border-color: rgba(37, 99, 235, 0.28);
         }
 
+        .dark .emp-stat-card {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .emp-stat-card:hover {
+            background: #0c1424 !important;
+            border-color: #3b82f6 !important;
+        }
+
         .dark .emp-stat-card.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08)) !important;
+            border-color: rgba(59, 130, 246, 0.35) !important;
+        }
+
+        .dark .emp-stat-icon {
+            background: #070b12 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .emp-stat-value {
+            color: #f8fafc !important;
         }
 
         .emp-stat-icon {
@@ -681,9 +776,23 @@
             border-color: rgba(37, 99, 235, 0.3);
         }
 
+        .dark .emp-deduction-kpi {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .emp-deduction-kpi:hover {
+            background: #0c1424 !important;
+            border-color: #3b82f6 !important;
+        }
+
         .dark .emp-deduction-kpi.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08)) !important;
+            border-color: rgba(59, 130, 246, 0.35) !important;
+        }
+
+        .dark .emp-kpi-value {
+            color: #f8fafc !important;
         }
 
         .emp-kpi-label {
@@ -712,6 +821,11 @@
             overflow: hidden;
         }
 
+        .dark .emp-table-card {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
         .emp-table-header {
             align-items: center;
             background: var(--emp-surface-muted);
@@ -722,11 +836,20 @@
             padding: 0.55rem 0.85rem;
         }
 
+        .dark .emp-table-header {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+        }
+
         .emp-table-title {
             color: var(--emp-text-primary);
             font-size: 0.82rem;
             font-weight: 800;
             margin: 0;
+        }
+
+        .dark .emp-table-title {
+            color: #f8fafc !important;
         }
 
         .emp-table-subtitle {
@@ -757,10 +880,21 @@
             text-transform: uppercase;
         }
 
+        .dark .emp-compact-table th {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+            color: #93c5fd !important;
+        }
+
         .emp-compact-table td {
-            border-bottom: 1px solid var(--emp-border-subtle);
+            border-bottom-color: var(--emp-border-subtle);
             padding: 0.42rem 0.7rem;
             vertical-align: middle;
+        }
+
+        .dark .emp-compact-table td {
+            border-bottom-color: #161f2e !important;
+            color: #f8fafc !important;
         }
 
         .emp-compact-table tr:hover {
@@ -768,7 +902,11 @@
         }
 
         .dark .emp-compact-table tr:hover {
-            background: rgba(255, 255, 255, 0.02);
+            background: #0c1424 !important;
+        }
+
+        .dark .emp-compact-table tbody tr:nth-child(even) {
+            background: #050811 !important;
         }
 
         .emp-item-cell {
@@ -908,12 +1046,21 @@
             padding: 0.5rem 0.7rem;
         }
 
+        .dark .emp-compact-table tfoot td {
+            background: #070b12 !important;
+            border-top-color: #1e293b !important;
+        }
+
         .emp-tfoot-label {
             color: var(--emp-text-primary);
             font-size: 0.71rem;
             font-weight: 800;
             letter-spacing: 0.03em;
             text-transform: uppercase;
+        }
+
+        .dark .emp-tfoot-label {
+            color: #f8fafc !important;
         }
 
         .emp-tfoot-total {
@@ -954,27 +1101,116 @@
         }
 
         @media (max-width: 640px) {
+            /* Reduce page-level padding so fields can stretch wider */
+            body:has(.employee-profile-form) .fi-main,
+            .fi-main:has(.employee-profile-form) {
+                padding-inline: 0.5rem !important;
+            }
+
             .employee-profile-form {
-                gap: 0.55rem;
+                gap: 0.45rem !important;
+                width: 100% !important;
             }
 
             .employee-profile-form .fi-tabs {
-                padding: 0.25rem;
+                padding: 0.2rem !important;
+                gap: 0.15rem !important;
+                border-radius: 0.45rem !important;
             }
 
             .employee-profile-form .fi-tabs-item {
-                min-height: 2.1rem;
-                padding: 0.3rem 0.55rem;
+                min-height: 2rem !important;
+                padding: 0.25rem 0.45rem !important;
+                font-size: 0.72rem !important;
                 white-space: nowrap;
             }
 
+            .employee-profile-form .fi-sc-tabs-tab.fi-active {
+                gap: 0.45rem !important;
+                margin-top: 0.35rem !important;
+                padding-inline: 0 !important;
+            }
+
+            /* Reduced Section paddings & margins on mobile */
+            .employee-profile-form :is(.fi-section, .fi-sc-section) {
+                border-radius: 0.45rem !important;
+                margin-inline: 0 !important;
+            }
+
+            .employee-profile-form :is(.fi-section-header, .fi-sc-section-header) {
+                padding: 0.4rem 0.55rem !important;
+            }
+
+            .employee-profile-form :is(.fi-section-header-heading, .fi-sc-section-header-title) {
+                font-size: 0.8rem !important;
+            }
+
+            .employee-profile-form :is(.fi-section-header-description, .fi-sc-section-header-description) {
+                font-size: 0.67rem !important;
+            }
+
+            .employee-profile-form :is(.fi-section-content, .fi-sc-section-content),
+            .employee-profile-form .fi-section > .fi-section-content-ctn > .fi-section-content {
+                padding: 0.45rem 0.45rem !important;
+                gap: 0.45rem !important;
+            }
+
+            /* Reduced Fieldset paddings & margins on mobile */
+            .employee-profile-form :is(.fi-fieldset, .fi-sc-fieldset) {
+                border-radius: 0.4rem !important;
+                padding: 0.35rem 0.45rem 0.45rem !important;
+                margin-inline: 0 !important;
+                margin-top: 0.2rem !important;
+                gap: 0.45rem !important;
+            }
+
+            .employee-profile-form :is(.fi-fieldset > legend, .fi-sc-fieldset-legend) {
+                font-size: 0.65rem !important;
+                padding-inline: 0.25rem !important;
+                margin-bottom: 0.2rem !important;
+            }
+
+            /* Expand input fields wider with compact height */
+            .employee-profile-form .fi-fo-field-wrp {
+                width: 100% !important;
+                min-width: 0 !important;
+            }
+
+            .employee-profile-form .fi-fo-field-wrp-label {
+                font-size: 0.7rem !important;
+                margin-bottom: 0.12rem !important;
+            }
+
+            .employee-profile-form .fi-input-wrp {
+                min-height: 2.1rem !important;
+                border-radius: 0.35rem !important;
+            }
+
+            .employee-profile-form .fi-input-wrp input,
+            .employee-profile-form .fi-input-wrp select {
+                padding: 0.3rem 0.45rem !important;
+                font-size: 0.79rem !important;
+            }
+
+            .employee-profile-form .fi-input-wrp-prefix,
+            .employee-profile-form .fi-input-wrp-suffix {
+                padding-inline: 0.4rem !important;
+            }
+
+            .employee-profile-form textarea {
+                padding: 0.35rem 0.45rem !important;
+                font-size: 0.79rem !important;
+            }
+
+            /* Streamline avatar card on mobile */
             .emp-account-card {
                 align-items: center;
                 flex-direction: column;
-                gap: 0.65rem;
+                gap: 0.55rem;
                 justify-content: center;
-                padding: 1.25rem 1rem;
+                padding: 0.85rem 0.65rem !important;
                 text-align: center;
+                border-radius: 0.5rem !important;
             }
 
             .emp-avatar-block {
@@ -986,13 +1222,19 @@
             }
 
             .emp-avatar-frame {
-                height: 92px;
+                height: 84px !important;
+                width: 84px !important;
+                min-height: 84px !important;
+                min-width: 84px !important;
+                max-height: 84px !important;
+                max-width: 84px !important;
                 margin-inline: auto;
-                width: 92px;
+                border-radius: 9999px !important;
+                overflow: hidden !important;
             }
 
             .emp-avatar-initials {
-                font-size: 1.75rem;
+                font-size: 1.65rem;
             }
 
             .emp-account-details {
@@ -1002,6 +1244,7 @@
                 justify-content: center;
                 text-align: center;
                 width: 100%;
+                gap: 0.25rem !important;
             }
 
             .emp-account-header-row {
@@ -1012,23 +1255,91 @@
             }
 
             .emp-account-name {
-                font-size: 1.15rem;
+                font-size: 1.1rem;
                 text-align: center;
             }
 
-            /* On mobile view, show less details (only the name) */
+            /* On mobile view, hide the heavy badge cluster */
             .emp-badge-status,
             .emp-account-badges-group {
                 display: none !important;
             }
 
-            .emp-salary-grid,
+            /* 2x2 Salary & Deductions Cards on Mobile */
+            .emp-salary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-salary-grid > :last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+            }
+
             .emp-deductions-kpis {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-stat-card {
+                padding: 0.5rem 0.6rem !important;
+                gap: 0.4rem !important;
+            }
+
+            .emp-stat-icon {
+                padding: 0.3rem !important;
+            }
+
+            .emp-stat-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-stat-value {
+                font-size: 0.92rem !important;
+            }
+
+            .emp-stat-sub {
+                font-size: 0.6rem !important;
+            }
+
+            .emp-deduction-kpi {
+                padding: 0.5rem 0.6rem !important;
+            }
+
+            .emp-kpi-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-kpi-value {
+                font-size: 0.92rem !important;
+            }
+
+            .emp-kpi-sub {
+                font-size: 0.6rem !important;
+            }
+
+            /* Deductions table card */
+            .emp-table-card {
+                border-radius: 0.45rem !important;
+            }
+
+            .emp-table-header {
+                padding: 0.45rem 0.6rem !important;
+            }
+
+            .emp-table-title {
+                font-size: 0.78rem !important;
+            }
+
+            .emp-compact-table th,
+            .emp-compact-table td {
+                padding: 0.35rem 0.5rem !important;
             }
 
             .employee-profile-actions {
                 justify-content: stretch;
+                padding-top: 0.25rem !important;
             }
 
             .employee-profile-actions .fi-btn {

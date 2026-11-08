@@ -47,8 +47,8 @@
         }
 
         .dark .emp-leave-kpi {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #1e293b;
         }
 
         .dark .emp-leave-kpi:hover {
@@ -61,8 +61,8 @@
         }
 
         .dark .emp-leave-kpi.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08));
+            border-color: rgba(59, 130, 246, 0.35);
         }
 
         .emp-leave-icon {
@@ -77,8 +77,8 @@
         }
 
         .dark .emp-leave-icon {
-            background: #1e293b;
-            border-color: #334155;
+            background: #070b12;
+            border-color: #1e293b;
         }
 
         .emp-leave-body {
@@ -175,8 +175,8 @@
         }
 
         .dark .emp-leave-page .fi-tabs {
-            background: #0f172a;
-            border-color: #334155;
+            background: #070b12;
+            border-color: #1e293b;
         }
 
         .emp-leave-page .fi-tabs-item {
@@ -248,8 +248,8 @@
         }
 
         .dark .emp-leave-page .fi-ta-ctn {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000;
+            border-color: #1e293b;
             border-top-color: #3b82f6;
         }
 
@@ -265,8 +265,8 @@
         }
 
         .dark .emp-leave-page .fi-ta-header-cell {
-            background: #1e293b;
-            border-bottom-color: #334155;
+            background: #070b12;
+            border-bottom-color: #1e293b;
             color: #94a3b8;
         }
 
@@ -281,7 +281,7 @@
         }
 
         .dark .emp-leave-page .fi-ta-table tbody tr {
-            border-bottom-color: #1e293b;
+            border-bottom-color: #161f2e;
         }
 
         .emp-leave-page .fi-ta-table tbody tr:hover {
@@ -289,7 +289,7 @@
         }
 
         .dark .emp-leave-page .fi-ta-table tbody tr:hover {
-            background-color: #1e293b !important;
+            background-color: #0c1424 !important;
         }
 
         /* Direct Action Buttons Styling */
@@ -305,7 +305,37 @@
 
         @media (max-width: 640px) {
             .emp-leave-kpis {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.5rem !important;
+            }
+
+            .emp-leave-kpi {
+                padding: 0.55rem 0.65rem !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-leave-icon {
+                padding: 0.35rem !important;
+            }
+
+            .emp-leave-icon svg {
+                width: 1.15rem !important;
+                height: 1.15rem !important;
+            }
+
+            .emp-leave-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-leave-val {
+                font-size: 1.05rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-leave-subtext,
+            .emp-leave-badge {
+                font-size: 0.6rem !important;
             }
         }
     </style>

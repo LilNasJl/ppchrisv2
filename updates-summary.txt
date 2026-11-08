@@ -1,0 +1,96 @@
+================================================================================
+                    SYSTEM ENHANCEMENTS AND PAGE UPDATES
+================================================================================
+
+--- SPEED & PERFORMANCE OPTIMIZATIONS (FASTER LOADING & QUERIES) ---
+
+* Daily Time Record (DTR) Speed Boost
+  - Attendance records are now retrieved and processed in bulk batches instead 
+    of checking each day one by one. This noticeably speeds up opening and 
+    refreshing attendance pages.
+
+* Quicker Reports Generation
+  - Optimized the search system for workforce reports (such as Tardiness / Late 
+    Rankings, Absences, and Overtime). The database now instantly zeroes in 
+    on the selected payroll period, making report previews and exports generate 
+    much faster.
+
+* Instant Summary Card Calculations (Designations, Branches, Departments)
+  - The top summary cards calculate employee totals and role assignments 
+    directly at the database level, ensuring pages load quickly without 
+    lagging even as staff counts grow.
+
+* Faster Employee Portal Loading (Profile, Leaves, and Loans)
+  - Calculations for loan balances, remaining leave credits, and deductions are 
+    now streamlined to load immediately without fetching unnecessary background 
+    data, keeping pages responsive on both mobile and desktop.
+
+
+--- HR MANAGEMENT SYSTEM ---
+
+1. Designations (Job Titles)
+   - Added 4 summary cards at the top showing total titles, assigned staff count, 
+     largest role, and vacant positions so the page no longer feels empty.
+   - Added staff count tags and clear placeholder text for missing descriptions.
+   - Updated the page, cards, and tables to a clean dark theme.
+
+2. Branch Management
+   - Added 4 summary cards showing total branch locations, total staff assigned, 
+     largest branch, and unassigned staff.
+   - Added employee count tags to each branch and updated the page to a dark theme.
+
+3. Department Management
+   - Added 4 summary cards displaying total departments, overall workforce, 
+     largest department, and unstaffed departments.
+   - Added department acronym badges and updated the page styling to dark mode.
+
+4. Company Memorandum
+   - Upgraded the announcement and memorandum table to a clean dark theme without 
+     cluttering the page.
+
+5. Manage Tickets (HR Inquiries)
+   - Updated the ticket tracking table and buttons to match the sleek dark theme.
+
+6. Leave Tracking
+   - Updated the employee leave approval and records table to a matching dark theme.
+
+7. Loan Management
+   - Updated the company loans table, request lists, and tab navigation to a clean 
+     dark background with clear contrast.
+
+8. Benefits & Company Deductions
+   - Updated the deduction and contribution tables, status badges, and tabs to dark mode.
+
+9. Analytics & Reports
+   - DTR Report: Simplified the search by removing separate date fields—it now 
+     automatically uses the selected payroll period.
+   - Branch Filter Fix: Fixed an issue where selecting a branch showed empty results 
+     even when records existed.
+   - Updated the entire reporting screen, filter bars, and preview tables to dark mode.
+
+
+--- EMPLOYEE SELF-SERVICE ---
+
+10. Daily Time Record (DTR)
+    - Reorganized attendance summary cards into a neat 2x2 grid on mobile phones.
+    - Updated attendance logs and time records to dark mode.
+
+11. Leave Requests
+    - Arranged the 4 leave cards (Total Requests, Pending, Approved, and Credits) 
+      into a 2x2 grid on mobile screens so you don't have to scroll through a long list.
+    - Applied the dark theme to all cards and request history tables.
+
+12. Employee Loans
+    - Reorganized the 4 loan summary cards into a balanced 2x2 grid on mobile phones.
+    - Updated loan details, balance cards, and payment history to dark mode.
+
+13. My Profile
+    - Profile Photo Fix: Fixed the employee profile picture so it stays inside 
+      a neat circular avatar frame instead of stretching out.
+    - Wider Mobile Layout: Removed excessive blank spaces and margins inside the 
+      profile tabs on phones, allowing all text boxes and input fields to stretch 
+      wider and be much easier to read and tap.
+    - Reorganized salary and deduction summary cards into a 2x2 grid on mobile screens.
+    - Updated all profile tabs and sections to match the clean dark theme.
+
+================================================================================
