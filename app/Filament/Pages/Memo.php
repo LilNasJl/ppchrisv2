@@ -116,4 +116,25 @@ class Memo extends Page implements HasTable
                 ->url(MemoTypeResource::getUrl()),
         ];
     }
+
+    /**
+     * @return array{total_employees:int, total_notices:int, clean_record_staff:int, notice_types:int}
+     */
+    public function getNoticeMetrics(): array
+    {
+        $totalEmployees = Employee::query()
+            ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
+            ->count();
+        $totalNotices = \App\Models\Memo::query()->count();
+        $employeesWithNotices = Employee::query()->has('memos')->count();
+        $cleanRecordStaff = max(0, $totalEmployees - $employeesWithNotices);
+        $noticeTypes = \App\Models\MemoType::query()->count();
+
+        return [
+            'total_employees' => $totalEmployees,
+            'total_notices' => $totalNotices,
+            'clean_record_staff' => $cleanRecordStaff,
+            'notice_types' => $noticeTypes,
+        ];
+    }
 }

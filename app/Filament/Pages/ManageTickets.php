@@ -218,4 +218,22 @@ class ManageTickets extends Page implements HasTable
             ->success()
             ->send();
     }
+
+    /**
+     * @return array{total_tickets:int, pending_tickets:int, done_tickets:int, requesting_employees:int}
+     */
+    public function getTicketMetrics(): array
+    {
+        $totalTickets = Ticket::query()->count();
+        $pendingTickets = Ticket::query()->where('status', Ticket::STATUS_PENDING)->count();
+        $doneTickets = Ticket::query()->where('status', Ticket::STATUS_DONE)->count();
+        $requestingEmployees = Ticket::query()->distinct('employee_id')->count('employee_id');
+
+        return [
+            'total_tickets' => $totalTickets,
+            'pending_tickets' => $pendingTickets,
+            'done_tickets' => $doneTickets,
+            'requesting_employees' => $requestingEmployees,
+        ];
+    }
 }

@@ -188,6 +188,14 @@ class BranchTable extends TableWidget
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('employees_count')
+                    ->label('Active Staff')
+                    ->counts('employees')
+                    ->badge()
+                    ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} staff" : 'Vacant')
+                    ->sortable(),
+
                 TextColumn::make('work_schedule')
                     ->label('Schedule')
                     ->badge()

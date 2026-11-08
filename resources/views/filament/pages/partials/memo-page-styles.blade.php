@@ -103,11 +103,12 @@
     }
 
     .dark .memo-content .fi-ta-header-cell {
-        background: #1d355a !important;
+        background: #070b12 !important;
+        border-bottom-color: #1e293b !important;
     }
 
     .dark .memo-content .fi-ta-header-cell-label {
-        color: #bfdbfe !important;
+        color: #93c5fd !important;
     }
 
     .memo-content .fi-ta-text {

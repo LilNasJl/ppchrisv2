@@ -26,9 +26,19 @@ class DepartmentsTable
                 TextColumn::make('acronym')
                     ->label('Acronym')
                     ->badge()
+                    ->placeholder('—')
                     ->searchable(),
+                TextColumn::make('employees_count')
+                    ->label('Active Staff')
+                    ->counts('employees')
+                    ->badge()
+                    ->color(fn (int $state): string => $state > 0 ? 'info' : 'gray')
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} staff" : 'Vacant')
+                    ->sortable(),
                 TextColumn::make('description')
                     ->label('Description')
+                    ->placeholder('None provided')
+                    ->color('gray')
                     ->wrap()
                     ->limit(100),
 

@@ -165,8 +165,8 @@
         }
 
         .dark .dtr-filter-card {
-            border-color: rgb(51, 65, 85);
-            background: rgb(15, 23, 42);
+            border-color: #1e293b;
+            background: #000000;
         }
 
         .dtr-field {
@@ -219,9 +219,9 @@
 
         .dark .dtr-input,
         .dark .dtr-select {
-            border-color: rgb(71, 85, 105);
-            background: rgb(30, 41, 59);
-            color: #ffffff;
+            border-color: #1e293b;
+            background: #000000;
+            color: #f8fafc;
         }
 
         .dark .dtr-input:focus,
@@ -383,8 +383,9 @@
         }
 
         .dark .table-card {
-            border-color: rgb(51, 65, 85);
-            background: rgb(15, 23, 42);
+            border-color: #1e293b;
+            background: #000000;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
         }
 
         .table-card-header {
@@ -397,8 +398,8 @@
         }
 
         .dark .table-card-header {
-            background: rgb(30, 41, 59);
-            border-bottom-color: rgb(51, 65, 85);
+            background: #070b12;
+            border-bottom-color: #1e293b;
         }
 
         .table-card-title {
@@ -413,7 +414,7 @@
         }
 
         .dark .table-card-title {
-            color: rgb(203, 213, 225);
+            color: #93c5fd;
         }
 
         .table-wrapper {
@@ -447,7 +448,7 @@
         }
 
         .dark .dtr-table thead {
-            background: rgb(30, 41, 59);
+            background: #070b12;
         }
 
         .dtr-table th,
@@ -461,7 +462,7 @@
 
         .dark .dtr-table th,
         .dark .dtr-table td {
-            border-color: rgb(51, 65, 85);
+            border-color: #161f2e;
         }
 
         .dtr-table thead th {
@@ -475,8 +476,8 @@
         }
 
         .dark .dtr-table thead th {
-            color: rgb(203, 213, 225);
-            border-bottom-color: rgb(71, 85, 105);
+            color: #93c5fd;
+            border-bottom-color: #1e293b;
         }
 
         .dtr-table tbody tr {
@@ -488,7 +489,7 @@
         }
 
         .dark .dtr-table tbody tr:nth-child(even) {
-            background-color: rgba(30, 41, 59, 0.3);
+            background-color: #050811;
         }
 
         .dtr-table tbody tr:hover {
@@ -496,7 +497,7 @@
         }
 
         .dark .dtr-table tbody tr:hover {
-            background-color: rgba(51, 65, 85, 0.45) !important;
+            background-color: #0c1424 !important;
         }
 
         /* Compact Index Column */

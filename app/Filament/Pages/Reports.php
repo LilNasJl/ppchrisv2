@@ -59,6 +59,8 @@ class Reports extends Page implements HasForms
 
     public ?string $month = null;
 
+    public ?array $data = [];
+
     public array $previewRows = [];
 
     public int $previewCount = 0;
@@ -76,12 +78,15 @@ class Reports extends Page implements HasForms
             'payroll_period_id' => $this->payroll_period_id,
             'branch_id' => $this->branch_id,
             'employee_id' => $this->employee_id,
-            'date_from' => $this->date_from,
-            'date_to' => $this->date_to,
             'month' => $this->month,
         ]);
 
         $this->generateReport();
+    }
+
+    protected function getFormStatePath(): ?string
+    {
+        return 'data';
     }
 
     protected function getFormSchema(): array
@@ -92,36 +97,35 @@ class Reports extends Page implements HasForms
                     ->label('Report Type')
                     ->options(fn (): array => $this->reportOptionsForCategory())
                     ->searchable()
-                    ->reactive()
+                    ->live()
                     ->required(),
 
                 Select::make('payroll_period_id')
                     ->label('Payroll Period')
                     ->options(fn (): array => PayrollPeriod::query()->newestFirst()->pluck('title', 'id')->all())
                     ->searchable()
-                    ->reactive()
+                    ->live()
                     ->required(fn (Get $get): bool => $this->reportNeedsPeriod((string) $get('report_type')))
                     ->visible(fn (Get $get): bool => $this->reportNeedsPeriod((string) $get('report_type'))),
 
                 Select::make('branch_id')
                     ->label('Branch')
-                    ->options(fn (): array => [
-                        'all' => 'All Branches',
-                        ...Branch::query()
-                            ->orderBy('branch_name')
-                            ->pluck('branch_name', 'id')
-                            ->all(),
-                    ])
+                    ->options(fn (): array => Branch::query()
+                        ->orderBy('branch_name')
+                        ->pluck('branch_name', 'id')
+                        ->mapWithKeys(fn ($name, $id) => [(string) $id => $name])
+                        ->prepend('All Branches', 'all')
+                        ->all())
                     ->default('all')
                     ->searchable()
-                    ->reactive()
+                    ->live()
                     ->visible(fn (Get $get): bool => $this->reportNeedsBranch((string) $get('report_type'))),
 
                 Select::make('employee_id')
                     ->label('Employee')
                     ->placeholder('All employees')
                     ->searchable()
-                    ->reactive()
+                    ->live()
                     ->getSearchResultsUsing(fn (string $search): array => Employee::query()
                         ->activeEmployment()
                         ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
@@ -138,33 +142,18 @@ class Reports extends Page implements HasForms
                     ->getOptionLabelUsing(fn ($value): ?string => Employee::query()->find($value)?->full_name)
                     ->visible(fn (Get $get): bool => $this->reportNeedsEmployee((string) $get('report_type'))),
 
-                TextInput::make('date_from')
-                    ->label('DTR Date From')
-                    ->type('date')
-                    ->reactive()
-                    ->visible(fn (Get $get): bool => $this->reportNeedsDateRange((string) $get('report_type'))),
-
-                TextInput::make('date_to')
-                    ->label('DTR Date To')
-                    ->type('date')
-                    ->reactive()
-                    ->rule('after_or_equal:date_from')
-                    ->visible(fn (Get $get): bool => $this->reportNeedsDateRange((string) $get('report_type'))),
-
                 TextInput::make('month')
                     ->label('Calendar Month')
                     ->type('month')
-                    ->reactive()
+                    ->live()
                     ->required(fn (Get $get): bool => $this->reportNeedsMonth((string) $get('report_type')))
                     ->visible(fn (Get $get): bool => $this->reportNeedsMonth((string) $get('report_type'))),
             ])
-                ->columns(fn (Get $get): array => $this->reportNeedsDateRange((string) $get('report_type'))
-                    ? ['default' => 1, 'sm' => 2, 'md' => 3, 'xl' => 6]
-                    : ($this->reportNeedsPeriod((string) $get('report_type'))
-                        ? ['default' => 1, 'sm' => 2, 'lg' => 4]
-                        : ($this->reportNeedsBranch((string) $get('report_type'))
-                            ? ['default' => 1, 'sm' => 2, 'lg' => 3]
-                            : ['default' => 1, 'sm' => 2])))
+                ->columns(fn (Get $get): array => $this->reportNeedsPeriod((string) $get('report_type'))
+                    ? ['default' => 1, 'sm' => 2, 'lg' => 3, 'xl' => 4]
+                    : ($this->reportNeedsBranch((string) $get('report_type'))
+                        ? ['default' => 1, 'sm' => 2, 'lg' => 3]
+                        : ['default' => 1, 'sm' => 2]))
                 ->columnSpanFull(),
         ];
     }
@@ -195,11 +184,19 @@ class Reports extends Page implements HasForms
 
     public function generateReport(): void
     {
-        $this->form->getState();
+        $state = $this->form->getState();
+
+        $this->report_type = (string) ($state['report_type'] ?? $this->report_type);
+        $this->payroll_period_id = filled($state['payroll_period_id'] ?? null) ? (string) $state['payroll_period_id'] : null;
+        $this->branch_id = filled($state['branch_id'] ?? null) ? (string) $state['branch_id'] : 'all';
+        $this->employee_id = filled($state['employee_id'] ?? null) ? (string) $state['employee_id'] : null;
+        $this->month = filled($state['month'] ?? null) ? (string) $state['month'] : null;
 
         if (! $this->supportsReportType((string) $this->report_type)) {
             return;
         }
+
+        $this->report_category = $this->getCategoryForReportType($this->report_type);
 
         if ($this->isEmployeeDetailReport()) {
             $this->previewCount = $this->activeEmployeeQuery()->count();
@@ -227,15 +224,13 @@ class Reports extends Page implements HasForms
             'payroll_period_id' => $this->payroll_period_id,
             'branch_id' => $this->branch_id,
             'employee_id' => $this->employee_id,
-            'date_from' => $this->date_from,
-            'date_to' => $this->date_to,
             'month' => $this->month,
         ]);
     }
 
     protected function reportSignature(): string
     {
-        return implode('|', [$this->report_type, $this->payroll_period_id, $this->branch_id, $this->employee_id, $this->date_from, $this->date_to, $this->month]);
+        return implode('|', [$this->report_type, $this->payroll_period_id, $this->branch_id, $this->employee_id, $this->month]);
     }
 
     public function getReportTitleProperty(): string
@@ -266,7 +261,7 @@ class Reports extends Page implements HasForms
 
             'calendar_holidays_month' => ['Date', 'Holiday', 'Type', 'Rate (%)'],
             'activities_month' => ['From', 'To', 'Activity', 'Description'],
-            'memo_month' => ['Rank', 'Employee', 'Memo Count'],
+            'memo_month' => ['Rank', 'Employee', 'Branch', 'Memo Count'],
             default => [],
         };
     }
@@ -316,15 +311,6 @@ class Reports extends Page implements HasForms
             $labels['Employee'] = Employee::query()->find($this->employee_id)?->full_name ?? 'Unknown Employee';
         }
 
-        if ($this->reportNeedsDateRange($this->report_type)) {
-            if (filled($this->date_from)) {
-                $labels['From'] = $this->date_from;
-            }
-            if (filled($this->date_to)) {
-                $labels['To'] = $this->date_to;
-            }
-        }
-
         if ($this->reportNeedsMonth($this->report_type)) {
             $labels['Month'] = filled($this->month)
                 ? Carbon::parse($this->month.'-01')->format('F Y')
@@ -348,8 +334,6 @@ class Reports extends Page implements HasForms
             'payroll_period_id' => $this->payroll_period_id,
             'branch_id' => $this->branch_id,
             'employee_id' => $this->employee_id,
-            'date_from' => $this->date_from,
-            'date_to' => $this->date_to,
             'month' => $this->month,
         ]);
 
@@ -533,9 +517,31 @@ class Reports extends Page implements HasForms
 
     protected function employmentStatusRows(): Collection
     {
+        $baseQuery = Employee::query()
+            ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
+            ->when(
+                filled($this->branch_id) && $this->branch_id !== 'all',
+                fn (Builder $query): Builder => $query->where('employees.branch_id', $this->branch_id),
+            );
+
+        $permanentCount = (clone $baseQuery)->where('employment_type', 'Permanent')->count();
+        $probationaryCount = (clone $baseQuery)->where('employment_type', 'Probationary')->count();
+        $otherActiveCount = (clone $baseQuery)->whereNotIn('employment_type', [...Employee::ENDED_EMPLOYMENT_TYPES, 'Permanent', 'Probationary'])->count();
+        $terminatedCount = (clone $baseQuery)->where('employment_type', 'Terminated')->count();
+        $resignedCount = (clone $baseQuery)->where('employment_type', 'Resigned')->count();
+        $otherEndedCount = (clone $baseQuery)->whereIn('employment_type', Employee::ENDED_EMPLOYMENT_TYPES)->whereNotIn('employment_type', ['Terminated', 'Resigned'])->count();
+
+        $activeTotal = $permanentCount + $probationaryCount + $otherActiveCount;
+        $endedTotal = $terminatedCount + $resignedCount + $otherEndedCount;
+
         return collect([
-            ['Active Employee', $this->activeEmployeeQuery()->count()],
-        ]);
+            ['Active Workforce (Total)', $activeTotal],
+            ['  - Permanent', $permanentCount],
+            ['  - Probationary', $probationaryCount],
+            ['Ended / Inactive (Total)', $endedTotal],
+            ['  - Resigned', $resignedCount],
+            ['  - Terminated', $terminatedCount],
+        ])->filter(fn (array $row): bool => $row[1] > 0 || str_contains($row[0], 'Total'))->values();
     }
 
     protected function payrollTotalRows(): Collection
@@ -609,6 +615,8 @@ class Reports extends Page implements HasForms
             return collect();
         }
 
+        $selectedEmployee = filled($this->employee_id) ? Employee::query()->find($this->employee_id) : null;
+
         $totals = Dtr::query()
             ->where('payroll_period_id', $period->id)
             ->when(
@@ -616,41 +624,47 @@ class Reports extends Page implements HasForms
                 fn (Builder $query): Builder => $query->where('branch_id', $this->branch_id),
             )
             ->when(
-                filled($this->date_from),
-                fn (Builder $query): Builder => $query->where('date_in', '>=', $this->date_from),
-            )
-            ->when(
-                filled($this->date_to),
-                fn (Builder $query): Builder => $query->where('date_in', '<=', $this->date_to),
+                filled($selectedEmployee),
+                function (Builder $query) use ($selectedEmployee): void {
+                    $query->where(function (Builder $q) use ($selectedEmployee): void {
+                        $q->where('employee_id', $selectedEmployee->id);
+                        if (filled($selectedEmployee->fingerprint_id)) {
+                            $q->orWhere('fingerprint_id', $selectedEmployee->fingerprint_id);
+                        }
+                    });
+                },
             )
             ->finalizedAttendance()
-            ->select('branch_id', 'fingerprint_id')
+            ->select('branch_id', 'fingerprint_id', 'employee_id')
             ->selectRaw('SUM(COALESCE('.$metric.', 0)) as minutes')
-            ->groupBy('branch_id', 'fingerprint_id')
+            ->groupBy('branch_id', 'fingerprint_id', 'employee_id')
             ->get();
 
         if ($totals->isEmpty()) {
             return collect();
         }
 
-        $employees = Employee::query()
+        $employeeIds = $totals->pluck('employee_id')->filter()->unique();
+        $fingerprintIds = $totals->pluck('fingerprint_id')->filter()->unique();
+
+        $employeesById = Employee::query()
             ->with('branch')
             ->activeEmployment()
-            ->whereHas('user', fn (Builder $query) => $query->where('role', 'employee'))
-            ->when(
-                $this->reportNeedsEmployee($this->report_type) && filled($this->employee_id),
-                fn (Builder $query): Builder => $query->whereKey($this->employee_id),
-            )
-            ->whereIn('branch_id', $totals->pluck('branch_id')->filter()->unique())
-            ->whereIn('fingerprint_id', $totals->pluck('fingerprint_id')->filter()->unique())
-            ->orderBy('id')
+            ->whereIn('id', $employeeIds)
             ->get()
-            ->unique(fn (Employee $employee): string => $employee->branch_id.'-'.$employee->fingerprint_id)
-            ->keyBy(fn (Employee $employee): string => $employee->branch_id.'-'.$employee->fingerprint_id);
+            ->keyBy('id');
+
+        $employeesByFingerprint = Employee::query()
+            ->with('branch')
+            ->activeEmployment()
+            ->whereIn('fingerprint_id', $fingerprintIds)
+            ->get()
+            ->keyBy('fingerprint_id');
 
         return $totals
-            ->map(function (Dtr $total) use ($employees): array {
-                $employee = $employees->get($total->branch_id.'-'.$total->fingerprint_id);
+            ->map(function (Dtr $total) use ($employeesById, $employeesByFingerprint): array {
+                $employee = ($total->employee_id ? $employeesById->get($total->employee_id) : null)
+                    ?: ($total->fingerprint_id ? $employeesByFingerprint->get($total->fingerprint_id) : null);
 
                 return $employee ? [
                     'employee' => $employee->full_name,
@@ -659,6 +673,12 @@ class Reports extends Page implements HasForms
                 ] : [];
             })
             ->filter()
+            ->groupBy(fn (array $row): string => $row['employee'])
+            ->map(fn (Collection $group, string $name): array => [
+                'employee' => $name,
+                'branch' => $group->first()['branch'],
+                'minutes' => $group->sum('minutes'),
+            ])
             ->sortByDesc('minutes')
             ->values()
             ->map(fn (array $row, int $index): array => [
@@ -720,7 +740,15 @@ class Reports extends Page implements HasForms
         $counts = Memo::query()
             ->whereHas('employee', fn (Builder $query) => $query
                 ->activeEmployment()
-                ->whereHas('user', fn (Builder $userQuery) => $userQuery->where('role', 'employee')))
+                ->whereHas('user', fn (Builder $userQuery) => $userQuery->where('role', 'employee'))
+                ->when(
+                    filled($this->branch_id) && $this->branch_id !== 'all',
+                    fn (Builder $bQuery) => $bQuery->where('employees.branch_id', $this->branch_id),
+                )
+                ->when(
+                    $this->reportNeedsEmployee($this->report_type) && filled($this->employee_id),
+                    fn (Builder $eQuery) => $eQuery->where('employees.id', $this->employee_id),
+                ))
             ->whereBetween('created_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
             ->select('employee_id')
             ->selectRaw('COUNT(*) as memo_count')
@@ -728,7 +756,7 @@ class Reports extends Page implements HasForms
             ->orderByDesc('memo_count')
             ->get();
 
-        $employees = Employee::query()->whereIn('id', $counts->pluck('employee_id'))->get()->keyBy('id');
+        $employees = Employee::query()->with('branch')->whereIn('id', $counts->pluck('employee_id'))->get()->keyBy('id');
 
         return $counts
             ->map(function (Memo $memo) use ($employees): array {
@@ -736,6 +764,7 @@ class Reports extends Page implements HasForms
 
                 return [
                     'employee' => $employee?->full_name ?: 'Unknown Employee',
+                    'branch' => $employee?->branch?->branch_name ?: 'No Branch',
                     'count' => (int) $memo->memo_count,
                 ];
             })
@@ -743,6 +772,7 @@ class Reports extends Page implements HasForms
             ->map(fn (array $row, int $index): array => [
                 $index + 1,
                 $row['employee'],
+                $row['branch'],
                 $row['count'],
             ]);
     }
@@ -903,22 +933,27 @@ class Reports extends Page implements HasForms
             'dtr_credited_overtime',
             'dtr_early_clock_in',
             'dtr_undertime',
+            'memo_month',
         ], true);
     }
 
     protected function reportNeedsEmployee(?string $reportType): bool
     {
-        return $this->reportNeedsBranch($reportType);
-    }
-
-    protected function reportNeedsDateRange(?string $reportType): bool
-    {
         return in_array($reportType, [
+            'employee_all',
+            'employee_age_oldest',
+            'employee_tenure',
             'dtr_late',
             'dtr_credited_overtime',
             'dtr_early_clock_in',
             'dtr_undertime',
+            'memo_month',
         ], true);
+    }
+
+    protected function reportNeedsDateRange(?string $reportType): bool
+    {
+        return false;
     }
 
     protected function fileName(string $extension): string

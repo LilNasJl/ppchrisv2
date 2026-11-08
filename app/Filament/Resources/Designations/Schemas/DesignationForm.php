@@ -13,26 +13,27 @@ class DesignationForm
     {
         return $schema
             ->components([
-                Section::make()
+                Section::make('Designation Details')
+                    ->description('Specify the organizational title, job qualifications, and role responsibilities.')
                     ->schema([
                         TextInput::make('title')
                             ->label('Designation Title')
-                            ->placeholder('e.g., IT Staff')
+                            ->placeholder('e.g., Forecourt Attendant, Accounting Staff')
                             ->maxLength(100)
                             ->required(),
                         Textarea::make('specification')
-                            ->placeholder('Required skills, education, and traits')
+                            ->placeholder('Required skills, education, qualifications, and traits...')
                             ->label('Job Specification')
                             ->maxLength(255)
                             ->rows(3)
                             ->columnSpanFull(),
                         Textarea::make('description')
-                            ->placeholder('Description...')
+                            ->placeholder('Core duties, daily responsibilities, and key results...')
                             ->label('Job Description')
                             ->maxLength(255)
-                            ->rows(5)
+                            ->rows(4)
                             ->columnSpanFull(),
-                    ])->columns(2),
+                    ])->columns(1),
             ])->columns(1);
     }
 }

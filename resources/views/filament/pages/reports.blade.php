@@ -39,18 +39,110 @@
         }
 
         .dark .reports-workspace {
-            --rpt-bg-card: #0f172a;
-            --rpt-bg-subtle: #1e293b;
-            --rpt-bg-muted: rgba(30, 41, 59, 0.7);
+            --rpt-bg-card: #000000;
+            --rpt-bg-subtle: #070b12;
+            --rpt-bg-muted: #0c1424;
             --rpt-border: #1e293b;
-            --rpt-border-strong: #334155;
+            --rpt-border-strong: #1e293b;
             --rpt-text-main: #f8fafc;
             --rpt-text-secondary: #cbd5e1;
             --rpt-text-muted: #94a3b8;
             --rpt-accent: #60a5fa;
-            --rpt-accent-soft: rgba(59, 130, 246, 0.18);
-            --rpt-row-even: rgba(30, 41, 59, 0.35);
-            --rpt-row-hover: rgba(59, 130, 246, 0.14);
+            --rpt-accent-soft: rgba(59, 130, 246, 0.16);
+            --rpt-row-even: #050811;
+            --rpt-row-hover: #0c1424;
+        }
+
+        .dark .reports-header {
+            border-color: #1e293b !important;
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+        }
+
+        .dark .reports-control-card {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .reports-cat-strip {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+        }
+
+        .dark .reports-category {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            color: #94a3b8 !important;
+        }
+
+        .dark .reports-category:hover {
+            border-color: #3b82f6 !important;
+            background: #0c1424 !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .reports-category.active {
+            border-color: #2563eb !important;
+            background: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        .dark .reports-config input.fi-input,
+        .dark .reports-config select.fi-select-input {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .reports-config .fi-input-wrp {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .reports-panel {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .reports-panel-header {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+        }
+
+        .dark .reports-button.secondary {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            color: #cbd5e1 !important;
+        }
+
+        .dark .reports-button.secondary:hover {
+            background: #0c1424 !important;
+            border-color: #3b82f6 !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .reports-table th {
+            background: #070b12 !important;
+            border-bottom-color: #1e293b !important;
+            color: #93c5fd !important;
+        }
+
+        .dark .reports-table td {
+            border-bottom-color: #161f2e !important;
+            color: #f8fafc !important;
+        }
+
+        .dark .reports-table tbody tr:nth-child(even) {
+            background: #050811 !important;
+        }
+
+        .dark .reports-table tbody tr:hover {
+            background: #0c1424 !important;
+        }
+
+        .dark .reports-preview-note {
+            background: #070b12 !important;
+            border-top-color: #1e293b !important;
+            color: #94a3b8 !important;
         }
 
         /* 1. Compact Topbar Header */

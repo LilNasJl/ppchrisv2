@@ -554,8 +554,26 @@ class Branch extends Page
 
     protected function getHeaderWidgets(): array
     {
+        return [];
+    }
+
+    /**
+     * @return array{total_branches:int, total_employees:int, twenty_four_hours:int, top_branch_name:string, top_branch_count:int}
+     */
+    public function getBranchMetrics(): array
+    {
+        $branches = ModelsBranch::query()->withCount('employees')->get();
+        $totalBranches = $branches->count();
+        $totalEmployees = Employee::query()->whereNotNull('branch_id')->count();
+        $twentyFourHours = $branches->where('is_24hrs', 1)->count();
+        $topBranch = $branches->sortByDesc('employees_count')->first();
+
         return [
-            BranchTable::class,
+            'total_branches' => $totalBranches,
+            'total_employees' => $totalEmployees,
+            'twenty_four_hours' => $twentyFourHours,
+            'top_branch_name' => $topBranch?->branch_name ?? 'None',
+            'top_branch_count' => $topBranch?->employees_count ?? 0,
         ];
     }
 }

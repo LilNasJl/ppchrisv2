@@ -5,8 +5,8 @@
     }
 
     .dark .fi-page {
-        --management-row-even: rgba(30, 41, 59, .35);
-        --management-row-hover: rgba(96, 165, 250, .12);
+        --management-row-even: #050811;
+        --management-row-hover: #0c1424;
     }
 
     .fi-page .fi-ta,
@@ -21,8 +21,15 @@
 
     .dark .fi-page .fi-ta,
     .dark .fi-page .fi-ta-ctn {
-        border-color: rgb(51, 65, 85) !important;
-        background: rgb(15, 23, 42) !important;
+        border-color: #1e293b !important;
+        background: #000000 !important;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    .dark .fi-page .fi-ta table,
+    .dark .fi-page .fi-ta table thead,
+    .dark .fi-page .fi-ta table tbody {
+        background: #000000 !important;
     }
 
     .fi-page .fi-ta-ctn {
@@ -45,8 +52,8 @@
     }
 
     .dark .fi-page .fi-ta-header {
-        background: rgb(30, 41, 59) !important;
-        border-bottom-color: rgb(51, 65, 85) !important;
+        background: #070b12 !important;
+        border-bottom-color: #1e293b !important;
     }
 
     .fi-page .fi-ta-header-toolbar {
@@ -63,8 +70,8 @@
     }
 
     .dark .fi-page .fi-ta-header-cell {
-        background: rgb(30, 41, 59) !important;
-        border-bottom-color: rgb(71, 85, 105) !important;
+        background: #070b12 !important;
+        border-bottom-color: #1e293b !important;
     }
 
     .fi-page .fi-ta-header-cell-label {
@@ -77,7 +84,12 @@
     }
 
     .dark .fi-page .fi-ta-header-cell-label {
-        color: rgb(203, 213, 225) !important;
+        color: #93c5fd !important;
+    }
+
+    .dark .fi-page .fi-ta-header-cell svg,
+    .dark .fi-page .fi-ta-header-cell .fi-ta-header-cell-sort-icon {
+        color: #60a5fa !important;
     }
 
     .fi-page .fi-ta-cell {
@@ -88,7 +100,7 @@
     }
 
     .dark .fi-page .fi-ta-cell {
-        border-bottom-color: rgb(51, 65, 85) !important;
+        border-bottom-color: #161f2e !important;
     }
 
     .fi-page .fi-ta-text {
@@ -99,6 +111,10 @@
     .fi-page .fi-ta-text-item {
         font-size: 0.775rem !important;
         line-height: 1.25 !important;
+    }
+
+    .dark .fi-page .fi-ta-text-item {
+        color: #f8fafc !important;
     }
 
     .fi-page .fi-ta-cell-index {
@@ -113,7 +129,7 @@
     }
 
     .dark .fi-page .fi-ta-cell-index {
-        color: rgb(100, 116, 139) !important;
+        color: #64748b !important;
     }
 
     .fi-page .fi-ta-cell-index .fi-ta-text-item {
@@ -168,7 +184,77 @@
     }
 
     .dark .fi-page .fi-pagination {
-        border-top-color: rgb(51, 65, 85) !important;
+        background: #070b12 !important;
+        border-top-color: #1e293b !important;
+    }
+
+    .dark .fi-page .fi-pagination .fi-pagination-overview {
+        color: #94a3b8 !important;
+    }
+
+    .dark .fi-page .fi-pagination .fi-btn,
+    .dark .fi-page .fi-pagination .fi-icon-btn {
+        background: #000000 !important;
+        border: 1px solid #1e293b !important;
+        color: #cbd5e1 !important;
+    }
+
+    .dark .fi-page .fi-pagination .fi-btn:hover,
+    .dark .fi-page .fi-pagination .fi-icon-btn:hover {
+        background: #0f172a !important;
+        border-color: #334155 !important;
+        color: #ffffff !important;
+    }
+
+    .dark .fi-page .fi-pagination .fi-btn.fi-active,
+    .dark .fi-page .fi-pagination .fi-active .fi-btn {
+        background: #2563eb !important;
+        border-color: #3b82f6 !important;
+        color: #ffffff !important;
+    }
+
+    .dark .fi-page .fi-pagination .fi-select-input,
+    .dark .fi-page .fi-pagination .fi-input-wrp {
+        background: #000000 !important;
+        border-color: #1e293b !important;
+        color: #f8fafc !important;
+    }
+
+    .dark .fi-page .fi-ta-header-toolbar .fi-input-wrp {
+        background: #000000 !important;
+        border: 1px solid #1e293b !important;
+    }
+
+    .dark .fi-page .fi-ta-header-toolbar input {
+        background: transparent !important;
+        color: #f8fafc !important;
+    }
+
+    .dark .fi-page .fi-ta-header-toolbar input::placeholder {
+        color: #64748b !important;
+    }
+
+    .dark .fi-page .fi-ta-header-toolbar .fi-icon-btn,
+    .dark .fi-page .fi-ta-header-toolbar .fi-btn {
+        background: #000000 !important;
+        border: 1px solid #1e293b !important;
+        color: #94a3b8 !important;
+    }
+
+    .dark .fi-page .fi-ta-header-toolbar .fi-icon-btn:hover,
+    .dark .fi-page .fi-ta-header-toolbar .fi-btn:hover {
+        background: #0f172a !important;
+        border-color: #334155 !important;
+        color: #f8fafc !important;
+    }
+
+    .dark .fi-page .fi-ta-empty-state {
+        background: #000000 !important;
+    }
+
+    .dark .fi-page .fi-tabs {
+        background: #000000 !important;
+        border-color: #1e293b !important;
     }
 
     .fi-page :is(
