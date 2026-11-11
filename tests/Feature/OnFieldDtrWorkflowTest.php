@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Filament\Employee\Pages\Payroll;
 use App\Filament\Employee\Pages\Station\StationProofSubmissions;
+use App\Filament\Pages\Dtr as HrDtrPage;
+use App\Filament\Pages\ViewOnFieldDtrSubmission;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\DtrSubmission;
@@ -15,7 +17,9 @@ use App\Services\Imports\EmployeeVisibleDtrImportService;
 use App\Services\OnFieldDtrService;
 use App\Services\PayrollCalculator;
 use Filament\Facades\Filament;
+use Filament\Support\Colors\Color;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -45,12 +49,63 @@ class OnFieldDtrWorkflowTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('roles', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('guard_name')->default('web');
+            $table->timestamps();
+        });
+
+        Schema::create('permissions', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('guard_name')->default('web');
+            $table->timestamps();
+        });
+
+        Schema::create('model_has_roles', function (Blueprint $table): void {
+            $table->unsignedBigInteger('role_id');
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+            $table->primary(['role_id', 'model_id', 'model_type']);
+        });
+
+        Schema::create('model_has_permissions', function (Blueprint $table): void {
+            $table->unsignedBigInteger('permission_id');
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+            $table->primary(['permission_id', 'model_id', 'model_type']);
+        });
+
+        Schema::create('role_has_permissions', function (Blueprint $table): void {
+            $table->unsignedBigInteger('permission_id');
+            $table->unsignedBigInteger('role_id');
+            $table->primary(['permission_id', 'role_id']);
+        });
+
         Schema::create('notifications', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('type');
             $table->morphs('notifiable');
             $table->text('data');
             $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('action_histories', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('actor_id')->nullable();
+            $table->string('actor_name')->nullable();
+            $table->string('actor_role')->nullable();
+            $table->string('action');
+            $table->string('model_type')->nullable();
+            $table->unsignedBigInteger('model_id')->nullable();
+            $table->string('model_label')->nullable();
+            $table->string('record_label')->nullable();
+            $table->string('summary')->nullable();
+            $table->json('before_data')->nullable();
+            $table->json('after_data')->nullable();
+            $table->json('changed_data')->nullable();
             $table->timestamps();
         });
 
@@ -71,6 +126,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         Schema::create('branches', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->string('branch_name');
             $table->string('branch_address')->nullable();
             $table->string('mobile_no')->nullable();
@@ -110,6 +166,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         Schema::create('payroll_periods', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->string('title');
             $table->date('date_start');
             $table->date('date_end');
@@ -128,6 +185,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         Schema::create('employees', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->string('uid', 20)->nullable();
             $table->foreignId('user_id')->nullable();
             $table->string('company_id', 20)->nullable();
@@ -271,6 +329,7 @@ class OnFieldDtrWorkflowTest extends TestCase
 
         Schema::create('dtr_submissions', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->unsignedBigInteger('payroll_period_id');
             $table->unsignedBigInteger('branch_id');
             $table->unsignedBigInteger('employee_id')->nullable();
@@ -745,6 +804,79 @@ class OnFieldDtrWorkflowTest extends TestCase
             ->assertSee('Return')
             ->assertDontSee('On Field DTR Requests')
             ->assertDontSee('Submitted records remain pending until HR reviews them.');
+    }
+
+    public function test_viewing_on_field_dtr_request_does_not_deduct_pending_notification_counts_until_approved_or_rejected(): void
+    {
+        [$branch, $employee, $period] = $this->context();
+        $reviewer = User::factory()->create(['role' => 'hr']);
+
+        $firstSubmission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
+        $secondSubmission = app(OnFieldDtrService::class)->submit($employee, [
+            ...$this->submissionData($period),
+            'date_in' => '2026-08-21',
+            'date_out' => '2026-08-21',
+        ]);
+
+        // Viewed legacy DTR file submissions must not be counted alongside pending On Field DTR requests.
+        DtrSubmission::query()->create([
+            'payroll_period_id' => $period->id,
+            'branch_id' => $branch->id,
+            'submitted_by_employee_id' => $employee->id,
+            'submission_type' => DtrSubmission::TYPE_DTR,
+            'status' => DtrSubmission::STATUS_PENDING,
+            'is_new' => false,
+            'viewed_at' => now(),
+            'file_path' => 'dtr-proof-submissions/on-field.pdf',
+            'file_name' => 'legacy.pdf',
+        ]);
+
+        $this->assertSame(Color::Yellow, HrDtrPage::getNavigationBadgeColor());
+        $this->assertSame('2', HrDtrPage::getNavigationBadge());
+        $this->assertSame(2, (new HrDtrPage)->dtrProofSubmissionCount());
+
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+        Gate::before(fn () => true);
+        $this->actingAs($reviewer);
+
+        Livewire::withQueryParams(['submissionId' => $firstSubmission->publicKey()])
+            ->test(ViewOnFieldDtrSubmission::class)
+            ->assertSuccessful();
+
+        $this->assertFalse($firstSubmission->fresh()->is_new);
+        $this->assertNotNull($firstSubmission->fresh()->viewed_at);
+        $this->assertTrue($firstSubmission->fresh()->isPending());
+        $this->assertSame('2', HrDtrPage::getNavigationBadge());
+        $this->assertSame(2, (new HrDtrPage)->dtrProofSubmissionCount());
+
+        $this->get(route('hr_tools.dtr_submissions.view', $secondSubmission))
+            ->assertOk();
+
+        $this->assertFalse($secondSubmission->fresh()->is_new);
+        $this->assertNotNull($secondSubmission->fresh()->viewed_at);
+        $this->assertTrue($secondSubmission->fresh()->isPending());
+        $this->assertSame('2', HrDtrPage::getNavigationBadge());
+        $this->assertSame(2, (new HrDtrPage)->dtrProofSubmissionCount());
+
+        Livewire::test(HrDtrPage::class)
+            ->assertSuccessful()
+            ->assertSeeHtml('<span class="dtr-badge">2</span>');
+
+        app(OnFieldDtrService::class)->approve($firstSubmission->fresh(), $reviewer, 'Verified field log.');
+
+        $this->assertSame('1', HrDtrPage::getNavigationBadge());
+        $this->assertSame(1, (new HrDtrPage)->dtrProofSubmissionCount());
+        Livewire::test(HrDtrPage::class)
+            ->assertSuccessful()
+            ->assertSeeHtml('<span class="dtr-badge">1</span>');
+
+        app(OnFieldDtrService::class)->reject($secondSubmission->fresh(), $reviewer, 'Insufficient proof.');
+
+        $this->assertNull(HrDtrPage::getNavigationBadge());
+        $this->assertSame(0, (new HrDtrPage)->dtrProofSubmissionCount());
+        Livewire::test(HrDtrPage::class)
+            ->assertSuccessful()
+            ->assertDontSeeHtml('<span class="dtr-badge">');
     }
 
     private function context(): array

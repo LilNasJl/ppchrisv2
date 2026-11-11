@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasPublicUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -154,6 +155,13 @@ class DtrSubmission extends Model
     public function isRejected(): bool
     {
         return $this->status === self::STATUS_REJECTED;
+    }
+
+    public function scopePendingProof(Builder $query): Builder
+    {
+        return $query
+            ->where('submission_type', self::TYPE_PROOF)
+            ->where('status', self::STATUS_PENDING);
     }
 
     public function submittedEmployeeName(): string

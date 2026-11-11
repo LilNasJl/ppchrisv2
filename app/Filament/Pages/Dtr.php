@@ -16,6 +16,7 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Colors\Color;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -78,7 +79,22 @@ class Dtr extends Page implements HasForms
         $count = 0;
 
         if (Schema::hasTable('dtr_submissions')) {
-            $count += DtrSubmission::query()->where('is_new', true)->count();
+            $hasSubmissionType = Schema::hasColumn('dtr_submissions', 'submission_type');
+            $hasStatus = Schema::hasColumn('dtr_submissions', 'status');
+
+            if ($hasSubmissionType && $hasStatus) {
+                $count += DtrSubmission::query()
+                    ->where(function (Builder $query): void {
+                        $query->where(fn (Builder $proofQuery): Builder => $proofQuery->pendingProof())
+                            ->orWhere(function (Builder $dtrQuery): void {
+                                $dtrQuery->where('submission_type', DtrSubmission::TYPE_DTR)
+                                    ->where('is_new', true);
+                            });
+                    })
+                    ->count();
+            } else {
+                $count += DtrSubmission::query()->where('is_new', true)->count();
+            }
         }
 
         if (Schema::hasTable('dtr_change_requests')) {
@@ -90,7 +106,7 @@ class Dtr extends Page implements HasForms
 
     public static function getNavigationBadgeColor(): string|array|null
     {
-        return 'danger';
+        return Color::Yellow;
     }
 
     public function mount(): void
@@ -413,9 +429,15 @@ class Dtr extends Page implements HasForms
             return 0;
         }
 
+        if (! Schema::hasColumn('dtr_submissions', 'status')) {
+            return DtrSubmission::query()
+                ->where('submission_type', DtrSubmission::TYPE_PROOF)
+                ->where('is_new', true)
+                ->count();
+        }
+
         return DtrSubmission::query()
-            ->where('submission_type', DtrSubmission::TYPE_PROOF)
-            ->where('is_new', true)
+            ->pendingProof()
             ->count();
     }
 
