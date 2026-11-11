@@ -70,23 +70,24 @@ class OvertimeApprovalServiceTest extends TestCase
     public static function statusScenarios(): array
     {
         return [
-            'pending after threshold' => [30, 0, 'Pending', false, false, true, false, false],
-            'pending early threshold' => [0, 30, 'Pending', false, false, true, false, false],
-            'pending both thresholds' => [45, 35, 'n/a', false, false, true, false, false],
+            'pending after threshold' => [60, 0, 'Pending', false, false, true, false, false],
+            'pending early threshold' => [0, 60, 'Pending', false, false, true, false, false],
+            'pending both thresholds' => [75, 65, 'n/a', false, false, true, false, false],
             'approved after overtime' => [60, 0, 'Approved', true, false, false, true, false],
             'approved early overtime' => [0, 60, 'Approved', false, true, false, true, false],
-            'approved both overtime types' => [60, 45, 'Approved', true, true, false, true, false],
-            'previous after overtime approval with early still outstanding' => [60, 45, 'Approved', true, false, true, false, false],
-            'rejected' => [90, 45, 'Rejected', false, false, false, false, true],
-            'below threshold' => [29, 29, 'Pending', false, false, false, false, false],
+            'approved both overtime types' => [60, 65, 'Approved', true, true, false, true, false],
+            'previous after overtime approval with early still outstanding' => [60, 65, 'Approved', true, false, true, false, false],
+            'approved after overtime with early below threshold' => [60, 45, 'Approved', true, false, false, true, false],
+            'rejected' => [90, 65, 'Rejected', false, false, false, false, true],
+            'below threshold' => [59, 59, 'Pending', false, false, false, false, false],
         ];
     }
 
     public function test_it_accepts_a_partial_credit_within_the_calculated_overtime(): void
     {
-        $record = new Dtr(['overtime' => 60]);
+        $record = new Dtr(['overtime' => 90]);
 
-        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 30, null);
+        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 60, null);
 
         $this->addToAssertionCount(1);
     }
@@ -97,7 +98,7 @@ class OvertimeApprovalServiceTest extends TestCase
             'schedule_type' => 'Forgot to Punch',
             'is_imported' => true,
             'overtime' => 60,
-            'early_clock_in' => 45,
+            'early_clock_in' => 60,
             'overtime_status' => 'Pending',
         ]);
         $service = app(OvertimeApprovalService::class);
@@ -112,7 +113,7 @@ class OvertimeApprovalServiceTest extends TestCase
     {
         $record = new Dtr([
             'overtime' => 60,
-            'early_clock_in' => 45,
+            'early_clock_in' => 60,
         ]);
 
         app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 0, 0);
@@ -123,7 +124,7 @@ class OvertimeApprovalServiceTest extends TestCase
     #[DataProvider('invalidCreditedMinutes')]
     public function test_it_rejects_invalid_partial_overtime_values(int $minutes): void
     {
-        $record = new Dtr(['overtime' => 60]);
+        $record = new Dtr(['overtime' => 90]);
 
         $this->expectException(DomainException::class);
 
@@ -135,32 +136,32 @@ class OvertimeApprovalServiceTest extends TestCase
         return [
             'negative' => [-1],
             'one minute' => [1],
-            'below minimum' => [29],
-            'above calculated overtime' => [61],
+            'below minimum' => [59],
+            'above calculated overtime' => [91],
         ];
     }
 
     public function test_it_accepts_separate_partial_credits_for_early_and_after_overtime(): void
     {
         $record = new Dtr([
-            'overtime' => 60,
-            'early_clock_in' => 45,
+            'overtime' => 90,
+            'early_clock_in' => 75,
         ]);
 
-        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 30, 35);
+        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 60, 65);
 
         $this->addToAssertionCount(1);
     }
 
-    public function test_it_requires_each_eligible_overtime_component_to_be_at_least_thirty_minutes(): void
+    public function test_it_requires_each_eligible_overtime_component_to_be_at_least_sixty_minutes(): void
     {
         $record = new Dtr([
-            'overtime' => 60,
-            'early_clock_in' => 45,
+            'overtime' => 90,
+            'early_clock_in' => 75,
         ]);
 
         $this->expectException(DomainException::class);
 
-        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 30, 29);
+        app(OvertimeApprovalService::class)->validateCreditedMinutes($record, 60, 59);
     }
 }

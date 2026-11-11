@@ -826,45 +826,46 @@ class DtrChangeRequestService
             if ($requestType === DtrChangeRequest::TYPE_OVERTIME_APPROVAL) {
                 $earlyOt = max(0, (int) ($record->early_clock_in ?? 0));
                 $regularOt = max(0, (int) ($record->overtime ?? 0));
+                $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
 
-                if ($earlyOt < 30 && $regularOt < 30) {
+                if ($earlyOt < $minMinutes && $regularOt < $minMinutes) {
                     throw ValidationException::withMessages([
-                        'request_type' => 'Overtime approval cannot be requested when both Early OT ('.$earlyOt.' mins) and Regular OT ('.$regularOt.' mins) are below 30 minutes.',
+                        'request_type' => "Overtime approval cannot be requested when both Early OT ({$earlyOt} mins) and Regular OT ({$regularOt} mins) are below {$minMinutes} minutes.",
                     ]);
                 }
 
                 $scope = $data['overtime_request_scope'] ?? null;
                 if (! in_array($scope, [DtrChangeRequest::OT_SCOPE_BOTH, DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY, DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true)) {
-                    if ($earlyOt >= 30 && $regularOt >= 30) {
+                    if ($earlyOt >= $minMinutes && $regularOt >= $minMinutes) {
                         $scope = DtrChangeRequest::OT_SCOPE_BOTH;
-                    } elseif ($regularOt >= 30) {
+                    } elseif ($regularOt >= $minMinutes) {
                         $scope = DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY;
                     } else {
                         $scope = DtrChangeRequest::OT_SCOPE_EARLY_ONLY;
                     }
                 }
 
-                if ($scope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY && $regularOt < 30) {
+                if ($scope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY && $regularOt < $minMinutes) {
                     throw ValidationException::withMessages([
-                        'overtime_request_scope' => 'Regular Overtime must be at least 30 minutes to request Overtime Only.',
+                        'overtime_request_scope' => "Regular Overtime must be at least {$minMinutes} minutes to request Overtime Only.",
                     ]);
                 }
 
-                if ($scope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY && $earlyOt < 30) {
+                if ($scope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY && $earlyOt < $minMinutes) {
                     throw ValidationException::withMessages([
-                        'overtime_request_scope' => 'Early Clock In must be at least 30 minutes to request Early Clock In Overtime Only.',
+                        'overtime_request_scope' => "Early Clock In must be at least {$minMinutes} minutes to request Early Clock In Overtime Only.",
                     ]);
                 }
 
                 if ($scope === DtrChangeRequest::OT_SCOPE_BOTH) {
-                    if ($earlyOt < 30) {
+                    if ($earlyOt < $minMinutes) {
                         throw ValidationException::withMessages([
-                            'overtime_request_scope' => 'Early Clock In is only '.$earlyOt.' minutes (minimum 30 mins). Please select Overtime Only.',
+                            'overtime_request_scope' => "Early Clock In is only {$earlyOt} minutes (minimum {$minMinutes} mins). Please select Overtime Only.",
                         ]);
                     }
-                    if ($regularOt < 30) {
+                    if ($regularOt < $minMinutes) {
                         throw ValidationException::withMessages([
-                            'overtime_request_scope' => 'Regular Overtime is only '.$regularOt.' minutes (minimum 30 mins). Please select Early Clock In Only.',
+                            'overtime_request_scope' => "Regular Overtime is only {$regularOt} minutes (minimum {$minMinutes} mins). Please select Early Clock In Only.",
                         ]);
                     }
                 }
@@ -1224,6 +1225,273 @@ class DtrChangeRequestService
     }
 
     /**
+     * Edit an employee's pending Overtime Approval request at any non-HR workflow level.
+     */
+    public function updateOvertimeRequest(DtrChangeRequest $request, Employee|User $editor, array $data): DtrChangeRequest
+    {
+        return DB::transaction(function () use ($request, $editor, $data): DtrChangeRequest {
+            $request = DtrChangeRequest::query()
+                ->with(['payrollPeriod', 'branch', 'employee'])
+                ->whereKey($request->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($request->status !== DtrChangeRequest::STATUS_PENDING) {
+                throw ValidationException::withMessages([
+                    'status' => 'Only pending overtime requests can be edited.',
+                ]);
+            }
+
+            if (! $request->is_overtime_type) {
+                throw ValidationException::withMessages([
+                    'request_type' => 'Overtime editing is only allowed for Overtime Approval requests.',
+                ]);
+            }
+
+            if (! $request->canEditOvertimeBy($editor)) {
+                throw new AuthorizationException('You are not authorized to edit this overtime request.');
+            }
+
+            $period = $request->payrollPeriod;
+            if ($period && $period->is_locked) {
+                throw ValidationException::withMessages([
+                    'status' => "Cannot edit overtime request because payroll period ({$period->title}) is locked.",
+                ]);
+            }
+
+            $targetRecord = $request->targetDtrRecord();
+            if ($targetRecord && (bool) ($targetRecord->is_locked ?? false)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Cannot edit overtime request because the target D.T.R record is locked.',
+                ]);
+            }
+
+            $editRemarks = trim((string) ($data['overtime_edit_remarks'] ?? $data['reviewer_remarks'] ?? $data['remarks'] ?? ''));
+            if (mb_strlen($editRemarks) > 2000) {
+                throw ValidationException::withMessages([
+                    'overtime_edit_remarks' => 'Edit remarks must not exceed 2,000 characters.',
+                ]);
+            }
+
+            $decision = $this->resolveAndValidateOvertimeDecision($request, $data, requireProvided: true);
+            $identity = $this->resolveReviewerIdentity($editor);
+
+            $previousDecision = [
+                'scope' => $request->effectiveOvertimeScope(),
+                'credited_overtime' => $request->effectiveCreditedOvertimeMinutes(),
+                'credited_early_clock_in' => $request->effectiveCreditedEarlyMinutes(),
+            ];
+
+            $proposed = $request->proposed_values ?? [];
+            $proposed['overtime_request_scope'] = $request->overtime_request_scope;
+            $proposed['approved_overtime_scope'] = $decision['approved_overtime_scope'];
+            $proposed['credited_overtime'] = $decision['credited_overtime'];
+            $proposed['credited_early_clock_in'] = $decision['credited_early_clock_in'];
+            $proposed['overtime_edited_by_id'] = $identity['actor_id'];
+            $proposed['overtime_edited_by_name'] = $identity['actor_name'];
+            $proposed['overtime_edited_at'] = now()->toDateTimeString();
+
+            $history = $request->approvals_history ?? [];
+            $history[] = [
+                'level' => (int) $request->current_level,
+                'label' => (string) ($request->current_step_label ?? "Level {$request->current_level}"),
+                'action' => 'Overtime Edited',
+                'actor_id' => $identity['actor_id'],
+                'actor_name' => $identity['actor_name'],
+                'acted_at' => now()->toDateTimeString(),
+                'remarks' => $editRemarks !== '' ? $editRemarks : null,
+                'overtime_decision' => [
+                    'scope' => $decision['approved_overtime_scope'],
+                    'credited_overtime' => $decision['credited_overtime'],
+                    'credited_early_clock_in' => $decision['credited_early_clock_in'],
+                    'previous_scope' => $previousDecision['scope'],
+                    'previous_credited_overtime' => $previousDecision['credited_overtime'],
+                    'previous_credited_early_clock_in' => $previousDecision['credited_early_clock_in'],
+                ],
+            ];
+
+            $request->update([
+                'proposed_values' => $proposed,
+                'approvals_history' => $history,
+            ]);
+
+            return $request->refresh();
+        });
+    }
+
+    /**
+     * Validate and resolve the requested/edited overtime scope and credited minutes against actual calculated limits.
+     *
+     * @return array{approved_overtime_scope: string, credited_overtime: int, credited_early_clock_in: int}
+     */
+    protected function resolveAndValidateOvertimeDecision(
+        DtrChangeRequest $request,
+        array $data,
+        bool $requireProvided = false,
+    ): array {
+        $earlyCalculated = $request->actualEarlyClockInMinutes();
+        $otCalculated = $request->actualOvertimeMinutes();
+        $reqScope = $request->overtime_request_scope;
+        $proposed = $request->proposed_values ?? [];
+
+        if ($reqScope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY) {
+            if (filled($data['approved_overtime_scope'] ?? null)
+                && $data['approved_overtime_scope'] !== DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY) {
+                throw ValidationException::withMessages([
+                    'approved_overtime_scope' => 'This request only covers regular after-schedule overtime.',
+                ]);
+            }
+
+            $approvedScope = DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY;
+        } elseif ($reqScope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
+            if (filled($data['approved_overtime_scope'] ?? null)
+                && $data['approved_overtime_scope'] !== DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
+                throw ValidationException::withMessages([
+                    'approved_overtime_scope' => 'This request only covers early clock in overtime.',
+                ]);
+            }
+
+            $approvedScope = DtrChangeRequest::OT_SCOPE_EARLY_ONLY;
+        } else {
+            $candidateScope = $data['approved_overtime_scope']
+                ?? ($proposed['approved_overtime_scope'] ?? DtrChangeRequest::OT_SCOPE_BOTH);
+
+            if (! in_array($candidateScope, [
+                DtrChangeRequest::OT_SCOPE_BOTH,
+                DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+                DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
+            ], true)) {
+                throw ValidationException::withMessages([
+                    'approved_overtime_scope' => 'Select a valid overtime approval scope.',
+                ]);
+            }
+
+            $approvedScope = $candidateScope;
+        }
+
+        $needsOvertime = in_array($approvedScope, [
+            DtrChangeRequest::OT_SCOPE_BOTH,
+            DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+        ], true);
+
+        $needsEarly = in_array($approvedScope, [
+            DtrChangeRequest::OT_SCOPE_BOTH,
+            DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
+        ], true);
+
+        $creditedOt = 0;
+        if ($needsOvertime) {
+            if (array_key_exists('credited_overtime_minutes', $data)) {
+                $rawOt = $data['credited_overtime_minutes'];
+            } elseif (array_key_exists('credited_overtime', $data)) {
+                $rawOt = $data['credited_overtime'];
+            } elseif ($requireProvided) {
+                throw ValidationException::withMessages([
+                    'credited_overtime_minutes' => 'Credited overtime minutes are required.',
+                ]);
+            } else {
+                $storedOt = isset($proposed['credited_overtime']) && (int) $proposed['credited_overtime'] > 0
+                    ? (int) $proposed['credited_overtime']
+                    : null;
+                $rawOt = $storedOt ?? $otCalculated;
+            }
+
+            $creditedOt = $this->validateOvertimeComponentMinutes(
+                'credited_overtime_minutes',
+                'Credited overtime',
+                $otCalculated,
+                $rawOt,
+            );
+        }
+
+        $creditedEarly = 0;
+        if ($needsEarly) {
+            if (array_key_exists('credited_early_minutes', $data)) {
+                $rawEarly = $data['credited_early_minutes'];
+            } elseif (array_key_exists('credited_early_clock_in', $data)) {
+                $rawEarly = $data['credited_early_clock_in'];
+            } elseif ($requireProvided) {
+                throw ValidationException::withMessages([
+                    'credited_early_minutes' => 'Credited early clock in minutes are required.',
+                ]);
+            } else {
+                $storedEarly = isset($proposed['credited_early_clock_in']) && (int) $proposed['credited_early_clock_in'] > 0
+                    ? (int) $proposed['credited_early_clock_in']
+                    : null;
+                $rawEarly = $storedEarly ?? $earlyCalculated;
+            }
+
+            $creditedEarly = $this->validateOvertimeComponentMinutes(
+                'credited_early_minutes',
+                'Credited early clock in',
+                $earlyCalculated,
+                $rawEarly,
+            );
+        }
+
+        return [
+            'approved_overtime_scope' => $approvedScope,
+            'credited_overtime' => $creditedOt,
+            'credited_early_clock_in' => $creditedEarly,
+        ];
+    }
+
+    protected function validateOvertimeComponentMinutes(
+        string $field,
+        string $label,
+        int $maxActual,
+        mixed $rawValue,
+    ): int {
+        if (is_bool($rawValue) || $rawValue === null) {
+            throw ValidationException::withMessages([
+                $field => "{$label} is required.",
+            ]);
+        }
+
+        if (is_int($rawValue)) {
+            $minutes = $rawValue;
+        } elseif (is_float($rawValue)) {
+            if ((float) $rawValue !== (float) ((int) $rawValue)) {
+                throw ValidationException::withMessages([
+                    $field => "{$label} must be a whole number of minutes.",
+                ]);
+            }
+            $minutes = (int) $rawValue;
+        } elseif (is_string($rawValue)) {
+            $trimmed = trim($rawValue);
+            if ($trimmed === '') {
+                throw ValidationException::withMessages([
+                    $field => "{$label} is required.",
+                ]);
+            }
+            if (preg_match('/^-?\d+$/', $trimmed) !== 1) {
+                throw ValidationException::withMessages([
+                    $field => "{$label} must be a whole number of minutes.",
+                ]);
+            }
+            $minutes = (int) $trimmed;
+        } else {
+            throw ValidationException::withMessages([
+                $field => "{$label} must be a whole number of minutes.",
+            ]);
+        }
+
+        if ($minutes > $maxActual) {
+            throw ValidationException::withMessages([
+                $field => "{$label} cannot exceed the actual {$maxActual} minutes.",
+            ]);
+        }
+
+        if ($minutes < OvertimeApprovalService::MINIMUM_MINUTES) {
+            throw ValidationException::withMessages([
+                $field => "{$label} must be at least ".OvertimeApprovalService::MINIMUM_MINUTES.' minutes.',
+            ]);
+        }
+
+        return $minutes;
+    }
+
+    /**
      * Approve the change request at the current level.
      */
     public function approve(
@@ -1266,51 +1534,25 @@ class DtrChangeRequestService
             $proposed = $request->proposed_values ?? [];
 
             if ($request->is_overtime_type) {
-                $targetRecord = $request->targetDtrRecord();
-                $earlyCalculated = max(0, (int) ($request->original_values['early_clock_in'] ?? $targetRecord?->early_clock_in ?? 0));
-                $otCalculated = max(0, (int) ($request->original_values['overtime'] ?? $targetRecord?->overtime ?? 0));
-                $reqScope = $request->overtime_request_scope;
+                $previousScope = $request->effectiveOvertimeScope();
+                $previousOt = $request->effectiveCreditedOvertimeMinutes();
+                $previousEarly = $request->effectiveCreditedEarlyMinutes();
 
-                if ($reqScope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY) {
-                    $approvedScope = DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY;
-                    $creditedOt = isset($approvalData['credited_overtime_minutes'])
-                        ? (int) $approvalData['credited_overtime_minutes']
-                        : ($proposed['credited_overtime'] ?? $otCalculated);
-                    $creditedEarly = 0;
-                } elseif ($reqScope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
-                    $approvedScope = DtrChangeRequest::OT_SCOPE_EARLY_ONLY;
-                    $creditedEarly = isset($approvalData['credited_early_minutes'])
-                        ? (int) $approvalData['credited_early_minutes']
-                        : ($proposed['credited_early_clock_in'] ?? $earlyCalculated);
-                    $creditedOt = 0;
-                } else {
-                    $approvedScope = $approvalData['approved_overtime_scope']
-                        ?? ($proposed['approved_overtime_scope'] ?? DtrChangeRequest::OT_SCOPE_BOTH);
+                $decision = $this->resolveAndValidateOvertimeDecision($request, $approvalData, requireProvided: false);
+                $proposed['overtime_request_scope'] = $request->overtime_request_scope;
+                $proposed['approved_overtime_scope'] = $decision['approved_overtime_scope'];
+                $proposed['credited_overtime'] = $decision['credited_overtime'];
+                $proposed['credited_early_clock_in'] = $decision['credited_early_clock_in'];
 
-                    if ($approvedScope === DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY) {
-                        $creditedOt = isset($approvalData['credited_overtime_minutes'])
-                            ? (int) $approvalData['credited_overtime_minutes']
-                            : ($proposed['credited_overtime'] ?? $otCalculated);
-                        $creditedEarly = 0;
-                    } elseif ($approvedScope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
-                        $creditedEarly = isset($approvalData['credited_early_minutes'])
-                            ? (int) $approvalData['credited_early_minutes']
-                            : ($proposed['credited_early_clock_in'] ?? $earlyCalculated);
-                        $creditedOt = 0;
-                    } else {
-                        $approvedScope = DtrChangeRequest::OT_SCOPE_BOTH;
-                        $creditedOt = isset($approvalData['credited_overtime_minutes'])
-                            ? (int) $approvalData['credited_overtime_minutes']
-                            : ($proposed['credited_overtime'] ?? $otCalculated);
-                        $creditedEarly = isset($approvalData['credited_early_minutes'])
-                            ? (int) $approvalData['credited_early_minutes']
-                            : ($proposed['credited_early_clock_in'] ?? $earlyCalculated);
-                    }
+                if (
+                    $decision['approved_overtime_scope'] !== $previousScope
+                    || $decision['credited_overtime'] !== $previousOt
+                    || $decision['credited_early_clock_in'] !== $previousEarly
+                ) {
+                    $proposed['overtime_edited_by_id'] = $identity['actor_id'];
+                    $proposed['overtime_edited_by_name'] = $identity['actor_name'];
+                    $proposed['overtime_edited_at'] = now()->toDateTimeString();
                 }
-
-                $proposed['approved_overtime_scope'] = $approvedScope;
-                $proposed['credited_overtime'] = $creditedOt;
-                $proposed['credited_early_clock_in'] = $creditedEarly;
             }
 
             $isHrStage = $request->isCurrentStepHr();
@@ -1519,21 +1761,8 @@ class DtrChangeRequestService
         // 1. Overtime Approval Request
         if ($request->is_overtime_type) {
             $targetRecord = $request->targetDtrRecord();
-            $scope = $request->proposed_values['approved_overtime_scope']
-                ?? $request->overtime_request_scope;
-
-            $earlyCalculated = max(0, (int) ($request->original_values['early_clock_in'] ?? $targetRecord?->early_clock_in ?? 0));
-            $otCalculated = max(0, (int) ($request->original_values['overtime'] ?? $targetRecord?->overtime ?? 0));
-
-            $creditedOt = match ($scope) {
-                DtrChangeRequest::OT_SCOPE_EARLY_ONLY => 0,
-                default => (int) ($request->proposed_values['credited_overtime'] ?? $otCalculated),
-            };
-
-            $creditedEarly = match ($scope) {
-                DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => 0,
-                default => (int) ($request->proposed_values['credited_early_clock_in'] ?? $earlyCalculated),
-            };
+            $creditedOt = $request->effectiveCreditedOvertimeMinutes();
+            $creditedEarly = $request->effectiveCreditedEarlyMinutes();
 
             if ($targetRecord instanceof EmployeeVisibleDtr) {
                 if (app(OvertimeApprovalService::class)->hasApprovableOvertime($targetRecord)) {
@@ -1545,9 +1774,10 @@ class DtrChangeRequestService
                 } else {
                     $baseCreditedMinutes = max(0, (int) $targetRecord->credited_work_hrs - (int) $targetRecord->credited_overtime);
                     $totalCredited = $creditedOt + $creditedEarly;
+                    $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
                     $targetRecord->forceFill([
-                        'early_clock_in_approved' => $creditedEarly >= 30,
-                        'overtime_approved' => $creditedOt >= 30,
+                        'early_clock_in_approved' => $creditedEarly >= $minMinutes,
+                        'overtime_approved' => $creditedOt >= $minMinutes,
                         'overtime_status' => 'Approved',
                         'credited_early_clock_in' => $creditedEarly,
                         'credited_overtime' => $totalCredited,
@@ -1576,9 +1806,10 @@ class DtrChangeRequestService
                 } else {
                     $baseCreditedMinutes = max(0, (int) $targetRecord->credited_work_hrs - (int) $targetRecord->credited_overtime);
                     $totalCredited = $creditedOt + $creditedEarly;
+                    $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
                     $targetRecord->forceFill([
-                        'early_clock_in_approved' => $creditedEarly >= 30,
-                        'overtime_approved' => $creditedOt >= 30,
+                        'early_clock_in_approved' => $creditedEarly >= $minMinutes,
+                        'overtime_approved' => $creditedOt >= $minMinutes,
                         'overtime_status' => 'Approved',
                         'credited_early_clock_in' => $creditedEarly,
                         'credited_overtime' => $totalCredited,
@@ -1988,7 +2219,8 @@ class DtrChangeRequestService
             );
         }
 
-        $hasPendingOvertime = (($calc['overtime'] ?? 0) >= 30) || (($calc['early_clock_in'] ?? 0) >= 30);
+        $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
+        $hasPendingOvertime = (($calc['overtime'] ?? 0) >= $minMinutes) || (($calc['early_clock_in'] ?? 0) >= $minMinutes);
         $overtimeStatus = $record->overtime_status === 'Approved'
             ? ($hasPendingOvertime ? 'Approved' : 'n/a')
             : ($calc['overtime_status'] ?? ($hasPendingOvertime ? 'Pending' : 'n/a'));

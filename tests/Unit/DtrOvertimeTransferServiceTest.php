@@ -45,27 +45,28 @@ class DtrOvertimeTransferServiceTest extends TestCase
     {
         return [
             'no overtime' => [0, 0, 'n/a', 'n/a', 0, 0, 'n/a', false, false],
-            'early pending' => [30, 0, 'Pending', 'n/a', 0, 0, 'Pending', false, false],
-            'early approved' => [45, 0, 'Approved', 'n/a', 30, 0, 'Approved', true, false],
-            'early rejected' => [45, 0, 'Rejected', 'n/a', 0, 0, 'Rejected', false, false],
+            'below threshold' => [45, 59, 'n/a', 'n/a', 0, 0, 'n/a', false, false],
+            'early pending' => [60, 0, 'Pending', 'n/a', 0, 0, 'Pending', false, false],
+            'early approved' => [75, 0, 'Approved', 'n/a', 60, 0, 'Approved', true, false],
+            'early rejected' => [75, 0, 'Rejected', 'n/a', 0, 0, 'Rejected', false, false],
             'overtime pending' => [0, 60, 'n/a', 'Pending', 0, 0, 'Pending', false, false],
-            'overtime approved' => [0, 60, 'n/a', 'Approved', 0, 45, 'Approved', false, true],
+            'overtime approved' => [0, 90, 'n/a', 'Approved', 0, 75, 'Approved', false, true],
             'overtime rejected' => [0, 60, 'n/a', 'Rejected', 0, 0, 'Rejected', false, false],
-            'both approved' => [45, 60, 'Approved', 'Approved', 30, 45, 'Approved', true, true],
-            'early approved and overtime pending' => [45, 60, 'Approved', 'Pending', 30, 0, 'Pending', true, false],
+            'both approved' => [75, 90, 'Approved', 'Approved', 60, 75, 'Approved', true, true],
+            'early approved and overtime pending' => [75, 90, 'Approved', 'Pending', 60, 0, 'Pending', true, false],
         ];
     }
 
     public function test_export_contains_independent_approval_and_credit_fields(): void
     {
         $record = new Dtr([
-            'early_clock_in' => 45,
-            'overtime' => 60,
+            'early_clock_in' => 75,
+            'overtime' => 90,
             'early_clock_in_approved' => true,
             'overtime_approved' => true,
             'overtime_status' => OvertimeApprovalService::STATUS_APPROVED,
-            'credited_early_clock_in' => 30,
-            'credited_overtime' => 75,
+            'credited_early_clock_in' => 60,
+            'credited_overtime' => 135,
         ]);
 
         $payload = app(DtrOvertimeTransferService::class)->exportPayload($record);
@@ -74,13 +75,13 @@ class DtrOvertimeTransferServiceTest extends TestCase
         $this->assertSame(1, $payload['hris_transfer_version']);
         $this->assertSame('Approved', $payload['early_overtime_status']);
         $this->assertSame('Approved', $payload['after_overtime_status']);
-        $this->assertSame(30, $payload['credited_early_overtime_minutes']);
-        $this->assertSame(45, $payload['credited_overtime_minutes']);
+        $this->assertSame(60, $payload['credited_early_overtime_minutes']);
+        $this->assertSame(75, $payload['credited_overtime_minutes']);
     }
 
     public function test_plain_biometric_payload_keeps_normal_calculation_behavior(): void
     {
-        $calculation = $this->calculation(45, 60);
+        $calculation = $this->calculation(75, 90);
 
         $result = app(DtrOvertimeTransferService::class)
             ->applyImportedPayload([], $calculation);
@@ -94,13 +95,13 @@ class DtrOvertimeTransferServiceTest extends TestCase
         $this->expectException(DomainException::class);
 
         app(DtrOvertimeTransferService::class)->applyImportedPayload([
-            ...$this->payload(45, 60),
+            ...$this->payload(75, 90),
             'early_overtime_status' => 'Approved',
             'after_overtime_status' => 'Approved',
-            'credited_early_overtime_minutes' => 30,
-            'credited_overtime_minutes' => 45,
+            'credited_early_overtime_minutes' => 60,
+            'credited_overtime_minutes' => 75,
             ...$overrides,
-        ], $this->calculation(45, 60));
+        ], $this->calculation(75, 90));
     }
 
     public static function invalidPayloads(): array
@@ -108,13 +109,13 @@ class DtrOvertimeTransferServiceTest extends TestCase
         return [
             'unknown transfer version' => [['hris_transfer_version' => 99]],
             'invalid status' => [['after_overtime_status' => 'Confirmed']],
-            'mismatched calculated minutes' => [['overtime_minutes' => 61]],
+            'mismatched calculated minutes' => [['overtime_minutes' => 91]],
             'pending overtime cannot carry credit' => [[
                 'after_overtime_status' => 'Pending',
-                'credited_overtime_minutes' => 30,
+                'credited_overtime_minutes' => 60,
             ]],
-            'credit cannot exceed overtime' => [['credited_overtime_minutes' => 61]],
-            'positive credit below threshold' => [['credited_overtime_minutes' => 29]],
+            'credit cannot exceed overtime' => [['credited_overtime_minutes' => 91]],
+            'positive credit below threshold' => [['credited_overtime_minutes' => 59]],
         ];
     }
 
@@ -128,8 +129,8 @@ class DtrOvertimeTransferServiceTest extends TestCase
             'hris_transfer_version' => DtrOvertimeTransferService::VERSION,
             'early_overtime_minutes' => $earlyMinutes,
             'overtime_minutes' => $overtimeMinutes,
-            'early_overtime_status' => $earlyMinutes >= 30 ? 'Pending' : 'n/a',
-            'after_overtime_status' => $overtimeMinutes >= 30 ? 'Pending' : 'n/a',
+            'early_overtime_status' => $earlyMinutes >= 60 ? 'Pending' : 'n/a',
+            'after_overtime_status' => $overtimeMinutes >= 60 ? 'Pending' : 'n/a',
             'credited_early_overtime_minutes' => 0,
             'credited_overtime_minutes' => 0,
         ];
@@ -146,7 +147,7 @@ class DtrOvertimeTransferServiceTest extends TestCase
             'credited_early_clock_in' => 0,
             'credited_overtime' => 0,
             'credited_work_hrs' => 480,
-            'overtime_status' => ($earlyMinutes >= 30 || $overtimeMinutes >= 30) ? 'Pending' : 'n/a',
+            'overtime_status' => ($earlyMinutes >= 60 || $overtimeMinutes >= 60) ? 'Pending' : 'n/a',
             'early_clock_in_approved' => false,
             'overtime_approved' => false,
         ];

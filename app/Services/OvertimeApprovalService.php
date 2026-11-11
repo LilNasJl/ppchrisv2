@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class OvertimeApprovalService
 {
-    public const MINIMUM_MINUTES = 30;
+    public const MINIMUM_MINUTES = 60;
 
     public const STATUS_NOT_APPLICABLE = 'n/a';
 
@@ -72,14 +72,14 @@ class OvertimeApprovalService
             ->where(function ($query): void {
                 $query
                     ->where(function ($query): void {
-                        $query->where('overtime', '>=', 30)
+                        $query->where('overtime', '>=', self::MINIMUM_MINUTES)
                             ->where(function ($query): void {
                                 $query->where('overtime_approved', false)
                                     ->orWhereNull('overtime_approved');
                             });
                     })
                     ->orWhere(function ($query): void {
-                        $query->where('early_clock_in', '>=', 30)
+                        $query->where('early_clock_in', '>=', self::MINIMUM_MINUTES)
                             ->where(function ($query): void {
                                 $query->where('early_clock_in_approved', false)
                                     ->orWhereNull('early_clock_in_approved');
@@ -118,12 +118,12 @@ class OvertimeApprovalService
 
     public function hasEligibleOvertime(Dtr $record): bool
     {
-        return (int) $record->overtime >= 30;
+        return (int) $record->overtime >= self::MINIMUM_MINUTES;
     }
 
     public function hasEligibleEarlyOvertime(Dtr $record): bool
     {
-        return (int) $record->early_clock_in >= 30;
+        return (int) $record->early_clock_in >= self::MINIMUM_MINUTES;
     }
 
     public function hasApprovableOvertime(Dtr $record): bool
@@ -140,7 +140,7 @@ class OvertimeApprovalService
             (int) $record->credited_overtime - (int) $record->credited_early_clock_in,
         );
 
-        return (bool) $record->overtime_approved && $stored >= 30
+        return (bool) $record->overtime_approved && $stored >= self::MINIMUM_MINUTES
             ? min($calculated, $stored)
             : $calculated;
     }
@@ -150,7 +150,7 @@ class OvertimeApprovalService
         $calculated = max(0, (int) $record->early_clock_in);
         $stored = max(0, (int) $record->credited_early_clock_in);
 
-        return (bool) $record->early_clock_in_approved && $stored >= 30
+        return (bool) $record->early_clock_in_approved && $stored >= self::MINIMUM_MINUTES
             ? min($calculated, $stored)
             : $calculated;
     }
@@ -209,8 +209,8 @@ class OvertimeApprovalService
             $totalCreditedOvertime = $approvedOvertimeMinutes + $approvedEarlyMinutes;
 
             $record->forceFill([
-                'early_clock_in_approved' => $approved && $this->hasEligibleEarlyOvertime($record) && $approvedEarlyMinutes >= 30,
-                'overtime_approved' => $approved && $this->hasEligibleOvertime($record) && $approvedOvertimeMinutes >= 30,
+                'early_clock_in_approved' => $approved && $this->hasEligibleEarlyOvertime($record) && $approvedEarlyMinutes >= self::MINIMUM_MINUTES,
+                'overtime_approved' => $approved && $this->hasEligibleOvertime($record) && $approvedOvertimeMinutes >= self::MINIMUM_MINUTES,
                 'overtime_status' => $targetStatus,
                 'credited_early_clock_in' => $approvedEarlyMinutes,
                 'credited_overtime' => $totalCreditedOvertime,
@@ -262,7 +262,7 @@ class OvertimeApprovalService
         }
 
         if (! $this->hasApprovableOvertime($record)) {
-            throw new DomainException('Only early or after-schedule overtime of at least 30 minutes can be approved or rejected.');
+            throw new DomainException('Only early or after-schedule overtime of at least '.self::MINIMUM_MINUTES.' minutes can be approved or rejected.');
         }
 
         if ($targetStatus === self::STATUS_PENDING) {
@@ -295,8 +295,8 @@ class OvertimeApprovalService
 
     protected function validateComponent(string $label, ?int $creditedMinutes, int $calculatedMinutes): void
     {
-        if ($creditedMinutes === null || $creditedMinutes < 0 || ($creditedMinutes > 0 && $creditedMinutes < 30)) {
-            throw new DomainException("{$label} must be 0 or at least 30 minutes.");
+        if ($creditedMinutes === null || $creditedMinutes < 0 || ($creditedMinutes > 0 && $creditedMinutes < self::MINIMUM_MINUTES)) {
+            throw new DomainException("{$label} must be 0 or at least ".self::MINIMUM_MINUTES.' minutes.');
         }
 
         if ($creditedMinutes > $calculatedMinutes) {

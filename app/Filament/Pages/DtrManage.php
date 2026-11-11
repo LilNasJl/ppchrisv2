@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrDayPartService;
+use App\Services\OvertimeApprovalService;
 use App\Services\SaturdayWfhDtrService;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Actions\Action;
@@ -217,7 +218,7 @@ class DtrManage extends Page
             });
 
         $pendingOtCount = $records->filter(fn (DtrModel $r): bool => $r->overtime_status === 'Pending'
-            && (((int) $r->overtime >= 30) || ((int) $r->early_clock_in >= 30)))->count();
+            && (((int) $r->overtime >= OvertimeApprovalService::MINIMUM_MINUTES) || ((int) $r->early_clock_in >= OvertimeApprovalService::MINIMUM_MINUTES)))->count();
 
         return [
             'total_entries' => $records->count(),

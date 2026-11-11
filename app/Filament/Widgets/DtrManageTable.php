@@ -423,7 +423,8 @@ class DtrManageTable extends BaseWidget
                             ->default(fn (ModelsDtr $record): int => app(OvertimeApprovalService::class)
                                 ->defaultCreditedEarlyOvertime($record))
                             ->helperText(fn (ModelsDtr $record): string => sprintf(
-                                'Enter 0 for no credit, or a whole number from 30 to %d minutes.',
+                                'Enter 0 for no credit, or a whole number from %d to %d minutes.',
+                                OvertimeApprovalService::MINIMUM_MINUTES,
                                 (int) $record->early_clock_in,
                             )),
 
@@ -440,7 +441,8 @@ class DtrManageTable extends BaseWidget
                             ->default(fn (ModelsDtr $record): int => app(OvertimeApprovalService::class)
                                 ->defaultCreditedOvertime($record))
                             ->helperText(fn (ModelsDtr $record): string => sprintf(
-                                'Enter 0 for no credit, or a whole number from 30 to %d minutes.',
+                                'Enter 0 for no credit, or a whole number from %d to %d minutes.',
+                                OvertimeApprovalService::MINIMUM_MINUTES,
                                 (int) $record->overtime,
                             )),
                     ])

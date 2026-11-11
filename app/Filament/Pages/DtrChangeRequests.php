@@ -7,6 +7,7 @@ use App\Models\DtrChangeRequest;
 use App\Models\PayrollPeriod;
 use App\Models\User;
 use App\Services\DtrChangeRequestService;
+use App\Services\OvertimeApprovalService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -21,6 +22,8 @@ use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
@@ -29,6 +32,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema as SchemaFacade;
@@ -101,6 +105,11 @@ class DtrChangeRequests extends Page implements HasTable
                 ->badgeColor('gray')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', DtrChangeRequest::STATUS_CANCELLED)),
 
+            'voided' => Tab::make('Voided')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_VOIDED))
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', DtrChangeRequest::STATUS_VOIDED)),
+
             'awaiting_approvers' => Tab::make('Awaiting Workflow Approvers')
                 ->badge(fn (): ?int => $this->getTabCount('awaiting_approvers'))
                 ->badgeColor('info')
@@ -159,7 +168,7 @@ class DtrChangeRequests extends Page implements HasTable
         return $table
             ->query(fn (): Builder => $this->modifyQueryWithActiveTab(
                 DtrChangeRequest::query()
-                    ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee'])
+                    ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee', 'employeeVisibleDtr', 'dtr'])
                     ->latest('created_at')
             ))
             ->heading('HR Final Approval – D.T.R Change Requests')
@@ -219,7 +228,7 @@ class DtrChangeRequests extends Page implements HasTable
                     ->color(fn (DtrChangeRequest $record): string => match ($record->status) {
                         DtrChangeRequest::STATUS_APPROVED => 'success',
                         DtrChangeRequest::STATUS_REJECTED => 'danger',
-                        DtrChangeRequest::STATUS_CANCELLED => 'gray',
+                        DtrChangeRequest::STATUS_CANCELLED, DtrChangeRequest::STATUS_VOIDED => 'gray',
                         default => 'warning',
                     })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction)),
@@ -606,14 +615,19 @@ class DtrChangeRequests extends Page implements HasTable
                                 ];
                             }
 
-                            $targetRecord = $record->targetDtrRecord();
-                            $earlyCalculated = max(0, (int) ($record->original_values['early_clock_in'] ?? $targetRecord?->early_clock_in ?? 0));
-                            $otCalculated = max(0, (int) ($record->original_values['overtime'] ?? $targetRecord?->overtime ?? 0));
+                            $earlyCalculated = $record->actualEarlyClockInMinutes();
+                            $otCalculated = $record->actualOvertimeMinutes();
                             $scope = $record->overtime_request_scope;
+                            $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
 
-                            $defaultApprovedScope = $record->proposed_values['approved_overtime_scope'] ?? DtrChangeRequest::OT_SCOPE_BOTH;
-                            $defaultOtMinutes = (int) ($record->proposed_values['credited_overtime'] ?? $otCalculated) ?: $otCalculated;
-                            $defaultEarlyMinutes = (int) ($record->proposed_values['credited_early_clock_in'] ?? $earlyCalculated) ?: $earlyCalculated;
+                            $proposed = $record->proposed_values ?? [];
+                            $defaultApprovedScope = $record->effectiveOvertimeScope();
+                            $defaultOtMinutes = isset($proposed['credited_overtime']) && (int) $proposed['credited_overtime'] > 0
+                                ? min($otCalculated, (int) $proposed['credited_overtime'])
+                                : $otCalculated;
+                            $defaultEarlyMinutes = isset($proposed['credited_early_clock_in']) && (int) $proposed['credited_early_clock_in'] > 0
+                                ? min($earlyCalculated, (int) $proposed['credited_early_clock_in'])
+                                : $earlyCalculated;
 
                             $components = [
                                 ViewField::make('overtime_approval_info')
@@ -632,67 +646,98 @@ class DtrChangeRequests extends Page implements HasTable
                                     ->label('Credited Overtime (Minutes)')
                                     ->numeric()
                                     ->integer()
-                                    ->minValue(30)
+                                    ->minValue($minMinutes)
                                     ->maxValue($otCalculated)
                                     ->default($defaultOtMinutes)
                                     ->required()
-                                    ->helperText(sprintf('Approve regular after-schedule overtime (30 to %d mins). Early clock in is excluded from this request.', $otCalculated));
+                                    ->validationMessages([
+                                        'min' => "Credited overtime must be at least {$minMinutes} minutes.",
+                                        'max' => "Credited overtime cannot exceed the actual {$otCalculated} minutes.",
+                                    ])
+                                    ->helperText(sprintf('Approve regular after-schedule overtime (%d to %d mins; cannot exceed %d mins actual). Early clock in is excluded.', $minMinutes, $otCalculated, $otCalculated));
                             } elseif ($scope === DtrChangeRequest::OT_SCOPE_EARLY_ONLY) {
                                 $components[] = TextInput::make('credited_early_minutes')
                                     ->label('Credited Early Clock In (Minutes)')
                                     ->numeric()
                                     ->integer()
-                                    ->minValue(30)
+                                    ->minValue($minMinutes)
                                     ->maxValue($earlyCalculated)
                                     ->default($defaultEarlyMinutes)
                                     ->required()
-                                    ->helperText(sprintf('Approve early clock in overtime (30 to %d mins). Regular overtime is excluded from this request.', $earlyCalculated));
+                                    ->validationMessages([
+                                        'min' => "Credited early clock in must be at least {$minMinutes} minutes.",
+                                        'max' => "Credited early clock in cannot exceed the actual {$earlyCalculated} minutes.",
+                                    ])
+                                    ->helperText(sprintf('Approve early clock in overtime (%d to %d mins; cannot exceed %d mins actual). Regular overtime is excluded.', $minMinutes, $earlyCalculated, $earlyCalculated));
                             } else {
                                 $components[] = Select::make('approved_overtime_scope')
                                     ->label('Select What to Approve')
                                     ->options([
-                                        DtrChangeRequest::OT_SCOPE_BOTH => sprintf('Both Early Clock In (%d mins) & Overtime (%d mins)', $earlyCalculated, $otCalculated),
-                                        DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => sprintf('Overtime Only (%d mins)', $otCalculated),
-                                        DtrChangeRequest::OT_SCOPE_EARLY_ONLY => sprintf('Early Clock In Only (%d mins)', $earlyCalculated),
+                                        DtrChangeRequest::OT_SCOPE_BOTH => sprintf('Both Early Clock In (%d mins actual) & Overtime (%d mins actual)', $earlyCalculated, $otCalculated),
+                                        DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => sprintf('Overtime Only (%d mins actual)', $otCalculated),
+                                        DtrChangeRequest::OT_SCOPE_EARLY_ONLY => sprintf('Early Clock In Only (%d mins actual)', $earlyCalculated),
                                     ])
                                     ->default($defaultApprovedScope)
                                     ->required()
                                     ->live()
+                                    ->afterStateUpdated(function (?string $state, Set $set, Get $get) use ($defaultEarlyMinutes, $defaultOtMinutes): void {
+                                        if (
+                                            in_array($state, [DtrChangeRequest::OT_SCOPE_BOTH, DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true)
+                                            && (blank($get('credited_early_minutes')) || (int) $get('credited_early_minutes') <= 0)
+                                        ) {
+                                            $set('credited_early_minutes', $defaultEarlyMinutes);
+                                        }
+
+                                        if (
+                                            in_array($state, [DtrChangeRequest::OT_SCOPE_BOTH, DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY], true)
+                                            && (blank($get('credited_overtime_minutes')) || (int) $get('credited_overtime_minutes') <= 0)
+                                        ) {
+                                            $set('credited_overtime_minutes', $defaultOtMinutes);
+                                        }
+                                    })
                                     ->helperText('Choose whether to approve both overtime components or only one of them.');
 
                                 $components[] = TextInput::make('credited_early_minutes')
                                     ->label('Credited Early Clock In (Minutes)')
                                     ->numeric()
                                     ->integer()
-                                    ->minValue(30)
+                                    ->minValue($minMinutes)
                                     ->maxValue($earlyCalculated)
                                     ->default($defaultEarlyMinutes)
-                                    ->visible(fn ($get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
+                                    ->visible(fn (Get $get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
                                         DtrChangeRequest::OT_SCOPE_BOTH,
                                         DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
                                     ], true))
-                                    ->required(fn ($get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
+                                    ->required(fn (Get $get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
                                         DtrChangeRequest::OT_SCOPE_BOTH,
                                         DtrChangeRequest::OT_SCOPE_EARLY_ONLY,
                                     ], true))
-                                    ->helperText(sprintf('Enter credited early minutes from 30 to %d.', $earlyCalculated));
+                                    ->validationMessages([
+                                        'min' => "Credited early clock in must be at least {$minMinutes} minutes.",
+                                        'max' => "Credited early clock in cannot exceed the actual {$earlyCalculated} minutes.",
+                                    ])
+                                    ->helperText(sprintf('Enter credited early minutes from %d to %d (cannot exceed actual).', $minMinutes, $earlyCalculated));
 
                                 $components[] = TextInput::make('credited_overtime_minutes')
                                     ->label('Credited Regular Overtime (Minutes)')
                                     ->numeric()
                                     ->integer()
-                                    ->minValue(30)
+                                    ->minValue($minMinutes)
                                     ->maxValue($otCalculated)
                                     ->default($defaultOtMinutes)
-                                    ->visible(fn ($get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
+                                    ->visible(fn (Get $get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
                                         DtrChangeRequest::OT_SCOPE_BOTH,
                                         DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
                                     ], true))
-                                    ->required(fn ($get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
+                                    ->required(fn (Get $get): bool => in_array($get('approved_overtime_scope') ?? $defaultApprovedScope, [
                                         DtrChangeRequest::OT_SCOPE_BOTH,
                                         DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
                                     ], true))
-                                    ->helperText(sprintf('Enter credited overtime minutes from 30 to %d.', $otCalculated));
+                                    ->validationMessages([
+                                        'min' => "Credited overtime must be at least {$minMinutes} minutes.",
+                                        'max' => "Credited overtime cannot exceed the actual {$otCalculated} minutes.",
+                                    ])
+                                    ->helperText(sprintf('Enter credited overtime minutes from %d to %d (cannot exceed actual).', $minMinutes, $otCalculated));
                             }
 
                             $components[] = Textarea::make('reviewer_remarks')
@@ -703,7 +748,7 @@ class DtrChangeRequests extends Page implements HasTable
 
                             return $components;
                         })
-                        ->action(function (DtrChangeRequest $record, array $data): void {
+                        ->action(function (DtrChangeRequest $record, array $data, Action $action): void {
                             $reviewer = $this->hrReviewer();
                             try {
                                 $record = app(DtrChangeRequestService::class)->approve(
@@ -718,12 +763,14 @@ class DtrChangeRequests extends Page implements HasTable
                                     ->title('D.T.R change request finalized & approved')
                                     ->success()
                                     ->send();
-                            } catch (\DomainException $e) {
+                            } catch (AuthorizationException|\DomainException $e) {
                                 Notification::make()
                                     ->title('Unable to Approve Request')
                                     ->body($e->getMessage())
                                     ->danger()
                                     ->send();
+
+                                $action->halt();
                             } catch (ValidationException $e) {
                                 $msg = collect($e->errors())->flatten()->first() ?: $e->getMessage();
                                 Notification::make()
@@ -731,6 +778,8 @@ class DtrChangeRequests extends Page implements HasTable
                                     ->body($msg)
                                     ->danger()
                                     ->send();
+
+                                $action->halt();
                             }
                         }),
 

@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Widgets\Concerns\HasDashboardDtrFilters;
+use App\Services\OvertimeApprovalService;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -38,14 +39,16 @@ class OvertimeLogHoursChart extends ChartWidget
             ->where('early_clock_in_approved', true)
             ->sum(DB::raw('CASE WHEN COALESCE(credited_early_clock_in, 0) > 0 THEN credited_early_clock_in ELSE COALESCE(early_clock_in, 0) END'));
 
+        $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
+
         $rejectedOvertime = (int) (clone $records)
             ->where('overtime_status', 'Rejected')
-            ->where('overtime', '>=', 30)
+            ->where('overtime', '>=', $minMinutes)
             ->sum('overtime');
 
         $rejectedEarlyTimeIn = (int) (clone $records)
             ->where('overtime_status', 'Rejected')
-            ->where('early_clock_in', '>=', 30)
+            ->where('early_clock_in', '>=', $minMinutes)
             ->sum('early_clock_in');
 
         $pendingRecords = (clone $records)
@@ -55,14 +58,14 @@ class OvertimeLogHoursChart extends ChartWidget
             });
 
         $pendingOvertime = (int) (clone $pendingRecords)
-            ->where('overtime', '>=', 30)
+            ->where('overtime', '>=', $minMinutes)
             ->where(function (Builder $query): void {
                 $query->where('overtime_approved', false)->orWhereNull('overtime_approved');
             })
             ->sum('overtime');
 
         $pendingEarlyTimeIn = (int) (clone $pendingRecords)
-            ->where('early_clock_in', '>=', 30)
+            ->where('early_clock_in', '>=', $minMinutes)
             ->where(function (Builder $query): void {
                 $query->where('early_clock_in_approved', false)->orWhereNull('early_clock_in_approved');
             })

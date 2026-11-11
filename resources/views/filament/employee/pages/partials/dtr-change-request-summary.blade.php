@@ -11,7 +11,8 @@
     
     $earlyOt = max(0, (int) ($record->early_clock_in ?? 0));
     $regularOt = max(0, (int) ($record->overtime ?? 0));
-    $otEligible = ($earlyOt >= 30 || $regularOt >= 30);
+    $otMinThreshold = \App\Services\OvertimeApprovalService::MINIMUM_MINUTES;
+    $otEligible = ($earlyOt >= $otMinThreshold || $regularOt >= $otMinThreshold);
     $otStatus = $record->overtime_status ?: 'None';
 
     $late = (int) ($record->late ?? 0);
@@ -327,8 +328,8 @@
                 <span class="cr-label">Early OT</span>
                 <div style="display:flex;align-items:center;gap:6px;">
                     <span class="cr-val mono">{{ $earlyOt }} mins</span>
-                    @if ($earlyOt >= 30)
-                        <span class="cr-pill success" style="font-size:9.5px;">&ge; 30m</span>
+                    @if ($earlyOt >= $otMinThreshold)
+                        <span class="cr-pill success" style="font-size:9.5px;">&ge; {{ $otMinThreshold }}m</span>
                     @endif
                 </div>
             </div>
@@ -336,8 +337,8 @@
                 <span class="cr-label">Regular OT</span>
                 <div style="display:flex;align-items:center;gap:6px;">
                     <span class="cr-val mono">{{ $regularOt }} mins</span>
-                    @if ($regularOt >= 30)
-                        <span class="cr-pill success" style="font-size:9.5px;">&ge; 30m</span>
+                    @if ($regularOt >= $otMinThreshold)
+                        <span class="cr-pill success" style="font-size:9.5px;">&ge; {{ $otMinThreshold }}m</span>
                     @endif
                 </div>
             </div>
@@ -364,7 +365,7 @@
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                    <strong>Eligible for Overtime Request:</strong> At least one overtime segment meets the required 30-minute policy threshold (Early OT: {{ $earlyOt }}m, Regular OT: {{ $regularOt }}m).
+                    <strong>Eligible for Overtime Request:</strong> At least one overtime segment meets the required {{ $otMinThreshold }}-minute (1-hour) policy threshold (Early OT: {{ $earlyOt }}m, Regular OT: {{ $regularOt }}m).
                     @if ($overtimeScope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
                         <div style="margin-top:3px;font-size:11px;color:#15803d;">Selected component: <strong>Overtime Only ({{ $regularOt }}m)</strong>. Early clock in will not be submitted for credit.</div>
                     @elseif ($overtimeScope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
@@ -380,7 +381,7 @@
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
                 </svg>
                 <div>
-                    <strong>Minimum Overtime Threshold Not Met:</strong> Company policy requires at least 30 minutes of Early OT or Regular OT to request overtime approval. Both current values (Early: {{ $earlyOt }}m, Regular: {{ $regularOt }}m) are below 30 minutes.
+                    <strong>Minimum Overtime Threshold Not Met:</strong> Company policy requires at least {{ $otMinThreshold }} minutes (1 hour) of Early OT or Regular OT to request overtime approval. Both current values (Early: {{ $earlyOt }}m, Regular: {{ $regularOt }}m) are below {{ $otMinThreshold }} minutes.
                 </div>
             </div>
         @endif

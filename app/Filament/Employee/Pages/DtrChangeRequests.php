@@ -109,6 +109,11 @@ class DtrChangeRequests extends Page implements HasTable
                 ->badgeColor('gray')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_CANCELLED)),
 
+            'voided' => Tab::make('Voided')
+                ->badge(fn (): ?int => $this->getTabCount(DtrChangeRequest::STATUS_VOIDED))
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_VOIDED)),
+
             'all' => Tab::make('All')
                 ->badge(fn (): ?int => $this->getTabCount(null)),
         ];
@@ -265,7 +270,7 @@ class DtrChangeRequests extends Page implements HasTable
                     ->color(fn (DtrChangeRequest $record): string => match ($record->status) {
                         DtrChangeRequest::STATUS_APPROVED => 'success',
                         DtrChangeRequest::STATUS_REJECTED => 'danger',
-                        DtrChangeRequest::STATUS_CANCELLED => 'gray',
+                        DtrChangeRequest::STATUS_CANCELLED, DtrChangeRequest::STATUS_VOIDED => 'gray',
                         default => 'warning',
                     })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction))

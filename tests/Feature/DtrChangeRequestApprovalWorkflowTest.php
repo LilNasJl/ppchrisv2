@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Employee\Pages\Station\ReviewDtrChangeRequests;
 use App\Filament\Employee\Widgets\StationDtrManageTable;
+use App\Filament\Pages\DtrChangeRequests as HrDtrChangeRequests;
 use App\Models\Branch;
 use App\Models\Dtr;
 use App\Models\DtrChangeRequest;
@@ -20,6 +21,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class TestStationDtrManageTable extends StationDtrManageTable
@@ -93,6 +95,23 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             $table->morphs('notifiable');
             $table->text('data');
             $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('action_histories', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('actor_id')->nullable();
+            $table->string('actor_name')->nullable();
+            $table->string('actor_role')->nullable();
+            $table->string('action');
+            $table->string('model_type')->nullable();
+            $table->unsignedBigInteger('model_id')->nullable();
+            $table->string('model_label')->nullable();
+            $table->string('record_label')->nullable();
+            $table->string('summary')->nullable();
+            $table->json('before_data')->nullable();
+            $table->json('after_data')->nullable();
+            $table->json('changed_data')->nullable();
             $table->timestamps();
         });
 
@@ -796,9 +815,9 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
     }
 
     /**
-     * Scenario 4: Valid Overtime Request (>= 30 mins)
-     * Early OT: 0, Overtime: 45.
-     * Approver can only approve/reject OT. DTR editing is not allowed.
+     * Scenario 4: Valid Overtime Request (>= 60 mins)
+     * Early OT: 0, Overtime: 75.
+     * Approver can approve/reject OT (within capped threshold). DTR punch editing is not allowed.
      */
     public function test_scenario_4_valid_overtime_request(): void
     {
@@ -811,11 +830,11 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'date_in' => '2026-09-05',
             'time_in' => '08:00 AM',
             'date_out' => '2026-09-05',
-            'time_out' => '05:45 PM',
+            'time_out' => '06:15 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'overtime' => 45,
+            'overtime' => 75,
             'early_clock_in' => 0,
             'overtime_approved' => false,
         ]);
@@ -823,7 +842,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $service = app(DtrChangeRequestService::class);
         $request = $service->submitFromDtr($employee, $dtr, [
             'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
-            'explanation' => 'Rendered 45 minutes OT assisting closing operations.',
+            'explanation' => 'Rendered 75 minutes OT assisting closing operations.',
         ]);
 
         $this->assertSame(DtrChangeRequest::TYPE_OVERTIME_APPROVAL, $request->request_type);
@@ -836,12 +855,12 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $dtr->refresh();
         $this->assertTrue((bool) $dtr->overtime_approved);
-        $this->assertSame(45, (int) $dtr->credited_overtime);
+        $this->assertSame(75, (int) $dtr->credited_overtime);
     }
 
     /**
-     * Scenario 5: Invalid Overtime Request (< 30 mins)
-     * Early OT: 10, Overtime: 20 -> Blocked by validation.
+     * Scenario 5: Invalid Overtime Request (< 60 mins)
+     * Early OT: 45, Overtime: 59 -> Blocked by 1-hour (60-min) validation.
      */
     public function test_scenario_5_invalid_overtime_request_blocked(): void
     {
@@ -852,14 +871,14 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-06',
-            'time_in' => '07:50 AM',
+            'time_in' => '07:15 AM',
             'date_out' => '2026-09-06',
-            'time_out' => '05:20 PM',
+            'time_out' => '05:59 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 10,
-            'overtime' => 20,
+            'early_clock_in' => 45,
+            'overtime' => 59,
         ]);
 
         $service = app(DtrChangeRequestService::class);
@@ -1200,13 +1219,13 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-07',
-            'time_in' => '07:15 AM',
+            'time_in' => '06:45 AM',
             'date_out' => '2026-09-07',
             'time_out' => '06:00 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 45,
+            'early_clock_in' => 75,
             'overtime' => 60,
             'overtime_approved' => false,
             'early_clock_in_approved' => false,
@@ -1223,14 +1242,14 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
 
         // Approver approves early clock in only
         $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Early clock in approved.', [
-            'credited_early_minutes' => 45,
+            'credited_early_minutes' => 75,
         ]);
 
         $dtr->refresh();
         $this->assertTrue((bool) $dtr->early_clock_in_approved);
-        $this->assertSame(45, (int) $dtr->credited_early_clock_in);
+        $this->assertSame(75, (int) $dtr->credited_early_clock_in);
         $this->assertFalse((bool) $dtr->overtime_approved);
-        $this->assertSame(45, (int) $dtr->credited_overtime);
+        $this->assertSame(75, (int) $dtr->credited_overtime);
     }
 
     /**
@@ -1245,13 +1264,13 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-08',
-            'time_in' => '07:15 AM',
+            'time_in' => '06:45 AM',
             'date_out' => '2026-09-08',
             'time_out' => '06:00 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 45,
+            'early_clock_in' => 75,
             'overtime' => 60,
             'overtime_approved' => false,
             'early_clock_in_approved' => false,
@@ -1269,15 +1288,15 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         // Approver approves both components
         $this->approveAndCompleteHrWhenPending($service, $request, $sic, 'Both approved.', [
             'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
-            'credited_early_minutes' => 45,
+            'credited_early_minutes' => 75,
             'credited_overtime_minutes' => 60,
         ]);
 
         $dtr->refresh();
         $this->assertTrue((bool) $dtr->early_clock_in_approved);
         $this->assertTrue((bool) $dtr->overtime_approved);
-        $this->assertSame(45, (int) $dtr->credited_early_clock_in);
-        $this->assertSame(105, (int) $dtr->credited_overtime);
+        $this->assertSame(75, (int) $dtr->credited_early_clock_in);
+        $this->assertSame(135, (int) $dtr->credited_overtime);
     }
 
     /**
@@ -1292,13 +1311,13 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-09',
-            'time_in' => '07:15 AM',
+            'time_in' => '06:45 AM',
             'date_out' => '2026-09-09',
             'time_out' => '06:00 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 45,
+            'early_clock_in' => 75,
             'overtime' => 60,
             'overtime_approved' => false,
             'early_clock_in_approved' => false,
@@ -1336,13 +1355,13 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-10',
-            'time_in' => '07:15 AM',
+            'time_in' => '06:45 AM',
             'date_out' => '2026-09-10',
             'time_out' => '06:00 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 45,
+            'early_clock_in' => 75,
             'overtime' => 60,
             'overtime_approved' => false,
             'early_clock_in_approved' => false,
@@ -1368,7 +1387,7 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
     }
 
     /**
-     * Scenario: Requesting overtime_only when regular OT < 30 is rejected by validation.
+     * Scenario: Requesting overtime_only when regular OT < 60 is rejected by validation.
      */
     public function test_overtime_request_scope_validation_prevents_ineligible_components(): void
     {
@@ -1379,19 +1398,19 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'payroll_period_id' => $period->id,
             'date_in' => '2026-09-13',
-            'time_in' => '07:15 AM',
+            'time_in' => '06:45 AM',
             'date_out' => '2026-09-13',
-            'time_out' => '05:15 PM',
+            'time_out' => '05:45 PM',
             'schedule_start' => '08:00 AM',
             'schedule_end' => '05:00 PM',
             'schedule_type' => 'Regular',
-            'early_clock_in' => 45,
-            'overtime' => 15,
+            'early_clock_in' => 75,
+            'overtime' => 45,
         ]);
 
         $service = app(DtrChangeRequestService::class);
 
-        // Attempting overtime_only when regular OT is only 15 mins
+        // Attempting overtime_only when regular OT is only 45 mins (< 60 mins)
         $this->expectException(ValidationException::class);
         $service->submitFromDtr($employee, $dtr, [
             'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
@@ -2352,5 +2371,645 @@ class DtrChangeRequestApprovalWorkflowTest extends TestCase
         $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
         $this->assertTrue((bool) $sicDtr->fresh()->overtime_approved);
         $this->assertSame(0, DtrChangeRequest::query()->pendingForHr()->count());
+    }
+
+    public function test_first_and_subsequent_non_hr_approvers_can_edit_overtime_request_within_actual_limit_and_persist_to_hr_finalization(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+        $hrUser = $this->hrReviewer();
+
+        $rcUser = User::query()->create([
+            'name' => 'Robert RC',
+            'email' => 'robert.rc@example.com',
+            'role' => 'employee',
+        ]);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'firstname' => 'Robert',
+            'lastname' => 'RC',
+            'company_id' => 'RC-101',
+            'branch_id' => $branch->id,
+        ]);
+
+        $amUser = User::query()->create([
+            'name' => 'Alice AM',
+            'email' => 'alice.am@example.com',
+            'role' => 'employee',
+        ]);
+        $am = Employee::query()->create([
+            'user_id' => $amUser->id,
+            'firstname' => 'Alice',
+            'lastname' => 'AreaMgr',
+            'company_id' => 'AM-101',
+            'branch_id' => $branch->id,
+        ]);
+
+        $workflow = LeaveApprovalWorkflow::query()->create([
+            'name' => '3-Level OT Edit Workflow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'Station In-Charge',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 2,
+            'label' => 'Regional Coordinator',
+            'approver_employee_id' => $rc->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 3,
+            'label' => 'Area Manager',
+            'approver_employee_id' => $am->id,
+        ]);
+
+        $visibleDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-10',
+            'time_in' => '06:30:00',
+            'date_out' => '2026-09-10',
+            'time_out' => '18:45:00',
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '17:00:00',
+            'schedule_type' => 'Regular',
+            'work_hrs' => 675,
+            'credited_work_hrs' => 480,
+            'early_clock_in' => 90,
+            'overtime' => 105,
+            'early_clock_in_approved' => false,
+            'overtime_approved' => false,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+        $request = $service->submitFromDtr($employee, $visibleDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'overtime_request_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+            'explanation' => 'Rendered early setup and post-shift closing overtime.',
+        ]);
+
+        $this->assertSame(1, $request->current_level);
+        $this->assertSame(4, $request->total_levels);
+        $this->assertTrue($request->canEditOvertimeBy($sicUser));
+        $this->assertFalse($request->canEditOvertimeBy($rcUser));
+        $this->assertFalse($request->canEditOvertimeBy($hrUser));
+
+        // Level 1 SIC edits overtime (without approving yet): 90m early -> 75m, 105m OT -> 90m
+        $request = $service->updateOvertimeRequest($request, $sic, [
+            'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+            'credited_early_minutes' => 75,
+            'credited_overtime_minutes' => 90,
+            'overtime_edit_remarks' => 'Capped to 75m early and 90m regular OT per shift log.',
+        ]);
+
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $request->status);
+        $this->assertSame(1, $request->current_level);
+        $this->assertSame($sic->id, $request->assigned_employee_id);
+        $this->assertSame(75, $request->effectiveCreditedEarlyMinutes());
+        $this->assertSame(90, $request->effectiveCreditedOvertimeMinutes());
+        $this->assertStringStartsWith('Edited:', (string) $request->overtime_summary_description);
+        $this->assertSame($sic->full_name, $request->proposed_values['overtime_edited_by_name'] ?? null);
+
+        $editHistory = collect($request->approvals_history)->last();
+        $this->assertSame('Overtime Edited', $editHistory['action']);
+        $this->assertSame(90, $editHistory['overtime_decision']['previous_credited_early_clock_in']);
+        $this->assertSame(105, $editHistory['overtime_decision']['previous_credited_overtime']);
+        $this->assertSame(75, $editHistory['overtime_decision']['credited_early_clock_in']);
+        $this->assertSame(90, $editHistory['overtime_decision']['credited_overtime']);
+
+        // Official DTR must not change while still pending
+        $visibleDtr->refresh();
+        $this->assertFalse((bool) $visibleDtr->overtime_approved);
+        $this->assertFalse((bool) $visibleDtr->early_clock_in_approved);
+        $this->assertSame(0, (int) $visibleDtr->credited_overtime);
+
+        // Level 1 SIC approves without overrides -> edited values and attribution carry to Level 2 RC
+        $request = $service->approve($request, $sic, 'SIC endorses edited OT.');
+        $this->assertSame(2, $request->current_level);
+        $this->assertSame($rc->id, $request->assigned_employee_id);
+        $this->assertSame(75, $request->effectiveCreditedEarlyMinutes());
+        $this->assertSame(90, $request->effectiveCreditedOvertimeMinutes());
+        $this->assertSame($sic->full_name, $request->proposed_values['overtime_edited_by_name'] ?? null);
+
+        // Level 2 RC can edit and switches scope to Overtime Only (80m OT, 0m Early)
+        $this->assertFalse($request->canEditOvertimeBy($sicUser));
+        $this->assertTrue($request->canEditOvertimeBy($rcUser));
+
+        $request = $service->updateOvertimeRequest($request, $rc, [
+            'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+            'credited_overtime_minutes' => 80,
+            'overtime_edit_remarks' => 'RC excludes early clock in and approves 80m regular OT.',
+        ]);
+
+        $this->assertSame(DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY, $request->effectiveOvertimeScope());
+        $this->assertSame(0, $request->effectiveCreditedEarlyMinutes());
+        $this->assertSame(80, $request->effectiveCreditedOvertimeMinutes());
+        $this->assertSame($rc->id, $request->proposed_values['overtime_edited_by_id'] ?? null);
+
+        // Level 2 RC approves without overrides -> advances to Level 3 AM
+        $request = $service->approve($request, $rc, 'RC endorses 80m regular OT.');
+        $this->assertSame(3, $request->current_level);
+        $this->assertSame($am->id, $request->assigned_employee_id);
+        $this->assertSame(DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY, $request->effectiveOvertimeScope());
+        $this->assertSame(80, $request->effectiveCreditedOvertimeMinutes());
+
+        // Level 3 AM edits back to Both (60m early, 70m OT) and approves to HR Final Approval
+        $this->assertTrue($request->canEditOvertimeBy($amUser));
+        $request = $service->updateOvertimeRequest($request, $am, [
+            'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+            'credited_early_minutes' => 60,
+            'credited_overtime_minutes' => 70,
+            'overtime_edit_remarks' => 'AM restores 60m early and adjusts post-shift OT to 70m.',
+        ]);
+
+        $request = $service->approve($request, $am, 'AM endorses 60m early + 70m OT.');
+        $this->assertSame(4, $request->current_level);
+        $this->assertTrue($request->isPendingHrApproval());
+        $this->assertFalse($request->canEditOvertimeBy($hrUser));
+
+        // HR cannot use edit-overtime endpoint even at HR stage
+        try {
+            $service->updateOvertimeRequest($request, $hrUser, [
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+                'credited_early_minutes' => 60,
+                'credited_overtime_minutes' => 70,
+            ]);
+            $this->fail('HR must not be allowed to use non-HR edit-overtime service.');
+        } catch (AuthorizationException $e) {
+            $this->assertTrue(true);
+        }
+
+        // HR approves without overrides -> applies AM's edited values (60m early + 70m OT = 130m credited)
+        $request = $service->approve($request, $hrUser, 'Approved by HR.');
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $request->status);
+
+        $visibleDtr->refresh();
+        $this->assertTrue((bool) $visibleDtr->early_clock_in_approved);
+        $this->assertTrue((bool) $visibleDtr->overtime_approved);
+        $this->assertSame('Approved', $visibleDtr->overtime_status);
+        $this->assertSame(60, (int) $visibleDtr->credited_early_clock_in);
+        $this->assertSame(130, (int) $visibleDtr->credited_overtime);
+        $this->assertSame(610, (int) $visibleDtr->credited_work_hrs);
+    }
+
+    public function test_overtime_edit_and_approval_enforce_actual_overtime_cap_and_minimum_threshold(): void
+    {
+        [$employee, $branch, $period, $sic] = $this->setupEmployeeAndBranch();
+
+        $visibleDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-11',
+            'time_in' => '04:15:00',
+            'date_out' => '2026-09-11',
+            'time_out' => '13:45:00',
+            'schedule_start' => '04:30:00',
+            'schedule_end' => '12:30:00',
+            'schedule_type' => 'Shift1',
+            'early_clock_in' => 14,
+            'overtime' => 75,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+        $request = $service->submitFromDtr($employee, $visibleDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'overtime_request_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+            'explanation' => '75 mins regular OT.',
+        ]);
+
+        // 1. Reject minutes exceeding actual overtime (76 > 75)
+        try {
+            $service->updateOvertimeRequest($request, $sic, [
+                'credited_overtime_minutes' => 76,
+            ]);
+            $this->fail('Editing overtime above actual D.T.R overtime must fail.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('cannot exceed the actual 75 minutes', collect($e->errors())->flatten()->first());
+        }
+
+        // 2. Same actual cap must hold during approve()
+        try {
+            $service->approve($request, $sic, 'Trying to over-credit.', [
+                'credited_overtime_minutes' => 76,
+            ]);
+            $this->fail('Approving overtime above actual D.T.R overtime must fail.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('cannot exceed the actual 75 minutes', collect($e->errors())->flatten()->first());
+        }
+
+        // 3. Reject below 60-minute policy minimum (59 < 60)
+        try {
+            $service->updateOvertimeRequest($request, $sic, [
+                'credited_overtime_minutes' => 59,
+            ]);
+            $this->fail('Editing overtime below 60 minutes must fail.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('at least 60 minutes', collect($e->errors())->flatten()->first());
+        }
+
+        // 4. Reject non-integer values
+        try {
+            $service->updateOvertimeRequest($request, $sic, [
+                'credited_overtime_minutes' => '65.5',
+            ]);
+            $this->fail('Decimal overtime minutes must fail.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('whole number', collect($e->errors())->flatten()->first());
+        }
+
+        // 5. Reject switching scope on an overtime_only request
+        try {
+            $service->updateOvertimeRequest($request, $sic, [
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+                'credited_overtime_minutes' => 70,
+            ]);
+            $this->fail('Switching scope on Overtime Only request must fail.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('regular after-schedule overtime', collect($e->errors())->flatten()->first());
+        }
+
+        // 6. Exact boundaries (60 and 75) succeed
+        $request = $service->updateOvertimeRequest($request, $sic, [
+            'credited_overtime_minutes' => 60,
+        ]);
+        $this->assertSame(60, $request->effectiveCreditedOvertimeMinutes());
+
+        $request = $service->updateOvertimeRequest($request, $sic, [
+            'credited_overtime_minutes' => 75,
+        ]);
+        $this->assertSame(75, $request->effectiveCreditedOvertimeMinutes());
+    }
+
+    public function test_overtime_edit_authorization_blocks_hr_wrong_level_self_locked_and_non_overtime_requests(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+        $hrUser = $this->hrReviewer();
+
+        $rcUser = User::query()->create(['name' => 'Rachel RC', 'role' => 'employee']);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'firstname' => 'Rachel',
+            'lastname' => 'RC',
+            'company_id' => 'RC-201',
+            'branch_id' => $branch->id,
+        ]);
+
+        $workflow = LeaveApprovalWorkflow::query()->create([
+            'name' => '2-Level OT Auth Test',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'SIC',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 2,
+            'label' => 'RC',
+            'approver_employee_id' => $rc->id,
+        ]);
+
+        $visibleDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-12',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-09-12',
+            'time_out' => '18:00:00',
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '17:00:00',
+            'schedule_type' => 'Regular',
+            'overtime' => 60,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+        $otRequest = $service->submitFromDtr($employee, $visibleDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'overtime_request_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+            'explanation' => 'One hour regular overtime.',
+        ]);
+
+        // Blocked: HR at Level 1, higher-level approver at Level 1, and requesting employee
+        $this->assertFalse($otRequest->canEditOvertimeBy($hrUser));
+        $this->assertFalse($otRequest->canEditOvertimeBy($rcUser));
+        $this->assertFalse($otRequest->canEditOvertimeBy($employee));
+
+        // Blocked: disabled approver account
+        $sicUser->update(['is_disabled' => true]);
+        $this->assertFalse($otRequest->fresh()->canEditOvertimeBy($sicUser->fresh()));
+        $sicUser->update(['is_disabled' => false]);
+
+        // Blocked: locked target DTR record
+        $visibleDtr->update(['is_locked' => true]);
+        $this->assertFalse($otRequest->fresh()->canEditOvertimeBy($sicUser->fresh()));
+        $visibleDtr->update(['is_locked' => false]);
+
+        // Blocked: locked payroll period
+        $period->update(['is_locked' => true]);
+        $this->assertFalse($otRequest->fresh()->canEditOvertimeBy($sicUser->fresh()));
+        $period->update(['is_locked' => false]);
+
+        // Non-overtime Forgot To Punch request is not editable via updateOvertimeRequest
+        $forgotDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-13',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-09-13',
+            'time_out' => null,
+            'schedule_type' => 'Regular',
+        ]);
+        $forgotRequest = $service->submitFromDtr($employee, $forgotDtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'Forgot to punch out.',
+        ]);
+
+        $this->assertFalse($forgotRequest->canEditOvertimeBy($sicUser));
+
+        try {
+            $service->updateOvertimeRequest($forgotRequest, $sic, [
+                'credited_overtime_minutes' => 60,
+            ]);
+            $this->fail('updateOvertimeRequest must reject non-overtime requests.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('Overtime Approval', collect($e->errors())->flatten()->first());
+        }
+    }
+
+    public function test_station_review_and_hr_livewire_modals_edit_overtime_and_enforce_cap(): void
+    {
+        [$employee, $branch, $period, $sic, $sicUser] = $this->setupEmployeeAndBranch();
+        $period->update([
+            'date_start' => now()->subDays(5)->toDateString(),
+            'date_end' => now()->addDays(10)->toDateString(),
+            'date_payout' => now()->addDays(15)->toDateString(),
+        ]);
+        $hrUser = $this->hrReviewer();
+
+        $rcUser = User::query()->create([
+            'name' => 'Robert RC',
+            'email' => 'robert.rc@example.com',
+            'role' => 'employee',
+        ]);
+        $rc = Employee::query()->create([
+            'user_id' => $rcUser->id,
+            'firstname' => 'Robert',
+            'lastname' => 'RC',
+            'company_id' => 'RC-301',
+            'branch_id' => $branch->id,
+        ]);
+
+        $workflow = LeaveApprovalWorkflow::query()->create([
+            'name' => '2-Level Livewire OT Edit Workflow',
+            'branch_id' => $branch->id,
+            'is_active' => true,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 1,
+            'label' => 'SIC TAGUM',
+            'approver_employee_id' => $sic->id,
+        ]);
+        LeaveApprovalLevel::query()->create([
+            'workflow_id' => $workflow->id,
+            'sequence' => 2,
+            'label' => 'RC TAGUM',
+            'approver_employee_id' => $rc->id,
+        ]);
+
+        // Overtime Only (75 mins actual) + Forgot To Punch request in the same table
+        $otOnlyDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-11',
+            'time_in' => '04:15:00',
+            'date_out' => '2026-09-11',
+            'time_out' => '13:45:00',
+            'schedule_start' => '04:30:00',
+            'schedule_end' => '12:30:00',
+            'schedule_type' => 'Shift1',
+            'early_clock_in' => 14,
+            'overtime' => 75,
+        ]);
+        $forgotDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-12',
+            'time_in' => '08:00:00',
+            'date_out' => '2026-09-12',
+            'time_out' => null,
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '17:00:00',
+            'schedule_type' => 'Regular',
+        ]);
+        $bothOtDtr = EmployeeVisibleDtr::query()->create([
+            'employee_id' => $employee->id,
+            'fingerprint_id' => '1001',
+            'branch_id' => $branch->id,
+            'payroll_period_id' => $period->id,
+            'date_in' => '2026-09-14',
+            'time_in' => '06:45:00',
+            'date_out' => '2026-09-14',
+            'time_out' => '18:30:00',
+            'schedule_start' => '08:00:00',
+            'schedule_end' => '17:00:00',
+            'schedule_type' => 'Regular',
+            'work_hrs' => 645,
+            'credited_work_hrs' => 480,
+            'early_clock_in' => 75,
+            'overtime' => 90,
+        ]);
+
+        $service = app(DtrChangeRequestService::class);
+        $otRequest = $service->submitFromDtr($employee, $otOnlyDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'overtime_request_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+            'explanation' => 'After-shift closing tasks.',
+        ]);
+        $forgotRequest = $service->submitFromDtr($employee, $forgotDtr, [
+            'request_type' => DtrChangeRequest::TYPE_FORGOT_TO_PUNCH,
+            'explanation' => 'Forgot afternoon punch.',
+        ]);
+        $bothRequest = $service->submitFromDtr($employee, $bothOtDtr, [
+            'request_type' => DtrChangeRequest::TYPE_OVERTIME_APPROVAL,
+            'overtime_request_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+            'explanation' => 'Early inventory + post-shift closing.',
+        ]);
+
+        // Level 1 SIC opens Station Change Requests page
+        Filament::setCurrentPanel(Filament::getPanel('employee'));
+        $this->actingAs($sicUser);
+
+        $sicPage = Livewire::actingAs($sicUser)
+            ->test(ReviewDtrChangeRequests::class)
+            ->assertSuccessful()
+            ->assertTableActionVisible('editOvertime', $otRequest)
+            ->assertTableActionVisible('editOvertime', $bothRequest)
+            ->assertTableActionHidden('editOvertime', $forgotRequest);
+
+        // Attempt to exceed 75m actual OT via Edit Overtime modal -> fails validation
+        $sicPage
+            ->mountTableAction('editOvertime', $otRequest)
+            ->fillForm([
+                'credited_overtime_minutes' => 80,
+            ])
+            ->callMountedTableAction()
+            ->assertHasTableActionErrors(['credited_overtime_minutes']);
+
+        $this->assertSame(75, $otRequest->fresh()->effectiveCreditedOvertimeMinutes());
+
+        // Valid Edit Overtime (65m of 75m) saves cleanly and keeps status Pending
+        $sicPage
+            ->fillForm([
+                'credited_overtime_minutes' => 65,
+                'overtime_edit_remarks' => 'Verified 65m OT only.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Overtime request updated')
+            ->assertSeeText('Edited: 65m (1.1h) (of 75m actual) Overtime');
+
+        $otRequest->refresh();
+        $this->assertSame(DtrChangeRequest::STATUS_PENDING, $otRequest->status);
+        $this->assertSame(65, $otRequest->effectiveCreditedOvertimeMinutes());
+
+        // View Details modal exposes Edit Overtime button and shows edited values
+        $sicPage
+            ->mountTableAction('view', $otRequest)
+            ->assertMountedActionModalSee([
+                'Edit Overtime',
+                'Edited Request: 65 mins (of 75m actual)',
+                'Actual D.T.R Limit (Max: 75 mins)',
+            ])
+            ->unmountTableAction();
+
+        // Clicking Edit Overtime from inside View Details modal also updates and closes modals cleanly
+        $sicPage
+            ->mountTableAction(['view', 'editOvertimeFromDetails'], $otRequest)
+            ->assertTableActionDataSet([
+                'credited_overtime_minutes' => 65,
+            ])
+            ->fillForm([
+                'credited_overtime_minutes' => 64,
+                'overtime_edit_remarks' => 'Adjusted from View Details modal.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Overtime request updated')
+            ->assertSet('mountedActions', []);
+
+        $this->assertSame(64, $otRequest->fresh()->effectiveCreditedOvertimeMinutes());
+
+        // Approve modal on $otRequest pre-fills edited 64m default
+        $sicPage
+            ->mountTableAction('approve', $otRequest)
+            ->assertTableActionDataSet([
+                'credited_overtime_minutes' => 64,
+            ])
+            ->unmountTableAction();
+
+        // Level 1 SIC approves $bothRequest choosing Overtime Only (70m) -> advances to Level 2 RC
+        $sicPage
+            ->mountTableAction('approve', $bothRequest)
+            ->fillForm([
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+                'credited_overtime_minutes' => 70,
+                'reviewer_remarks' => 'SIC endorses 70m regular OT.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('D.T.R change request approved');
+
+        $bothRequest->refresh();
+        $this->assertSame(2, $bothRequest->current_level);
+        $this->assertSame($rc->id, $bothRequest->assigned_employee_id);
+        $this->assertSame(DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY, $bothRequest->effectiveOvertimeScope());
+
+        // Level 2 RC opens Station Change Requests, switches scope back to Both in editOvertime modal
+        $rcPage = Livewire::actingAs($rcUser)
+            ->test(ReviewDtrChangeRequests::class)
+            ->assertSuccessful()
+            ->assertTableActionVisible('editOvertime', $bothRequest)
+            ->mountTableAction('editOvertime', $bothRequest)
+            ->assertTableActionDataSet([
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY,
+                'credited_overtime_minutes' => 70,
+            ])
+            ->set('mountedActions.0.data.approved_overtime_scope', DtrChangeRequest::OT_SCOPE_BOTH);
+
+        // Switching scope to Both restores early clock in default to actual (75m) instead of 0
+        $this->assertSame(75, (int) $rcPage->get('mountedActions.0.data.credited_early_minutes'));
+        $this->assertSame(70, (int) $rcPage->get('mountedActions.0.data.credited_overtime_minutes'));
+
+        // RC edits to 60m early & 70m OT, saves, then approves to HR
+        $rcPage
+            ->fillForm([
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+                'credited_early_minutes' => 60,
+                'credited_overtime_minutes' => 70,
+                'overtime_edit_remarks' => 'RC endorses 60m early + 70m OT.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Overtime request updated')
+            ->mountTableAction('approve', $bothRequest)
+            ->fillForm([
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+                'credited_early_minutes' => 60,
+                'credited_overtime_minutes' => 70,
+                'reviewer_remarks' => 'Forward to HR.',
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('D.T.R change request approved');
+
+        $bothRequest->refresh();
+        $this->assertTrue($bothRequest->isPendingHrApproval());
+
+        // HR opens HR D.T.R Change Requests page: no editOvertime action, edited defaults pre-filled in Approve
+        Filament::setCurrentPanel(Filament::getPanel('hr'));
+        $hrPage = Livewire::actingAs($hrUser)
+            ->test(HrDtrChangeRequests::class)
+            ->assertSuccessful()
+            ->assertTableActionDoesNotExist('editOvertime', record: $bothRequest)
+            ->mountTableAction('approve', $bothRequest)
+            ->assertTableActionDataSet([
+                'approved_overtime_scope' => DtrChangeRequest::OT_SCOPE_BOTH,
+                'credited_early_minutes' => 60,
+                'credited_overtime_minutes' => 70,
+            ])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('D.T.R change request finalized & approved');
+
+        $bothRequest->refresh();
+        $this->assertSame(DtrChangeRequest::STATUS_APPROVED, $bothRequest->status);
+
+        $bothOtDtr->refresh();
+        $this->assertTrue((bool) $bothOtDtr->early_clock_in_approved);
+        $this->assertTrue((bool) $bothOtDtr->overtime_approved);
+        $this->assertSame(60, (int) $bothOtDtr->credited_early_clock_in);
+        $this->assertSame(130, (int) $bothOtDtr->credited_overtime);
+        $this->assertSame(610, (int) $bothOtDtr->credited_work_hrs);
     }
 }

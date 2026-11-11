@@ -79,7 +79,8 @@ class DtrCalculator
             ? $baseWorkMinutes
             : max(0, $baseWorkMinutes + $earlyClockIn + $overtime);
         $creditedWorkMinutes = $baseWorkMinutes;
-        $hasPendingOvertime = $overtime >= 30 || $earlyClockIn >= 30;
+        $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
+        $hasPendingOvertime = $overtime >= $minMinutes || $earlyClockIn >= $minMinutes;
 
         return [
             'late' => $late,
@@ -127,7 +128,7 @@ class DtrCalculator
             'credited_overtime' => 0,
             'work_hrs' => $overtime,
             'credited_work_hrs' => 0,
-            'overtime_status' => $overtime >= 30 ? 'Pending' : 'n/a',
+            'overtime_status' => $overtime >= OvertimeApprovalService::MINIMUM_MINUTES ? 'Pending' : 'n/a',
             'early_clock_in_approved' => false,
             'overtime_approved' => false,
         ];

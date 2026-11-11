@@ -10,6 +10,7 @@ use App\Models\DtrSubmission;
 use App\Models\Employee;
 use App\Models\PayrollPeriod;
 use App\Services\DtrSynchronizationService;
+use App\Services\OvertimeApprovalService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -358,7 +359,7 @@ class Dtr extends Page implements HasForms
             $records = $fp !== '' ? ($dtrByFingerprint->get($fp) ?? collect()) : collect();
 
             $pendingOtCount = $records->filter(fn (DtrModel $r): bool => $r->overtime_status === 'Pending'
-                && (((int) $r->overtime >= 30) || ((int) $r->early_clock_in >= 30)))->count();
+                && (((int) $r->overtime >= OvertimeApprovalService::MINIMUM_MINUTES) || ((int) $r->early_clock_in >= OvertimeApprovalService::MINIMUM_MINUTES)))->count();
             $approvedOtCount = $records->filter(fn (DtrModel $r): bool => $r->overtime_status === 'Approved')->count();
 
             $manageUrl = $period

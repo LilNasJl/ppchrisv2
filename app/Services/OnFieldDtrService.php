@@ -11,6 +11,7 @@ use App\Models\PayrollPeriod;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -140,7 +141,7 @@ class OnFieldDtrService
                 'status' => DtrSubmission::STATUS_PENDING,
             ];
 
-            if (\Illuminate\Support\Facades\Schema::hasColumn('dtr_submissions', 'schedule_type')) {
+            if (Schema::hasColumn('dtr_submissions', 'schedule_type')) {
                 $attributes['schedule_type'] = $firstEntry['schedule_type'];
                 $attributes['schedule_start'] = $firstEntry['schedule_start'];
                 $attributes['schedule_end'] = $firstEntry['schedule_end'];
@@ -199,7 +200,7 @@ class OnFieldDtrService
 
             $firstOfficial = null;
             $firstVisible = null;
-            $hasDtrSourceId = \Illuminate\Support\Facades\Schema::hasColumn('employee_visible_dtrs', 'dtr_source_id');
+            $hasDtrSourceId = Schema::hasColumn('employee_visible_dtrs', 'dtr_source_id');
 
             foreach ($builtEntries as $item) {
                 $data = $item['data'];
@@ -258,6 +259,461 @@ class OnFieldDtrService
 
             return $submission->refresh();
         }, 3);
+    }
+
+    public function canHrEdit(DtrSubmission $submission): bool
+    {
+        if ($submission->submission_type !== DtrSubmission::TYPE_PROOF) {
+            return false;
+        }
+
+        if (! $submission->isApproved()) {
+            return true;
+        }
+
+        if ($submission->payrollPeriod?->is_locked) {
+            return false;
+        }
+
+        if (Dtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->where('is_locked', true)->exists()) {
+            return false;
+        }
+
+        if (EmployeeVisibleDtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->where('is_locked', true)->exists()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function updateByHr(DtrSubmission $submission, User $editor, array $data): DtrSubmission
+    {
+        $this->assertHrReviewer($editor);
+
+        return DB::transaction(function () use ($submission, $data): DtrSubmission {
+            $submission = DtrSubmission::query()
+                ->with(['submittedByEmployee.branch', 'employee.branch', 'payrollPeriod'])
+                ->lockForUpdate()
+                ->findOrFail($submission->getKey());
+
+            if ($submission->submission_type !== DtrSubmission::TYPE_PROOF) {
+                throw new \DomainException('This record is not an On Field D.T.R request.');
+            }
+
+            $existingOfficial = Dtr::query()
+                ->where('on_field_dtr_submission_id', $submission->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->values();
+
+            $existingVisible = EmployeeVisibleDtr::query()
+                ->where('on_field_dtr_submission_id', $submission->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->values();
+
+            $hasActiveGeneratedRows = $existingOfficial->isNotEmpty() || $existingVisible->isNotEmpty();
+
+            if (($submission->isApproved() || $hasActiveGeneratedRows) && (
+                $submission->payrollPeriod?->is_locked
+                || $existingOfficial->contains(fn (Dtr $r): bool => (bool) $r->is_locked || $r->isPayrollPeriodLocked())
+                || $existingVisible->contains(fn (EmployeeVisibleDtr $r): bool => (bool) $r->is_locked || $r->isPayrollPeriodLocked())
+            )) {
+                throw new \DomainException('This approved On Field D.T.R belongs to a locked payroll period and cannot be edited.');
+            }
+
+            $targetPeriodId = (int) ($data['payroll_period_id'] ?? $submission->payroll_period_id);
+            $period = PayrollPeriod::query()
+                ->lockForUpdate()
+                ->find($targetPeriodId);
+
+            if (! $period || $period->is_locked) {
+                throw ValidationException::withMessages([
+                    'payroll_period_id' => 'Select an open payroll period.',
+                ]);
+            }
+
+            $employee = $submission->employee ?: $submission->submittedByEmployee;
+
+            if (! $employee || $employee->trashed()) {
+                throw new \DomainException('The submitting employee is no longer active.');
+            }
+
+            $branch = $employee->branch ?: $submission->branch;
+
+            if (! $branch || $branch->trashed()) {
+                throw new \DomainException('The employee branch is no longer available.');
+            }
+
+            $normalizedEntries = $this->normalizeAndValidateSubmissionEntries($period, $employee, $branch, $data);
+            $firstEntry = $normalizedEntries[0];
+
+            $existingSubmissions = DtrSubmission::query()
+                ->where('submission_type', DtrSubmission::TYPE_PROOF)
+                ->whereKeyNot($submission->getKey())
+                ->whereIn('status', [DtrSubmission::STATUS_PENDING, DtrSubmission::STATUS_APPROVED])
+                ->where('employee_id', $employee->getKey())
+                ->where('payroll_period_id', $period->getKey())
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($normalizedEntries as $entry) {
+                $duplicateExists = $existingSubmissions->contains(function (DtrSubmission $existing) use ($entry): bool {
+                    foreach ($existing->normalizedEntries() as $existingEntry) {
+                        if (
+                            $existingEntry['date_in'] === $entry['date_in']
+                            && $existingEntry['time_in'] === $entry['time_in']
+                            && $existingEntry['date_out'] === $entry['date_out']
+                            && $existingEntry['time_out'] === $entry['time_out']
+                        ) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                });
+
+                if ($duplicateExists) {
+                    throw ValidationException::withMessages([
+                        'entries' => 'Another pending or approved On Field D.T.R request already exists for that date and time range.',
+                    ]);
+                }
+            }
+
+            $description = array_key_exists('description', $data)
+                ? trim((string) ($data['description'] ?? ''))
+                : trim((string) ($submission->description ?? ''));
+
+            $attributes = [
+                'payroll_period_id' => $period->getKey(),
+                'date_in' => $firstEntry['date_in'],
+                'time_in' => $firstEntry['time_in'],
+                'date_out' => $firstEntry['date_out'],
+                'time_out' => $firstEntry['time_out'],
+                'description' => $description === '' ? null : $description,
+                'comments' => $description === '' ? null : $description,
+            ];
+
+            if (array_key_exists('reviewer_remarks', $data)) {
+                $attributes['reviewer_remarks'] = $this->normalizeRemarks($data['reviewer_remarks']);
+            }
+
+            $newProofPath = is_string($data['proof_file'] ?? null) ? trim($data['proof_file']) : '';
+
+            if ($newProofPath !== '' && $newProofPath !== $submission->file_path) {
+                if (
+                    ! str($newProofPath)->startsWith('dtr-proof-submissions/')
+                    || ! Storage::disk('local')->exists($newProofPath)
+                ) {
+                    throw ValidationException::withMessages([
+                        'proof_file' => 'Upload a valid proof file.',
+                    ]);
+                }
+
+                $mimeType = Storage::disk('local')->mimeType($newProofPath) ?: null;
+
+                if (! in_array($mimeType, self::ALLOWED_PROOF_MIME_TYPES, true)) {
+                    throw ValidationException::withMessages([
+                        'proof_file' => 'The proof must be a PDF, PNG, or JPG file.',
+                    ]);
+                }
+
+                if (Storage::disk('local')->size($newProofPath) > 20 * 1024 * 1024) {
+                    throw ValidationException::withMessages([
+                        'proof_file' => 'The proof file must not exceed 20 MB.',
+                    ]);
+                }
+
+                $attributes['file_path'] = $newProofPath;
+                $attributes['file_name'] = basename($newProofPath);
+                $attributes['file_size'] = Storage::disk('local')->size($newProofPath);
+                $attributes['mime_type'] = $mimeType;
+                $attributes['file_hash'] = hash_file('sha256', Storage::disk('local')->path($newProofPath));
+            }
+
+            if (Schema::hasColumn('dtr_submissions', 'schedule_type')) {
+                $attributes['schedule_type'] = $firstEntry['schedule_type'];
+                $attributes['schedule_start'] = $firstEntry['schedule_start'];
+                $attributes['schedule_end'] = $firstEntry['schedule_end'];
+                $attributes['entries'] = $normalizedEntries;
+            }
+
+            $submission->forceFill($attributes)->save();
+            $submission->refresh();
+
+            if ($submission->isApproved() && $hasActiveGeneratedRows) {
+                $builtEntries = [];
+
+                foreach ($normalizedEntries as $index => $entry) {
+                    $dtrData = $this->buildDtrData($submission, $employee, $branch, $entry, $index);
+                    $this->assertNoAttendanceConflict($submission, $employee, $dtrData, excludeSelf: true);
+                    $builtEntries[] = [
+                        'data' => $dtrData,
+                        'entry' => $entry,
+                        'index' => $index,
+                    ];
+                }
+
+                $firstOfficial = null;
+                $firstVisible = null;
+                $hasDtrSourceId = Schema::hasColumn('employee_visible_dtrs', 'dtr_source_id');
+
+                foreach ($builtEntries as $i => $item) {
+                    $dtrData = $item['data'];
+                    /** @var Dtr|null $official */
+                    $official = $existingOfficial->get($i);
+
+                    if ($official) {
+                        $official->forceFill($dtrData)->save();
+                    } else {
+                        $official = Dtr::query()->create($dtrData);
+                    }
+
+                    $visibleAttributes = [
+                        ...$dtrData,
+                        'employee_id' => $employee->getKey(),
+                        'latest_source_row_hash' => $dtrData['source_row_hash'],
+                        'latest_source_payload' => $this->sourcePayload($submission, $item['entry'], $item['index']),
+                        'is_manually_edited' => false,
+                        'needs_review' => false,
+                    ];
+
+                    if ($hasDtrSourceId) {
+                        $visibleAttributes['dtr_source_id'] = $official->getKey();
+                    }
+
+                    /** @var EmployeeVisibleDtr|null $visible */
+                    $visible = $existingVisible->get($i);
+
+                    if ($visible) {
+                        $visible->forceFill($visibleAttributes)->save();
+                    } else {
+                        $visible = EmployeeVisibleDtr::query()->create($visibleAttributes);
+                    }
+
+                    $firstOfficial ??= $official;
+                    $firstVisible ??= $visible;
+                }
+
+                $existingOfficial->slice(count($builtEntries))->each->forceDelete();
+                $existingVisible->slice(count($builtEntries))->each->forceDelete();
+
+                $submission->forceFill([
+                    'generated_dtr_id' => $firstOfficial?->getKey(),
+                    'generated_visible_dtr_id' => $firstVisible?->getKey(),
+                ])->save();
+            }
+
+            return $submission->refresh();
+        }, 3);
+    }
+
+    public function reopen(DtrSubmission $submission, User $reviewer, ?string $remarks = null): DtrSubmission
+    {
+        $this->assertHrReviewer($reviewer);
+
+        return DB::transaction(function () use ($submission, $remarks): DtrSubmission {
+            $submission = DtrSubmission::query()
+                ->with(['payrollPeriod'])
+                ->lockForUpdate()
+                ->findOrFail($submission->getKey());
+
+            if ($submission->submission_type !== DtrSubmission::TYPE_PROOF) {
+                throw new \DomainException('This record is not an On Field D.T.R request.');
+            }
+
+            if (! $submission->isRejected()) {
+                throw new \DomainException('Only rejected On Field D.T.R requests can be reopened to Pending.');
+            }
+
+            if ($submission->payrollPeriod?->is_locked) {
+                throw new \DomainException('This request belongs to a locked payroll period and cannot be reopened.');
+            }
+
+            if ($submission->generated_dtr_id || $submission->generated_visible_dtr_id) {
+                throw new \DomainException('This request already has generated D.T.R records.');
+            }
+
+            $attributes = [
+                'status' => DtrSubmission::STATUS_PENDING,
+                'reviewed_by_user_id' => null,
+                'reviewed_at' => null,
+            ];
+
+            if ($remarks !== null) {
+                $attributes['reviewer_remarks'] = $this->normalizeRemarks($remarks);
+            }
+
+            $submission->forceFill($attributes)->save();
+
+            return $submission->refresh();
+        }, 3);
+    }
+
+    /**
+     * Resolve canonical schedule defaults for hydrating HR edit forms.
+     *
+     * @return array{schedule_type: string, schedule_start: string, schedule_end: string}
+     */
+    public function resolveEntryScheduleDefaults(DtrSubmission $submission, array $entry): array
+    {
+        $branch = $submission->employee?->branch ?: $submission->branch;
+        $employee = $submission->employee ?: $submission->submittedByEmployee;
+
+        $schedType = filled($entry['schedule_type'] ?? null)
+            ? $this->normalizeScheduleTypeLabel((string) $entry['schedule_type'])
+            : null;
+        $schedStart = filled($entry['schedule_start'] ?? null) ? (string) $entry['schedule_start'] : null;
+        $schedEnd = filled($entry['schedule_end'] ?? null) ? (string) $entry['schedule_end'] : null;
+
+        if (blank($schedType) && $employee && $branch && filled($entry['date_in'] ?? null) && filled($entry['time_in'] ?? null)) {
+            try {
+                $resolved = $this->resolveSchedule($employee, $branch, (string) $entry['date_in'], (string) $entry['time_in']);
+                $schedType = $resolved['type'];
+                $schedStart ??= $resolved['start'];
+                $schedEnd ??= $resolved['end'];
+            } catch (\Throwable) {
+                // Fallback below
+            }
+        }
+
+        $schedType ??= 'Regular';
+
+        if (blank($schedStart) || blank($schedEnd)) {
+            [$bStart, $bEnd] = app(DtrChangeRequestService::class)
+                ->resolveBranchScheduleTimes($branch, $schedType, formatForInput: false);
+
+            $schedStart = filled($schedStart) ? $schedStart : ($bStart ?: '08:00:00');
+            $schedEnd = filled($schedEnd) ? $schedEnd : ($bEnd ?: '17:00:00');
+        }
+
+        try {
+            $schedStart = Carbon::parse($schedStart)->format('H:i:s');
+        } catch (\Throwable) {
+            $schedStart = '08:00:00';
+        }
+
+        try {
+            $schedEnd = Carbon::parse($schedEnd)->format('H:i:s');
+        } catch (\Throwable) {
+            $schedEnd = '17:00:00';
+        }
+
+        return [
+            'schedule_type' => $schedType,
+            'schedule_start' => $schedStart,
+            'schedule_end' => $schedEnd,
+        ];
+    }
+
+    /**
+     * Non-mutating attendance preview for HR review cards.
+     *
+     * @return array{
+     *     punched_minutes: int,
+     *     credited_work_hrs: int,
+     *     work_hrs: int,
+     *     late: int,
+     *     undertime: int,
+     *     early_clock_in: int,
+     *     overtime: int,
+     *     overtime_status: string,
+     *     day_part: ?string,
+     *     day_part_label: ?string,
+     *     schedule_type: ?string,
+     *     schedule_start: ?string,
+     *     schedule_end: ?string,
+     *     schedule_resolved_from_branch: bool,
+     *     is_holiday: bool,
+     *     holiday_type: ?string,
+     *     has_conflict: bool,
+     *     conflict_message: ?string,
+     *     error: ?string,
+     * }
+     */
+    public function previewEntry(DtrSubmission $submission, array $entry, int $entryIndex = 0): array
+    {
+        $empty = [
+            'punched_minutes' => 0,
+            'credited_work_hrs' => 0,
+            'work_hrs' => 0,
+            'late' => 0,
+            'undertime' => 0,
+            'early_clock_in' => 0,
+            'overtime' => 0,
+            'overtime_status' => 'n/a',
+            'day_part' => null,
+            'day_part_label' => null,
+            'schedule_type' => $entry['schedule_type'] ?? $submission->schedule_type,
+            'schedule_start' => $entry['schedule_start'] ?? $submission->schedule_start,
+            'schedule_end' => $entry['schedule_end'] ?? $submission->schedule_end,
+            'schedule_resolved_from_branch' => false,
+            'is_holiday' => false,
+            'holiday_type' => null,
+            'has_conflict' => false,
+            'conflict_message' => null,
+            'error' => null,
+        ];
+
+        $employee = $submission->employee ?: $submission->submittedByEmployee;
+        $branch = $employee?->branch ?: $submission->branch;
+
+        if (! $employee || ! $branch) {
+            return [...$empty, 'error' => 'Employee or branch record is unavailable.'];
+        }
+
+        try {
+            $dateIn = Carbon::parse((string) ($entry['date_in'] ?? $submission->date_in))->toDateString();
+            $timeIn = Carbon::parse((string) ($entry['time_in'] ?? $submission->time_in))->format('H:i:s');
+            $dateOut = Carbon::parse((string) ($entry['date_out'] ?? $submission->date_out))->toDateString();
+            $timeOut = Carbon::parse((string) ($entry['time_out'] ?? $submission->time_out))->format('H:i:s');
+
+            $actualIn = Carbon::parse("{$dateIn} {$timeIn}");
+            $actualOut = Carbon::parse("{$dateOut} {$timeOut}");
+            $punchedMinutes = $actualOut->greaterThan($actualIn) ? (int) $actualIn->diffInMinutes($actualOut) : 0;
+
+            $dtrData = $this->buildDtrData($submission, $employee, $branch, $entry, $entryIndex);
+
+            $hasConflict = false;
+            $conflictMessage = null;
+
+            if ($submission->isPending() || $submission->isRejected()) {
+                try {
+                    $this->assertNoAttendanceConflict($submission, $employee, $dtrData, excludeSelf: true);
+                } catch (\DomainException $e) {
+                    $hasConflict = true;
+                    $conflictMessage = $e->getMessage();
+                }
+            }
+
+            $dayPartLabel = app(DtrDayPartService::class)->label($dtrData['day_part'] ?? null);
+
+            return [
+                'punched_minutes' => $punchedMinutes,
+                'credited_work_hrs' => (int) ($dtrData['credited_work_hrs'] ?? 0),
+                'work_hrs' => (int) ($dtrData['work_hrs'] ?? 0),
+                'late' => (int) ($dtrData['late'] ?? 0),
+                'undertime' => (int) ($dtrData['undertime'] ?? 0),
+                'early_clock_in' => (int) ($dtrData['early_clock_in'] ?? 0),
+                'overtime' => (int) ($dtrData['overtime'] ?? 0),
+                'overtime_status' => (string) ($dtrData['overtime_status'] ?? 'n/a'),
+                'day_part' => $dtrData['day_part'] ?? null,
+                'day_part_label' => $dayPartLabel,
+                'schedule_type' => $dtrData['schedule_type'] ?? ($entry['schedule_type'] ?? null),
+                'schedule_start' => $dtrData['schedule_start'] ?? ($entry['schedule_start'] ?? null),
+                'schedule_end' => $dtrData['schedule_end'] ?? ($entry['schedule_end'] ?? null),
+                'schedule_resolved_from_branch' => blank($entry['schedule_type'] ?? $submission->schedule_type ?? null),
+                'is_holiday' => (bool) ($dtrData['is_holiday'] ?? false),
+                'holiday_type' => $dtrData['holiday_type'] ?? null,
+                'has_conflict' => $hasConflict,
+                'conflict_message' => $conflictMessage,
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            return [...$empty, 'error' => $e->getMessage()];
+        }
     }
 
     public function deleteGeneratedDtr(Dtr $record, User $reviewer): void
@@ -652,19 +1108,37 @@ class OnFieldDtrService
         return $schedule;
     }
 
-    private function assertNoAttendanceConflict(DtrSubmission $submission, Employee $employee, array $data): void
-    {
-        $official = Dtr::query()
+    private function assertNoAttendanceConflict(
+        DtrSubmission $submission,
+        Employee $employee,
+        array $data,
+        bool $excludeSelf = false,
+    ): void {
+        $officialQuery = Dtr::query()
             ->where('payroll_period_id', $submission->payroll_period_id)
             ->where('branch_id', $employee->branch_id)
             ->where('fingerprint_id', (string) ($employee->fingerprint_id ?: $employee->uid))
-            ->whereDate('date_in', $data['date_in'])
-            ->get();
-        $visible = EmployeeVisibleDtr::query()
+            ->whereDate('date_in', $data['date_in']);
+
+        $visibleQuery = EmployeeVisibleDtr::query()
             ->where('payroll_period_id', $submission->payroll_period_id)
             ->forEmployee($employee)
-            ->whereDate('date_in', $data['date_in'])
-            ->get();
+            ->whereDate('date_in', $data['date_in']);
+
+        if ($excludeSelf) {
+            $submissionId = $submission->getKey();
+            $officialQuery->where(function ($q) use ($submissionId): void {
+                $q->whereNull('on_field_dtr_submission_id')
+                    ->orWhere('on_field_dtr_submission_id', '!=', $submissionId);
+            });
+            $visibleQuery->where(function ($q) use ($submissionId): void {
+                $q->whereNull('on_field_dtr_submission_id')
+                    ->orWhere('on_field_dtr_submission_id', '!=', $submissionId);
+            });
+        }
+
+        $official = $officialQuery->get();
+        $visible = $visibleQuery->get();
 
         $conflict = $official
             ->concat($visible)

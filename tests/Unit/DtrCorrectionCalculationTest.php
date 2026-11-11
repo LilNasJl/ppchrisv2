@@ -88,12 +88,18 @@ class DtrCorrectionCalculationTest extends TestCase
                 'scheduleStart' => '08:00:00', 'scheduleEnd' => '18:00:00',
                 'scheduleStartColumn' => 'reg_sched_start', 'scheduleType' => 'Regular',
             ], ['late' => 0, 'undertime' => 30]],
-            'early and after-schedule overtime' => [[
-                'dateIn' => '2026-08-20', 'timeIn' => '07:30:00',
-                'dateOut' => '2026-08-20', 'timeOut' => '18:30:00',
+            'early and after-schedule overtime below threshold' => [[
+                'dateIn' => '2026-08-20', 'timeIn' => '07:01:00',
+                'dateOut' => '2026-08-20', 'timeOut' => '18:59:00',
                 'scheduleStart' => '08:00:00', 'scheduleEnd' => '18:00:00',
                 'scheduleStartColumn' => 'reg_sched_start', 'scheduleType' => 'Regular',
-            ], ['early_clock_in' => 30, 'overtime' => 30, 'overtime_status' => 'Pending']],
+            ], ['early_clock_in' => 59, 'overtime' => 59, 'overtime_status' => 'n/a']],
+            'early and after-schedule overtime' => [[
+                'dateIn' => '2026-08-20', 'timeIn' => '07:00:00',
+                'dateOut' => '2026-08-20', 'timeOut' => '19:00:00',
+                'scheduleStart' => '08:00:00', 'scheduleEnd' => '18:00:00',
+                'scheduleStartColumn' => 'reg_sched_start', 'scheduleType' => 'Regular',
+            ], ['early_clock_in' => 60, 'overtime' => 60, 'overtime_status' => 'Pending']],
             'rest day overtime-only entry' => [[
                 'dateIn' => '2026-08-23', 'timeIn' => '09:00:00',
                 'dateOut' => '2026-08-23', 'timeOut' => '12:00:00',

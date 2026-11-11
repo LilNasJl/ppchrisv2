@@ -274,7 +274,7 @@ class DtrSynchronizationWorkflowTest extends TestCase
                 'Period ID' => $ctx['period']->id,
                 'Branch ID' => $ctx['branch']->id,
                 'Date In' => '2026-10-05',
-                'Time In' => '07:15:00',
+                'Time In' => '06:45:00',
                 'Date Out' => '2026-10-05',
                 'Time Out' => '18:30:00',
                 'Schedule Type' => 'Regular',
@@ -288,8 +288,8 @@ class DtrSynchronizationWorkflowTest extends TestCase
             ->whereDate('date_in', '2026-10-05')
             ->firstOrFail();
 
-        // SIC approves both early clock-in (45m) and after-schedule overtime (90m) on the Station DTR record
-        app(OvertimeApprovalService::class)->approve($visibleRecord, 90, 45);
+        // SIC approves both early clock-in (75m) and after-schedule overtime (90m) on the Station DTR record
+        app(OvertimeApprovalService::class)->approve($visibleRecord, 90, 75);
 
         $visibleRecord->refresh();
         $officialRecord = Dtr::query()
@@ -299,8 +299,8 @@ class DtrSynchronizationWorkflowTest extends TestCase
 
         $this->assertSame('Approved', $visibleRecord->overtime_status);
         $this->assertSame('Approved', $officialRecord->overtime_status);
-        $this->assertSame(45, (int) $officialRecord->credited_early_clock_in);
-        $this->assertSame(135, (int) $officialRecord->credited_overtime);
+        $this->assertSame(75, (int) $officialRecord->credited_early_clock_in);
+        $this->assertSame(165, (int) $officialRecord->credited_overtime);
         $this->assertTrue((bool) $officialRecord->early_clock_in_approved);
         $this->assertTrue((bool) $officialRecord->overtime_approved);
 

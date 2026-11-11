@@ -667,16 +667,16 @@ class DtrImportServiceTest extends TestCase
     {
         [$branch, $period] = $this->importContext();
         $row = $this->row($branch, $period, [
-            'Time In' => '07:15:00',
-            'Time Out' => '19:00:00',
+            'Time In' => '06:45:00',
+            'Time Out' => '19:30:00',
             'hris_transfer_format' => 'ppchris-sicrc-dtr',
             'hris_transfer_version' => 1,
-            'early_overtime_minutes' => 45,
-            'overtime_minutes' => 60,
+            'early_overtime_minutes' => 75,
+            'overtime_minutes' => 90,
             'early_overtime_status' => 'Approved',
             'after_overtime_status' => 'Approved',
-            'credited_early_overtime_minutes' => 30,
-            'credited_overtime_minutes' => 45,
+            'credited_early_overtime_minutes' => 60,
+            'credited_overtime_minutes' => 75,
         ]);
 
         $first = app(DtrImportService::class)->importRows([$row], 'SIC/RC approved overtime');
@@ -688,12 +688,12 @@ class DtrImportServiceTest extends TestCase
         $this->assertSame(1, $second['skipped']);
         $this->assertDatabaseHas('dtrs', [
             'fingerprint_id' => '999999',
-            'early_clock_in' => 45,
-            'overtime' => 60,
+            'early_clock_in' => 75,
+            'overtime' => 90,
             'early_clock_in_approved' => 1,
             'overtime_approved' => 1,
-            'credited_early_clock_in' => 30,
-            'credited_overtime' => 75,
+            'credited_early_clock_in' => 60,
+            'credited_overtime' => 135,
             'overtime_status' => 'Approved',
         ]);
         $this->assertDatabaseCount('dtrs', 1);
@@ -703,16 +703,16 @@ class DtrImportServiceTest extends TestCase
     {
         [$branch, $period] = $this->importContext();
         $row = $this->row($branch, $period, [
-            'Time In' => '07:15:00',
-            'Time Out' => '19:00:00',
+            'Time In' => '06:45:00',
+            'Time Out' => '19:30:00',
             'hris_transfer_format' => 'ppchris-sicrc-dtr',
             'hris_transfer_version' => 1,
-            'early_overtime_minutes' => 45,
-            'overtime_minutes' => 60,
+            'early_overtime_minutes' => 75,
+            'overtime_minutes' => 90,
             'early_overtime_status' => 'Approved',
             'after_overtime_status' => 'Confirmed',
-            'credited_early_overtime_minutes' => 30,
-            'credited_overtime_minutes' => 45,
+            'credited_early_overtime_minutes' => 60,
+            'credited_overtime_minutes' => 75,
         ]);
 
         $result = app(DtrImportService::class)->importRows([$row], 'Invalid SIC/RC approval');

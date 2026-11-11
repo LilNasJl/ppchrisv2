@@ -181,7 +181,7 @@ class DtrOvertimeTransferService
             && $creditedMinutes > 0
             && $creditedMinutes < OvertimeApprovalService::MINIMUM_MINUTES
         ) {
-            throw new DomainException("{$label} credited minutes must be zero or at least 30 minutes.");
+            throw new DomainException("{$label} credited minutes must be zero or at least ".OvertimeApprovalService::MINIMUM_MINUTES.' minutes.');
         }
 
         return [

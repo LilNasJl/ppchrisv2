@@ -3,12 +3,24 @@
 @php
     $isOvertimeRequested = in_array($scope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY], true);
     $isEarlyRequested = in_array($scope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true);
+    $otMinThreshold = \App\Services\OvertimeApprovalService::MINIMUM_MINUTES;
     $targetRecord = $record->targetDtrRecord();
     $orig = $record->original_values ?? [];
+    $prop = $record->proposed_values ?? [];
     $scheduleStart = $orig['schedule_start'] ?? $targetRecord?->schedule_start ?? null;
     $scheduleEnd = $orig['schedule_end'] ?? $targetRecord?->schedule_end ?? null;
     $timeIn = $orig['time_in'] ?? $targetRecord?->time_in ?? null;
     $timeOut = $orig['time_out'] ?? $targetRecord?->time_out ?? null;
+
+    $effectiveScope = $record->effectiveOvertimeScope();
+    $effectiveOt = $record->effectiveCreditedOvertimeMinutes();
+    $effectiveEarly = $record->effectiveCreditedEarlyMinutes();
+    $hasProposedDecision = $record->hasProposedOvertimeDecision();
+    $isModified = $record->isOvertimeModifiedFromActual();
+    $editedByName = $prop['overtime_edited_by_name'] ?? null;
+    $editedAt = filled($prop['overtime_edited_at'] ?? null)
+        ? \Illuminate\Support\Carbon::parse($prop['overtime_edited_at'])->format('M d, Y h:i A')
+        : null;
 @endphp
 
 <style>
@@ -132,6 +144,20 @@
                 {{ $earlyCalculated }} <span style="font-size:11.5px; font-weight:600;">mins</span>
                 <span style="font-size:11px; font-weight:normal; opacity:0.8;">({{ sprintf('%.1f', $earlyCalculated / 60) }}h)</span>
             </div>
+            @if ($isEarlyRequested && $earlyCalculated >= $otMinThreshold)
+                <div style="font-size:10px; font-weight:700; color:var(--ot-text-muted);">
+                    Actual D.T.R Limit (Max: {{ $earlyCalculated }}m)
+                </div>
+            @endif
+            @if ($isEarlyRequested && $hasProposedDecision && in_array($effectiveScope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true) && $effectiveEarly !== $earlyCalculated)
+                <div style="font-size:10.5px; font-weight:800; color:#2563eb; background:rgba(37,99,235,0.1); border-radius:4px; padding:2px 6px; margin:2px auto 0 auto; width:fit-content;">
+                    Edited Request: {{ $effectiveEarly }} mins
+                </div>
+            @elseif ($isEarlyRequested && $hasProposedDecision && $effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
+                <div style="font-size:10.5px; font-weight:700; color:#dc2626; margin:2px auto 0 auto;">
+                    Excluded by Approver (0 mins)
+                </div>
+            @endif
 
             @if (filled($timeIn))
                 <div style="font-size:10.5px; color:var(--ot-text-muted);">
@@ -140,10 +166,10 @@
             @endif
 
             <div style="margin-top:auto; padding-top:4px; font-size:10.5px;">
-                @if ($earlyCalculated >= 30)
-                    <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; 30m threshold</span>
+                @if ($earlyCalculated >= $otMinThreshold)
+                    <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; {{ $otMinThreshold }}m threshold</span>
                 @else
-                    <span style="color:var(--ot-text-muted);">Below 30m threshold</span>
+                    <span style="color:var(--ot-text-muted);">Below {{ $otMinThreshold }}m threshold</span>
                 @endif
             </div>
         </div>
@@ -163,6 +189,20 @@
                 {{ $otCalculated }} <span style="font-size:11.5px; font-weight:600;">mins</span>
                 <span style="font-size:11px; font-weight:normal; opacity:0.8;">({{ sprintf('%.1f', $otCalculated / 60) }}h)</span>
             </div>
+            @if ($isOvertimeRequested && $otCalculated >= $otMinThreshold)
+                <div style="font-size:10px; font-weight:700; color:var(--ot-text-muted);">
+                    Actual D.T.R Limit (Max: {{ $otCalculated }}m)
+                </div>
+            @endif
+            @if ($isOvertimeRequested && $hasProposedDecision && in_array($effectiveScope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY], true) && $effectiveOt !== $otCalculated)
+                <div style="font-size:10.5px; font-weight:800; color:#2563eb; background:rgba(37,99,235,0.1); border-radius:4px; padding:2px 6px; margin:2px auto 0 auto; width:fit-content;">
+                    Edited Request: {{ $effectiveOt }} mins
+                </div>
+            @elseif ($isOvertimeRequested && $hasProposedDecision && $effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
+                <div style="font-size:10.5px; font-weight:700; color:#dc2626; margin:2px auto 0 auto;">
+                    Excluded by Approver (0 mins)
+                </div>
+            @endif
 
             @if (filled($timeOut))
                 <div style="font-size:10.5px; color:var(--ot-text-muted);">
@@ -171,14 +211,37 @@
             @endif
 
             <div style="margin-top:auto; padding-top:4px; font-size:10.5px;">
-                @if ($otCalculated >= 30)
-                    <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; 30m threshold</span>
+                @if ($otCalculated >= $otMinThreshold)
+                    <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; {{ $otMinThreshold }}m threshold</span>
                 @else
-                    <span style="color:var(--ot-text-muted);">Below 30m threshold</span>
+                    <span style="color:var(--ot-text-muted);">Below {{ $otMinThreshold }}m threshold</span>
                 @endif
             </div>
         </div>
     </div>
+
+    @if ($hasProposedDecision)
+        <div style="margin-bottom:10px; padding:8px 10px; border-radius:6px; font-size:11.5px; background:rgba(37, 99, 235, 0.08); border:1px solid rgba(37, 99, 235, 0.28); color:var(--ot-text-main);">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <strong style="color:#2563eb;">Current Edited / Endorsed Overtime:</strong>
+                @if ($editedByName)
+                    <span style="font-size:10.5px; color:var(--ot-text-muted);">
+                        Last edited by <strong>{{ $editedByName }}</strong>{{ $editedAt ? " on {$editedAt}" : '' }}
+                    </span>
+                @endif
+            </div>
+            <div style="margin-top:3px;">
+                {{ match($effectiveScope) {
+                    \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$effectiveOt} of {$otCalculated} mins actual)",
+                    \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$effectiveEarly} of {$earlyCalculated} mins actual)",
+                    default => "Both ({$effectiveEarly}/{$earlyCalculated}m Early, {$effectiveOt}/{$otCalculated}m OT)",
+                } }}
+                @if ($isModified)
+                    <span style="font-weight:700; color:#2563eb;">&bull; Adjusted within actual limit</span>
+                @endif
+            </div>
+        </div>
+    @endif
 
     <!-- Explanatory Guideline Box -->
     <div style="padding:8px 10px; border-radius:6px; font-size:11.5px; line-height:1.45; {{ match($scope) {
@@ -187,11 +250,11 @@
         default => 'background:#dcfce7; border:1px solid #bbf7d0; color:#166534;',
     } }}">
         @if ($scope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
-            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">AFTER-SHIFT OVERTIME ONLY</span> ({{ $otCalculated }} mins). Early clock in ({{ $earlyCalculated }} mins) is excluded from this request and will not be credited.
+            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">AFTER-SHIFT OVERTIME ONLY</span> ({{ $otCalculated }} mins actual). You may adjust between {{ $otMinThreshold }} and {{ $otCalculated }} mins (cannot exceed actual overtime). Early clock in ({{ $earlyCalculated }} mins) is excluded.
         @elseif ($scope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
-            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">EARLY CLOCK IN ONLY</span> ({{ $earlyCalculated }} mins). After-shift overtime ({{ $otCalculated }} mins) is excluded from this request and will not be credited.
+            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">EARLY CLOCK IN ONLY</span> ({{ $earlyCalculated }} mins actual). You may adjust between {{ $otMinThreshold }} and {{ $earlyCalculated }} mins (cannot exceed actual overtime). After-shift overtime ({{ $otCalculated }} mins) is excluded.
         @else
-            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">BOTH</span> Early Clock In ({{ $earlyCalculated }} mins) and Overtime ({{ $otCalculated }} mins). You can approve both components or select specific credited hours below.
+            <strong>Approval Directive:</strong> Employee requested <span style="text-decoration:underline;">BOTH</span> Early Clock In (max {{ $earlyCalculated }} mins) and Overtime (max {{ $otCalculated }} mins). You can adjust credited minutes up to actual rendered overtime or select one component below.
         @endif
     </div>
 </div>

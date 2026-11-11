@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Concerns\InteractsWithOnFieldDtrEdit;
 use App\Models\DtrSubmission;
 use App\Services\OnFieldDtrService;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -17,6 +18,7 @@ class ViewOnFieldDtrSubmission extends Page
     use HasPageShield {
         canAccess as protected canAccessWithShield;
     }
+    use InteractsWithOnFieldDtrEdit;
 
     protected string $view = 'filament.pages.view-on-field-dtr-submission';
 
@@ -24,7 +26,7 @@ class ViewOnFieldDtrSubmission extends Page
 
     protected static ?string $slug = 'on-field-dtr/view';
 
-    protected static ?string $title = 'View On Field DTR';
+    protected static ?string $title = 'Review On Field DTR';
 
     public ?string $submissionId = null;
 
@@ -66,7 +68,7 @@ class ViewOnFieldDtrSubmission extends Page
                     'employee.branch',
                     'branch',
                     'payrollPeriod',
-                    'submittedByEmployee',
+                    'submittedByEmployee.branch',
                     'reviewedBy',
                     'generatedDtrDeletedBy',
                 ])
@@ -81,7 +83,14 @@ class ViewOnFieldDtrSubmission extends Page
             Action::make('return')
                 ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
+                ->color('gray')
                 ->url(DtrProofSubmissions::getUrl()),
+
+            $this->makeEditOnFieldDtrAction(
+                name: 'edit',
+                resolveSubmission: fn (): ?DtrSubmission => $this->submission,
+                afterSave: fn (): mixed => $this->redirect(static::getUrl(['submissionId' => $this->submissionId])),
+            ),
 
             Action::make('approve')
                 ->label('Approve')
@@ -114,6 +123,27 @@ class ViewOnFieldDtrSubmission extends Page
                         ->maxLength(2000),
                 ])
                 ->action(fn (array $data): mixed => $this->reviewSubmission(false, $data['remarks'] ?? null)),
+
+            Action::make('reopen')
+                ->label('Reopen to Pending')
+                ->icon(Heroicon::ArrowPath)
+                ->color('warning')
+                ->visible(fn (): bool => (bool) (
+                    $this->submission?->isRejected()
+                    && ! (bool) $this->submission?->payrollPeriod?->is_locked
+                    && ! $this->submission?->generated_dtr_id
+                    && ! $this->submission?->generated_visible_dtr_id
+                ))
+                ->requiresConfirmation()
+                ->modalHeading('Reopen Rejected On Field DTR?')
+                ->modalDescription('Returning this request to Pending allows it to be edited and reconsidered for approval.')
+                ->schema([
+                    Textarea::make('remarks')
+                        ->label('HR Remarks (Optional)')
+                        ->rows(3)
+                        ->maxLength(2000),
+                ])
+                ->action(fn (array $data): mixed => $this->reopenSubmission($data['remarks'] ?? null)),
         ];
     }
 
@@ -142,6 +172,35 @@ class ViewOnFieldDtrSubmission extends Page
         } catch (\DomainException $exception) {
             Notification::make()
                 ->title('On Field DTR was not reviewed')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
+    }
+
+    protected function reopenSubmission(?string $remarks): mixed
+    {
+        try {
+            $service = app(OnFieldDtrService::class);
+            $submission = $this->submission;
+            $user = auth()->user();
+
+            abort_unless($submission && $user, 404);
+
+            $service->reopen($submission, $user, $remarks);
+
+            Notification::make()
+                ->title('On Field DTR reopened')
+                ->body('The request status is back to Pending for review.')
+                ->success()
+                ->send();
+
+            return $this->redirect(static::getUrl(['submissionId' => $this->submissionId]));
+        } catch (\DomainException $exception) {
+            Notification::make()
+                ->title('On Field DTR was not reopened')
                 ->body($exception->getMessage())
                 ->danger()
                 ->send();

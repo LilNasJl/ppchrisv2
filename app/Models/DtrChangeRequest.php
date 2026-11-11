@@ -21,6 +21,8 @@ class DtrChangeRequest extends Model
 
     public const STATUS_CANCELLED = 'Cancelled';
 
+    public const STATUS_VOIDED = 'Voided';
+
     public const TYPE_OVERTIME_APPROVAL = 'overtime_approval';
 
     public const TYPE_FORGOT_TO_PUNCH = 'forgot_to_punch';
@@ -291,32 +293,129 @@ class DtrChangeRequest extends Model
         };
     }
 
+    public function actualEarlyClockInMinutes(): int
+    {
+        $orig = $this->original_values ?? [];
+
+        return isset($orig['early_clock_in'])
+            ? max(0, (int) $orig['early_clock_in'])
+            : max(0, (int) ($this->targetDtrRecord()?->early_clock_in ?? 0));
+    }
+
+    public function actualOvertimeMinutes(): int
+    {
+        $orig = $this->original_values ?? [];
+
+        return isset($orig['overtime'])
+            ? max(0, (int) $orig['overtime'])
+            : max(0, (int) ($this->targetDtrRecord()?->overtime ?? 0));
+    }
+
+    public function effectiveOvertimeScope(): string
+    {
+        $reqScope = $this->overtime_request_scope;
+
+        if (in_array($reqScope, [self::OT_SCOPE_OVERTIME_ONLY, self::OT_SCOPE_EARLY_ONLY], true)) {
+            return $reqScope;
+        }
+
+        $candidate = $this->proposed_values['approved_overtime_scope'] ?? null;
+
+        return in_array($candidate, [
+            self::OT_SCOPE_BOTH,
+            self::OT_SCOPE_OVERTIME_ONLY,
+            self::OT_SCOPE_EARLY_ONLY,
+        ], true) ? $candidate : self::OT_SCOPE_BOTH;
+    }
+
+    public function effectiveCreditedOvertimeMinutes(): int
+    {
+        if ($this->effectiveOvertimeScope() === self::OT_SCOPE_EARLY_ONLY) {
+            return 0;
+        }
+
+        $actual = $this->actualOvertimeMinutes();
+        $stored = $this->proposed_values['credited_overtime'] ?? null;
+
+        return is_numeric($stored) ? max(0, min($actual, (int) $stored)) : $actual;
+    }
+
+    public function effectiveCreditedEarlyMinutes(): int
+    {
+        if ($this->effectiveOvertimeScope() === self::OT_SCOPE_OVERTIME_ONLY) {
+            return 0;
+        }
+
+        $actual = $this->actualEarlyClockInMinutes();
+        $stored = $this->proposed_values['credited_early_clock_in'] ?? null;
+
+        return is_numeric($stored) ? max(0, min($actual, (int) $stored)) : $actual;
+    }
+
+    public function hasProposedOvertimeDecision(): bool
+    {
+        if (! $this->is_overtime_type) {
+            return false;
+        }
+
+        return isset($this->proposed_values['approved_overtime_scope'])
+            || filled($this->proposed_values['overtime_edited_at'] ?? null);
+    }
+
+    public function isOvertimeModifiedFromActual(): bool
+    {
+        if (! $this->is_overtime_type || ! $this->hasProposedOvertimeDecision()) {
+            return false;
+        }
+
+        $effectiveScope = $this->effectiveOvertimeScope();
+        if ($effectiveScope !== $this->overtime_request_scope) {
+            return true;
+        }
+
+        if (
+            in_array($effectiveScope, [self::OT_SCOPE_BOTH, self::OT_SCOPE_OVERTIME_ONLY], true)
+            && $this->effectiveCreditedOvertimeMinutes() !== $this->actualOvertimeMinutes()
+        ) {
+            return true;
+        }
+
+        return in_array($effectiveScope, [self::OT_SCOPE_BOTH, self::OT_SCOPE_EARLY_ONLY], true)
+            && $this->effectiveCreditedEarlyMinutes() !== $this->actualEarlyClockInMinutes();
+    }
+
     public function getOvertimeSummaryDescriptionAttribute(): ?string
     {
         if (! $this->is_overtime_type) {
             return null;
         }
 
-        $orig = $this->original_values ?? [];
-        $scope = $this->overtime_request_scope;
-
-        $earlyMins = isset($orig['early_clock_in'])
-            ? max(0, (int) $orig['early_clock_in'])
-            : max(0, (int) ($this->targetDtrRecord()?->early_clock_in ?? 0));
-
-        $otMins = isset($orig['overtime'])
-            ? max(0, (int) $orig['overtime'])
-            : max(0, (int) ($this->targetDtrRecord()?->overtime ?? 0));
+        $earlyMins = $this->actualEarlyClockInMinutes();
+        $otMins = $this->actualOvertimeMinutes();
 
         $formatMins = function (int $mins): string {
             $hrs = round($mins / 60, 1);
+
             return "{$mins}m ({$hrs}h)";
         };
 
-        return match ($scope) {
-            self::OT_SCOPE_OVERTIME_ONLY => 'Target: ' . ($otMins > 0 ? $formatMins($otMins) : '0m') . ' Overtime',
-            self::OT_SCOPE_EARLY_ONLY => 'Target: ' . ($earlyMins > 0 ? $formatMins($earlyMins) : '0m') . ' Early Clock In',
-            default => 'Targets: Early ' . ($earlyMins > 0 ? "{$earlyMins}m" : '0m') . ' + OT ' . ($otMins > 0 ? $formatMins($otMins) : '0m'),
+        if ($this->isOvertimeModifiedFromActual()) {
+            $prefix = $this->status === self::STATUS_APPROVED ? 'Credited' : 'Edited';
+            $effectiveScope = $this->effectiveOvertimeScope();
+            $creditedOt = $this->effectiveCreditedOvertimeMinutes();
+            $creditedEarly = $this->effectiveCreditedEarlyMinutes();
+
+            return match ($effectiveScope) {
+                self::OT_SCOPE_OVERTIME_ONLY => "{$prefix}: {$formatMins($creditedOt)} (of {$otMins}m actual) Overtime",
+                self::OT_SCOPE_EARLY_ONLY => "{$prefix}: {$formatMins($creditedEarly)} (of {$earlyMins}m actual) Early Clock In",
+                default => "{$prefix}: Early {$creditedEarly}m (of {$earlyMins}m) + OT {$formatMins($creditedOt)} (of {$otMins}m)",
+            };
+        }
+
+        return match ($this->overtime_request_scope) {
+            self::OT_SCOPE_OVERTIME_ONLY => 'Target: '.($otMins > 0 ? $formatMins($otMins) : '0m').' Overtime',
+            self::OT_SCOPE_EARLY_ONLY => 'Target: '.($earlyMins > 0 ? $formatMins($earlyMins) : '0m').' Early Clock In',
+            default => 'Targets: Early '.($earlyMins > 0 ? "{$earlyMins}m" : '0m').' + OT '.($otMins > 0 ? $formatMins($otMins) : '0m'),
         };
     }
 
@@ -439,6 +538,28 @@ class DtrChangeRequest extends Model
         }
 
         return StationManagementAccess::canManageChangeRequest($actor, $this);
+    }
+
+    public function canEditOvertimeBy(User|Employee|null $actor): bool
+    {
+        if (! $this->is_overtime_type || ! $this->isPendingAtCurrentLevel()) {
+            return false;
+        }
+
+        if ($this->isCurrentStepHr() || self::isHrReviewer($actor)) {
+            return false;
+        }
+
+        if ((bool) $this->payrollPeriod?->is_locked) {
+            return false;
+        }
+
+        $targetRecord = $this->targetDtrRecord();
+        if ($targetRecord && (bool) ($targetRecord->is_locked ?? false)) {
+            return false;
+        }
+
+        return $this->canBeReviewedBy($actor);
     }
 
     public function canBeReviewedBy(User|Employee|null $actor): bool
@@ -649,9 +770,13 @@ class DtrChangeRequest extends Model
         }
 
         $history = collect($this->approvals_history ?? []);
-        $lastDecision = $history->reverse()->first(fn ($entry) => in_array(strtolower((string) ($entry['action'] ?? '')), ['approved', 'rejected'], true));
+        $lastDecision = $history->reverse()->first(fn ($entry) => in_array(strtolower((string) ($entry['action'] ?? '')), ['approved', 'rejected', 'voided'], true));
         if ($lastDecision && filled($lastDecision['actor_name'] ?? null)) {
             return (string) $lastDecision['actor_name'];
+        }
+
+        if ($this->status === self::STATUS_VOIDED) {
+            return 'System (1-Hour Overtime Policy)';
         }
 
         return $this->reviewed_at ? 'HR' : 'Not reviewed yet';

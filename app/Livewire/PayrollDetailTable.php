@@ -740,8 +740,8 @@ class PayrollDetailTable extends Component implements HasActions, HasSchemas, Ha
             ->whereIn('fingerprint_id', $fingerprintToEmployee->keys()->all())
             ->where(function (Builder $query): void {
                 $query
-                    ->where('overtime', '>=', 30)
-                    ->orWhere('early_clock_in', '>=', 30);
+                    ->where('overtime', '>=', OvertimeApprovalService::MINIMUM_MINUTES)
+                    ->orWhere('early_clock_in', '>=', OvertimeApprovalService::MINIMUM_MINUTES);
             })
             ->get([
                 'fingerprint_id',

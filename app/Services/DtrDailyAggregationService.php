@@ -163,7 +163,7 @@ class DtrDailyAggregationService
             'undertime' => $undertime,
             'early_clock_in' => $earlyClockIn,
             'overtime' => $overtime,
-            'overtime_status' => ($overtime >= 30 || $earlyClockIn >= 30) ? 'Pending' : 'n/a',
+            'overtime_status' => ($overtime >= OvertimeApprovalService::MINIMUM_MINUTES || $earlyClockIn >= OvertimeApprovalService::MINIMUM_MINUTES) ? 'Pending' : 'n/a',
             'representative' => $representative,
             'completed_records' => $completed,
         ];
@@ -218,6 +218,8 @@ class DtrDailyAggregationService
         $late = (int) floor(max(0, min($earliest, $end) - $start) / 60);
         // Missing scheduled time, including an internal gap, is charged once.
         $undertime = max(0, $required - $worked - $late);
+        $earlyClockIn = (int) floor(max(0, $start - $earliest) / 60);
+        $overtime = (int) floor(max(0, $latest - $end) / 60);
         $representative = $completed->sortBy(fn (Dtr $record): string => sprintf('%s %s', $record->date_out, $record->time_out))->last();
 
         return [
@@ -233,9 +235,9 @@ class DtrDailyAggregationService
             'credited_work_minutes' => max(0, $required - $late - $undertime),
             'late' => $late,
             'undertime' => $undertime,
-            'early_clock_in' => (int) floor(max(0, $start - $earliest) / 60),
-            'overtime' => (int) floor(max(0, $latest - $end) / 60),
-            'overtime_status' => ($latest - $end >= 1800 || $start - $earliest >= 1800) ? 'Pending' : 'n/a',
+            'early_clock_in' => $earlyClockIn,
+            'overtime' => $overtime,
+            'overtime_status' => ($overtime >= OvertimeApprovalService::MINIMUM_MINUTES || $earlyClockIn >= OvertimeApprovalService::MINIMUM_MINUTES) ? 'Pending' : 'n/a',
             'representative' => $representative,
             'completed_records' => $completed,
         ];
@@ -427,8 +429,8 @@ class DtrDailyAggregationService
             fn (Dtr $record): bool => strtolower(trim((string) $record->overtime_status)) === 'rejected',
         );
         $totalCreditedOvertime = $approvedEarlyMinutes + $approvedOvertimeMinutes;
-        $earlyEligible = (int) $aggregate['early_clock_in'] >= 30;
-        $overtimeEligible = (int) $aggregate['overtime'] >= 30;
+        $earlyEligible = (int) $aggregate['early_clock_in'] >= OvertimeApprovalService::MINIMUM_MINUTES;
+        $overtimeEligible = (int) $aggregate['overtime'] >= OvertimeApprovalService::MINIMUM_MINUTES;
         $hasEligibleOvertime = $earlyEligible || $overtimeEligible;
         $allEligibleOvertimeApproved = (! $earlyEligible || $earlyApproved)
             && (! $overtimeEligible || $overtimeApproved);

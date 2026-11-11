@@ -99,11 +99,11 @@ class DashboardDtrChartFilterPersistenceTest extends TestCase
     public function test_pending_hours_count_only_eligible_unapproved_components_in_the_selected_branch(): void
     {
         foreach ([
-            ['overtime' => 60, 'early_clock_in' => 30, 'overtime_status' => 'Pending'],
-            ['overtime' => 60, 'early_clock_in' => 45, 'overtime_status' => 'Approved', 'overtime_approved' => true, 'credited_overtime' => 60],
+            ['overtime' => 60, 'early_clock_in' => 60, 'overtime_status' => 'Pending'],
+            ['overtime' => 60, 'early_clock_in' => 75, 'overtime_status' => 'Approved', 'overtime_approved' => true, 'credited_overtime' => 60],
             ['overtime' => 90, 'overtime_status' => null],
             ['overtime' => 120, 'early_clock_in' => 60, 'overtime_status' => 'Rejected'],
-            ['overtime' => 29, 'early_clock_in' => 29, 'overtime_status' => 'Pending'],
+            ['overtime' => 59, 'early_clock_in' => 59, 'overtime_status' => 'Pending'],
             ['overtime' => 180, 'early_clock_in' => 180, 'schedule_type' => 'For Approval'],
             ['overtime' => 600, 'early_clock_in' => 600, 'branch_id' => 13],
         ] as $values) {
@@ -121,7 +121,7 @@ class DashboardDtrChartFilterPersistenceTest extends TestCase
         ])->test(OvertimeLogHoursChart::class);
 
         $data = (new \ReflectionMethod(OvertimeLogHoursChart::class, 'getCachedData'))->invoke($component->instance());
-        $this->assertSame([1.0, 0.0, 2.0, 1.0, 2.5, 1.25], $data['datasets'][0]['data']);
+        $this->assertSame([1.0, 0.0, 2.0, 1.0, 2.5, 2.25], $data['datasets'][0]['data']);
         $this->assertSame(['Pending Overtime', 'Pending Early Time-In'], array_slice($data['labels'], -2));
         $component->call('updateChartData')->assertNotDispatched('updateChartData');
     }

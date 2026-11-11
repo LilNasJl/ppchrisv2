@@ -11,15 +11,25 @@
     $statusClass = match ($record->status) {
         \App\Models\DtrChangeRequest::STATUS_APPROVED => 'status-approved',
         \App\Models\DtrChangeRequest::STATUS_REJECTED => 'status-rejected',
-        \App\Models\DtrChangeRequest::STATUS_CANCELLED => 'status-cancelled',
+        \App\Models\DtrChangeRequest::STATUS_CANCELLED, \App\Models\DtrChangeRequest::STATUS_VOIDED => 'status-cancelled',
         default => 'status-pending',
     };
 
-    $earlyMins = max(0, (int) ($orig['early_clock_in'] ?? $targetRecord?->early_clock_in ?? 0));
-    $otMins = max(0, (int) ($orig['overtime'] ?? $targetRecord?->overtime ?? 0));
+    $otMinThreshold = \App\Services\OvertimeApprovalService::MINIMUM_MINUTES;
+    $earlyMins = $record->actualEarlyClockInMinutes();
+    $otMins = $record->actualOvertimeMinutes();
     $scope = $record->overtime_request_scope;
     $isOvertimeRequested = in_array($scope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY], true);
     $isEarlyRequested = in_array($scope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true);
+    $effectiveScope = $record->effectiveOvertimeScope();
+    $editedOtMins = $record->effectiveCreditedOvertimeMinutes();
+    $editedEarlyMins = $record->effectiveCreditedEarlyMinutes();
+    $hasProposedDecision = $record->hasProposedOvertimeDecision();
+    $isOtModified = $record->isOvertimeModifiedFromActual();
+    $otEditedByName = $prop['overtime_edited_by_name'] ?? null;
+    $otEditedAtFormatted = filled($prop['overtime_edited_at'] ?? null)
+        ? \Illuminate\Support\Carbon::parse($prop['overtime_edited_at'])->format('M d, Y h:i A')
+        : null;
 
     $scheduleStart = $orig['schedule_start'] ?? $targetRecord?->schedule_start ?? null;
     $scheduleEnd = $orig['schedule_end'] ?? $targetRecord?->schedule_end ?? null;
@@ -29,7 +39,13 @@
     $dateIn = $orig['date_in'] ?? $targetRecord?->date_in ?? ($record->dtr_date ?? null);
     $dateOut = $orig['date_out'] ?? $targetRecord?->date_out ?? $dateIn;
     $workHrs = (int) ($orig['work_hrs'] ?? $targetRecord?->work_hrs ?? 0);
-    $otStatus = $orig['overtime_status'] ?? $targetRecord?->overtime_status ?? ($record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Approved' : 'Pending');
+    $otStatus = $targetRecord?->overtime_status ?? $orig['overtime_status'] ?? match ($record->status) {
+        \App\Models\DtrChangeRequest::STATUS_APPROVED => 'Approved',
+        \App\Models\DtrChangeRequest::STATUS_REJECTED => 'Rejected',
+        \App\Models\DtrChangeRequest::STATUS_VOIDED => 'Voided',
+        \App\Models\DtrChangeRequest::STATUS_CANCELLED => 'Cancelled',
+        default => 'Pending',
+    };
 @endphp
 
 <style>
@@ -162,6 +178,12 @@
         background: rgba(245, 158, 11, 0.15);
         border-color: rgba(245, 158, 11, 0.4);
         color: #fcd34d;
+    }
+
+    .crd-ot-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
     }
 
     .crd-ot-card {
@@ -421,13 +443,26 @@
                     <span class="crd-ot-badge-pill is-target">{{ $record->overtime_request_scope_label }}</span>
                 </div>
                 <div style="font-size:11.5px; font-weight:700;">
-                    Target Under Review:
-                    @if ($record->overtime_request_scope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
-                        <span style="color:#d97706;">{{ $otMins }} mins ({{ sprintf('%.1f', $otMins / 60) }} hrs) Regular Overtime</span>
-                    @elseif ($record->overtime_request_scope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
-                        <span style="color:#d97706;">{{ $earlyMins }} mins ({{ sprintf('%.1f', $earlyMins / 60) }} hrs) Early Clock In</span>
+                    @if ($isOtModified)
+                        <span style="color:#2563eb;">
+                            {{ $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Credited Decision:' : 'Edited Request:' }}
+                            @if ($effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
+                                {{ $editedOtMins }} mins (of {{ $otMins }}m actual) Overtime
+                            @elseif ($effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
+                                {{ $editedEarlyMins }} mins (of {{ $earlyMins }}m actual) Early Clock In
+                            @else
+                                {{ $editedEarlyMins }}/{{ $earlyMins }}m Early + {{ $editedOtMins }}/{{ $otMins }}m OT
+                            @endif
+                        </span>
                     @else
-                        <span style="color:#d97706;">{{ $earlyMins }}m Early + {{ $otMins }}m Overtime (Total: {{ $earlyMins + $otMins }} mins)</span>
+                        Target Under Review:
+                        @if ($record->overtime_request_scope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
+                            <span style="color:#d97706;">{{ $otMins }} mins ({{ sprintf('%.1f', $otMins / 60) }} hrs) Regular Overtime</span>
+                        @elseif ($record->overtime_request_scope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
+                            <span style="color:#d97706;">{{ $earlyMins }} mins ({{ sprintf('%.1f', $earlyMins / 60) }} hrs) Early Clock In</span>
+                        @else
+                            <span style="color:#d97706;">{{ $earlyMins }}m Early + {{ $otMins }}m Overtime (Total: {{ $earlyMins + $otMins }} mins)</span>
+                        @endif
                     @endif
                 </div>
             </div>
@@ -455,7 +490,7 @@
         <div class="crd-section">
             <div class="crd-section-header">
                 <span>Proposed Missing Attendance Entries ({{ count($prop['entries']) }})</span>
-                <span>{{ $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Officially Created' : 'Pending Final Approval' }}</span>
+                <span>{{ $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Officially Created' : ($record->status === \App\Models\DtrChangeRequest::STATUS_PENDING ? 'Pending Final Approval' : $record->status) }}</span>
             </div>
             <div style="overflow-x:auto;">
                 <table class="crd-table">
@@ -497,7 +532,7 @@
         <div class="crd-section">
             <div class="crd-section-header" style="background-color: #fef2f2; color: #991b1b;">
                 <span>Attendance Record Targeted for Permanent Deletion</span>
-                <span>{{ $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Permanently Deleted' : 'Pending Final Approval' }}</span>
+                <span>{{ $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED ? 'Permanently Deleted' : ($record->status === \App\Models\DtrChangeRequest::STATUS_PENDING ? 'Pending Final Approval' : $record->status) }}</span>
             </div>
             <div style="overflow-x:auto;">
                 <table class="crd-table">
@@ -597,15 +632,29 @@
                             {{ $earlyMins }} <span style="font-size:12px; font-weight:600;">mins</span>
                             <span style="font-size:11px; font-weight:normal; opacity:0.8;">({{ sprintf('%.1f', $earlyMins / 60) }} hrs)</span>
                         </div>
+                        @if ($isEarlyRequested && $earlyMins >= $otMinThreshold)
+                            <div style="font-size:10px; font-weight:700; color:var(--crd-text-muted);">
+                                Actual D.T.R Limit (Max: {{ $earlyMins }} mins)
+                            </div>
+                        @endif
+                        @if ($isEarlyRequested && $hasProposedDecision && in_array($effectiveScope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY], true) && $editedEarlyMins !== $earlyMins)
+                            <div style="font-size:11px; font-weight:800; color:#2563eb; background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.25); border-radius:4px; padding:3px 7px; width:fit-content;">
+                                Edited Request: {{ $editedEarlyMins }} mins (of {{ $earlyMins }}m actual)
+                            </div>
+                        @elseif ($isEarlyRequested && $hasProposedDecision && $effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY)
+                            <div style="font-size:10.5px; font-weight:700; color:#dc2626;">
+                                Excluded by Approver (0 mins)
+                            </div>
+                        @endif
                         <div style="font-size:11px; color:var(--crd-text-muted); line-height:1.4;">
-                            Shift start: <strong>{{ filled($scheduleStart) ? \Illuminate\Support\Carbon::parse($scheduleStart)->format('h:i A') : '04:30 AM' }}</strong><br>
+                            Shift start: <strong>{{ filled($scheduleStart) ? \Illuminate\Support\Carbon::parse($scheduleStart)->format('h:i A') : '-' }}</strong><br>
                             Actual Clock In: <strong>{{ filled($timeIn) ? \Illuminate\Support\Carbon::parse($timeIn)->format('h:i A') : '-' }}</strong>
                         </div>
                         <div style="margin-top:auto; padding-top:6px; border-top:1px solid var(--crd-border); font-size:10.5px;">
-                            @if ($earlyMins >= 30)
-                                <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; 30 mins threshold</span>
+                            @if ($earlyMins >= $otMinThreshold)
+                                <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; {{ $otMinThreshold }} mins threshold</span>
                             @else
-                                <span style="color:var(--crd-text-muted);">Below 30 mins threshold</span>
+                                <span style="color:var(--crd-text-muted);">Below {{ $otMinThreshold }} mins threshold</span>
                             @endif
                         </div>
                     </div>
@@ -624,32 +673,67 @@
                             {{ $otMins }} <span style="font-size:12px; font-weight:600;">mins</span>
                             <span style="font-size:11px; font-weight:normal; opacity:0.8;">({{ sprintf('%.1f', $otMins / 60) }} hrs)</span>
                         </div>
+                        @if ($isOvertimeRequested && $otMins >= $otMinThreshold)
+                            <div style="font-size:10px; font-weight:700; color:var(--crd-text-muted);">
+                                Actual D.T.R Limit (Max: {{ $otMins }} mins)
+                            </div>
+                        @endif
+                        @if ($isOvertimeRequested && $hasProposedDecision && in_array($effectiveScope, [\App\Models\DtrChangeRequest::OT_SCOPE_BOTH, \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY], true) && $editedOtMins !== $otMins)
+                            <div style="font-size:11px; font-weight:800; color:#2563eb; background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.25); border-radius:4px; padding:3px 7px; width:fit-content;">
+                                Edited Request: {{ $editedOtMins }} mins (of {{ $otMins }}m actual)
+                            </div>
+                        @elseif ($isOvertimeRequested && $hasProposedDecision && $effectiveScope === \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY)
+                            <div style="font-size:10.5px; font-weight:700; color:#dc2626;">
+                                Excluded by Approver (0 mins)
+                            </div>
+                        @endif
                         <div style="font-size:11px; color:var(--crd-text-muted); line-height:1.4;">
-                            Shift end: <strong>{{ filled($scheduleEnd) ? \Illuminate\Support\Carbon::parse($scheduleEnd)->format('h:i A') : '12:30 PM' }}</strong><br>
+                            Shift end: <strong>{{ filled($scheduleEnd) ? \Illuminate\Support\Carbon::parse($scheduleEnd)->format('h:i A') : '-' }}</strong><br>
                             Actual Clock Out: <strong>{{ filled($timeOut) ? \Illuminate\Support\Carbon::parse($timeOut)->format('h:i A') : '-' }}</strong>
                         </div>
                         <div style="margin-top:auto; padding-top:6px; border-top:1px solid var(--crd-border); font-size:10.5px;">
-                            @if ($otMins >= 30)
-                                <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; 30 mins threshold</span>
+                            @if ($otMins >= $otMinThreshold)
+                                <span style="color:#16a34a; font-weight:700;">✓ Meets &ge; {{ $otMinThreshold }} mins threshold</span>
                             @else
-                                <span style="color:var(--crd-text-muted);">Below 30 mins threshold</span>
+                                <span style="color:var(--crd-text-muted);">Below {{ $otMinThreshold }} mins threshold</span>
                             @endif
                         </div>
                     </div>
                 </div>
 
-                <!-- Decision Outcome if already approved -->
-                @if (isset($record->proposed_values['approved_overtime_scope']) || $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED)
+                <!-- Decision Outcome / Current Edited Overtime Proposal -->
+                @if ($record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED)
                     <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 6px; padding: 8px 12px; color: #166534;">
                         <div style="font-weight: 750; font-size: 11.5px; color: #15803d; display:flex; align-items:center; gap:5px;">
                             <span>✓</span> Official Credited Overtime Decision:
                         </div>
                         <div style="margin-top:3px; font-size:11.5px;">
                             <strong>Approved Scope:</strong>
-                            {{ match($record->proposed_values['approved_overtime_scope'] ?? $scope) {
-                                \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => 'Overtime Only (' . (int)($record->proposed_values['credited_overtime'] ?? $otMins) . ' mins credited)',
-                                \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => 'Early Clock In Only (' . (int)($record->proposed_values['credited_early_clock_in'] ?? $earlyMins) . ' mins credited)',
-                                default => 'Both (' . (int)($record->proposed_values['credited_early_clock_in'] ?? $earlyMins) . 'm Early, ' . (int)($record->proposed_values['credited_overtime'] ?? $otMins) . 'm OT credited)',
+                            {{ match($effectiveScope) {
+                                \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$editedOtMins} of {$otMins} mins actual credited)",
+                                \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$editedEarlyMins} of {$earlyMins} mins actual credited)",
+                                default => "Both ({$editedEarlyMins}/{$earlyMins}m Early, {$editedOtMins}/{$otMins}m OT credited)",
+                            } }}
+                        </div>
+                    </div>
+                @elseif ($hasProposedDecision)
+                    <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.28); border-radius: 6px; padding: 8px 12px; color: var(--crd-text-main);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                            <div style="font-weight: 750; font-size: 11.5px; color: #2563eb; display:flex; align-items:center; gap:5px;">
+                                <span>✎</span> {{ $record->status === \App\Models\DtrChangeRequest::STATUS_PENDING ? 'Edited / Endorsed Overtime Request (Pending Final Approval):' : 'Edited / Endorsed Overtime Request:' }}
+                            </div>
+                            @if ($otEditedByName)
+                                <span style="font-size:10.5px; color:var(--crd-text-muted);">
+                                    Last edited by <strong>{{ $otEditedByName }}</strong>{{ $otEditedAtFormatted ? " on {$otEditedAtFormatted}" : '' }}
+                                </span>
+                            @endif
+                        </div>
+                        <div style="margin-top:3px; font-size:11.5px;">
+                            <strong>Endorsed Scope:</strong>
+                            {{ match($effectiveScope) {
+                                \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$editedOtMins} of {$otMins} mins actual — capped at actual OT)",
+                                \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$editedEarlyMins} of {$earlyMins} mins actual — capped at actual early OT)",
+                                default => "Both ({$editedEarlyMins}/{$earlyMins}m Early, {$editedOtMins}/{$otMins}m OT — capped at actual OT)",
                             } }}
                         </div>
                     </div>
@@ -833,7 +917,8 @@
                             $isHrStep = !empty($step['is_hr']) || ($step['label'] ?? null) === 'HR Final Approval';
                             $isCurrent = ($record->status === \App\Models\DtrChangeRequest::STATUS_PENDING && (int)$record->current_level === $stepLevel);
                             $isRejected = ($record->status === \App\Models\DtrChangeRequest::STATUS_REJECTED && (int)$record->current_level === $stepLevel);
-                            $isPassed = (!$isRejected && ((int)$record->current_level > $stepLevel || $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED));
+                            $isVoided = ($record->status === \App\Models\DtrChangeRequest::STATUS_VOIDED && (int)$record->current_level === $stepLevel);
+                            $isPassed = (!$isRejected && !$isVoided && ((int)$record->current_level > $stepLevel || $record->status === \App\Models\DtrChangeRequest::STATUS_APPROVED));
                             $pillClass = $isRejected ? 'is-rejected' : ($isCurrent ? 'is-active' : ($isPassed ? 'is-passed' : ''));
                         @endphp
                         <div class="crd-step-pill {{ $pillClass }}">
@@ -846,6 +931,8 @@
                                 <span style="font-weight:bold;">✓ Approved</span>
                             @elseif ($isRejected)
                                 <span style="font-size:10px;font-weight:800;">✕ Rejected</span>
+                            @elseif ($isVoided)
+                                <span style="font-size:10px;font-weight:800;">⊘ Voided</span>
                             @elseif ($isCurrent)
                                 <span style="font-size:10px;font-weight:800;">● Pending</span>
                             @endif
@@ -872,6 +959,37 @@
                                         {{ filled($h['acted_at'] ?? null) ? \Illuminate\Support\Carbon::parse($h['acted_at'])->format('M d, Y h:i A') : '' }}
                                     </div>
                                 </div>
+                                @if (!empty($h['overtime_decision']) && is_array($h['overtime_decision']))
+                                    @php
+                                        $histDecision = $h['overtime_decision'];
+                                        $histScope = $histDecision['scope'] ?? \App\Models\DtrChangeRequest::OT_SCOPE_BOTH;
+                                        $histOt = (int) ($histDecision['credited_overtime'] ?? 0);
+                                        $histEarly = (int) ($histDecision['credited_early_clock_in'] ?? 0);
+                                        $histSummary = match ($histScope) {
+                                            \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$histOt} mins)",
+                                            \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$histEarly} mins)",
+                                            default => "Both ({$histEarly}m Early, {$histOt}m OT)",
+                                        };
+                                        $prevSummary = null;
+                                        if (isset($histDecision['previous_scope'])) {
+                                            $prevScope = $histDecision['previous_scope'];
+                                            $prevOt = (int) ($histDecision['previous_credited_overtime'] ?? 0);
+                                            $prevEarly = (int) ($histDecision['previous_credited_early_clock_in'] ?? 0);
+                                            $prevSummary = match ($prevScope) {
+                                                \App\Models\DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$prevOt} mins)",
+                                                \App\Models\DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$prevEarly} mins)",
+                                                default => "Both ({$prevEarly}m Early, {$prevOt}m OT)",
+                                            };
+                                        }
+                                    @endphp
+                                    <div style="margin-top:4px;font-size:11px;color:#2563eb;font-weight:600;">
+                                        @if ($prevSummary && $prevSummary !== $histSummary)
+                                            Overtime Adjusted: {{ $prevSummary }} &rarr; {{ $histSummary }}
+                                        @else
+                                            Overtime Credited: {{ $histSummary }}
+                                        @endif
+                                    </div>
+                                @endif
                                 @if (filled($h['remarks'] ?? null))
                                     <div style="margin-top:4px;font-style:italic;font-size:11.5px;color:var(--crd-text-main);">
                                         Remarks: "{{ $h['remarks'] }}"
@@ -884,9 +1002,15 @@
             @endif
 
             @if ($record->rejection_reason)
-                <div style="margin-top:8px;padding:8px 10px;border-radius:6px;background-color:#fef2f2;border:1px solid #fecaca;color:#991b1b;">
-                    <strong>Rejection Reason:</strong> {{ $record->rejection_reason }}
-                </div>
+                @if ($record->status === \App\Models\DtrChangeRequest::STATUS_VOIDED)
+                    <div style="margin-top:8px;padding:8px 10px;border-radius:6px;background-color:var(--crd-bg-subtle);border:1px solid var(--crd-border);color:var(--crd-text-main);">
+                        <strong>Void Reason:</strong> {{ $record->rejection_reason }}
+                    </div>
+                @else
+                    <div style="margin-top:8px;padding:8px 10px;border-radius:6px;background-color:#fef2f2;border:1px solid #fecaca;color:#991b1b;">
+                        <strong>Rejection Reason:</strong> {{ $record->rejection_reason }}
+                    </div>
+                @endif
             @endif
         </div>
     </div>

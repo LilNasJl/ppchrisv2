@@ -11,6 +11,7 @@ use App\Services\DtrAttendanceUnitService;
 use App\Services\DtrChangeRequestService;
 use App\Services\DtrDayPartService;
 use App\Services\DtrRecordService;
+use App\Services\OvertimeApprovalService;
 use App\Services\SaturdayWfhDtrService;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -537,8 +538,9 @@ class Dtr extends Page implements HasForms, HasTable
                                 ->options(function ($record): array {
                                     $early = max(0, (int) ($record?->early_clock_in ?? 0));
                                     $ot = max(0, (int) ($record?->overtime ?? 0));
+                                    $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
 
-                                    if ($early >= 30 && $ot >= 30) {
+                                    if ($early >= $minMinutes && $ot >= $minMinutes) {
                                         return [
                                             DtrChangeRequest::OT_SCOPE_BOTH => "Both Early Clock In ({$early} mins) & Overtime ({$ot} mins)",
                                             DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$ot} mins)",
@@ -546,13 +548,13 @@ class Dtr extends Page implements HasForms, HasTable
                                         ];
                                     }
 
-                                    if ($ot >= 30) {
+                                    if ($ot >= $minMinutes) {
                                         return [
                                             DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY => "Overtime Only ({$ot} mins)",
                                         ];
                                     }
 
-                                    if ($early >= 30) {
+                                    if ($early >= $minMinutes) {
                                         return [
                                             DtrChangeRequest::OT_SCOPE_EARLY_ONLY => "Early Clock In Only ({$early} mins)",
                                         ];
@@ -565,16 +567,17 @@ class Dtr extends Page implements HasForms, HasTable
                                 ->default(function ($record): string {
                                     $early = max(0, (int) ($record?->early_clock_in ?? 0));
                                     $ot = max(0, (int) ($record?->overtime ?? 0));
+                                    $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
 
-                                    if ($early >= 30 && $ot >= 30) {
+                                    if ($early >= $minMinutes && $ot >= $minMinutes) {
                                         return DtrChangeRequest::OT_SCOPE_BOTH;
                                     }
 
-                                    if ($ot >= 30) {
+                                    if ($ot >= $minMinutes) {
                                         return DtrChangeRequest::OT_SCOPE_OVERTIME_ONLY;
                                     }
 
-                                    if ($early >= 30) {
+                                    if ($early >= $minMinutes) {
                                         return DtrChangeRequest::OT_SCOPE_EARLY_ONLY;
                                     }
 
@@ -583,20 +586,21 @@ class Dtr extends Page implements HasForms, HasTable
                                 ->helperText(function ($record): string {
                                     $early = max(0, (int) ($record?->early_clock_in ?? 0));
                                     $ot = max(0, (int) ($record?->overtime ?? 0));
+                                    $minMinutes = OvertimeApprovalService::MINIMUM_MINUTES;
 
-                                    if ($early >= 30 && $ot >= 30) {
+                                    if ($early >= $minMinutes && $ot >= $minMinutes) {
                                         return 'Select whether to request approval for Both, Overtime Only, or Early Clock In Only.';
                                     }
 
-                                    if ($ot >= 30) {
+                                    if ($ot >= $minMinutes) {
                                         return sprintf('After-schedule overtime is eligible (%d mins). Early clock in (%d mins) is below policy threshold.', $ot, $early);
                                     }
 
-                                    if ($early >= 30) {
+                                    if ($early >= $minMinutes) {
                                         return sprintf('Early clock in is eligible (%d mins). After-schedule overtime (%d mins) is below policy threshold.', $early, $ot);
                                     }
 
-                                    return 'Minimum 30 minutes required for overtime approval.';
+                                    return "Minimum {$minMinutes} minutes (1 hour) required for overtime approval.";
                                 })
                                 ->columnSpanFull(),
 

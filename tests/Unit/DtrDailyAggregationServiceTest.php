@@ -148,6 +148,56 @@ class DtrDailyAggregationServiceTest extends TestCase
         $this->assertTrue($record->requiresAttendanceApproval());
     }
 
+    public function test_regular_and_scheduled_aggregation_enforce_sixty_minute_overtime_and_early_threshold(): void
+    {
+        $below = $this->calculate([['07:01:00', '18:59:00']]);
+        $this->assertSame(59, $below['early_clock_in']);
+        $this->assertSame(59, $below['overtime']);
+        $this->assertSame('n/a', $below['overtime_status']);
+
+        $earlyBoundary = $this->calculate([['07:00:00', '18:00:00']]);
+        $this->assertSame(60, $earlyBoundary['early_clock_in']);
+        $this->assertSame(0, $earlyBoundary['overtime']);
+        $this->assertSame('Pending', $earlyBoundary['overtime_status']);
+
+        $otBoundary = $this->calculate([['08:00:00', '19:00:00']]);
+        $this->assertSame(0, $otBoundary['early_clock_in']);
+        $this->assertSame(60, $otBoundary['overtime']);
+        $this->assertSame('Pending', $otBoundary['overtime_status']);
+
+        $scheduledBelow = $this->service()->calculateScheduled(collect([
+            $this->scheduledRecord('Shift1', '04:30:00', '12:30:00', '03:31:00', '13:29:00'),
+        ]));
+        $this->assertSame(59, $scheduledBelow['early_clock_in']);
+        $this->assertSame(59, $scheduledBelow['overtime']);
+        $this->assertSame('n/a', $scheduledBelow['overtime_status']);
+
+        $scheduledEarlyBoundary = $this->service()->calculateScheduled(collect([
+            $this->scheduledRecord('Shift1', '04:30:00', '12:30:00', '03:30:00', '12:30:00'),
+        ]));
+        $this->assertSame(60, $scheduledEarlyBoundary['early_clock_in']);
+        $this->assertSame('Pending', $scheduledEarlyBoundary['overtime_status']);
+
+        $scheduledOtBoundary = $this->service()->calculateScheduled(collect([
+            $this->scheduledRecord('Shift1', '04:30:00', '12:30:00', '04:30:00', '13:30:00'),
+        ]));
+        $this->assertSame(60, $scheduledOtBoundary['overtime']);
+        $this->assertSame('Pending', $scheduledOtBoundary['overtime_status']);
+
+        $overnightOut = $this->scheduledRecord('Shift3', '20:30:00', '04:30:00', '19:31:00', '05:29:00');
+        $overnightOut->forceFill(['date_in' => '2026-08-03', 'date_out' => '2026-08-04']);
+        $overnightBelow = $this->service()->calculateScheduled(collect([$overnightOut]));
+        $this->assertSame(59, $overnightBelow['early_clock_in']);
+        $this->assertSame(59, $overnightBelow['overtime']);
+        $this->assertSame('n/a', $overnightBelow['overtime_status']);
+
+        $overnightPassRecord = $this->scheduledRecord('Shift3', '20:30:00', '04:30:00', '19:30:00', '04:30:00');
+        $overnightPassRecord->forceFill(['date_in' => '2026-08-03', 'date_out' => '2026-08-04']);
+        $overnightPass = $this->service()->calculateScheduled(collect([$overnightPassRecord]));
+        $this->assertSame(60, $overnightPass['early_clock_in']);
+        $this->assertSame('Pending', $overnightPass['overtime_status']);
+    }
+
     protected function calculate(array $sessions): array
     {
         return $this->service()->calculate(

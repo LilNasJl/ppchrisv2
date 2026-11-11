@@ -89,6 +89,9 @@ class StationChangeRequestHistory extends Page implements HasTable
             'cancelled' => Tab::make('Cancelled')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_CANCELLED)),
 
+            'voided' => Tab::make('Voided')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_VOIDED)),
+
             'pending' => Tab::make('Pending')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', DtrChangeRequest::STATUS_PENDING)),
         ];
@@ -146,7 +149,7 @@ class StationChangeRequestHistory extends Page implements HasTable
                     ->color(fn (DtrChangeRequest $record): string => match ($record->status) {
                         DtrChangeRequest::STATUS_APPROVED => 'success',
                         DtrChangeRequest::STATUS_REJECTED => 'danger',
-                        DtrChangeRequest::STATUS_CANCELLED => 'gray',
+                        DtrChangeRequest::STATUS_CANCELLED, DtrChangeRequest::STATUS_VOIDED => 'gray',
                         default => 'warning',
                     })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('status', $direction)),
@@ -162,6 +165,9 @@ class StationChangeRequestHistory extends Page implements HasTable
                         }
                         if ($record->status === DtrChangeRequest::STATUS_CANCELLED) {
                             return 'Cancelled by Employee';
+                        }
+                        if ($record->status === DtrChangeRequest::STATUS_VOIDED) {
+                            return 'Voided (1-Hour Overtime Policy)';
                         }
                         return $record->current_step_label ? "Pending ({$record->current_step_label})" : 'Pending';
                     })
