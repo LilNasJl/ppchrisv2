@@ -123,27 +123,6 @@ class ViewOnFieldDtrSubmission extends Page
                         ->maxLength(2000),
                 ])
                 ->action(fn (array $data): mixed => $this->reviewSubmission(false, $data['remarks'] ?? null)),
-
-            Action::make('reopen')
-                ->label('Reopen to Pending')
-                ->icon(Heroicon::ArrowPath)
-                ->color('warning')
-                ->visible(fn (): bool => (bool) (
-                    $this->submission?->isRejected()
-                    && ! (bool) $this->submission?->payrollPeriod?->is_locked
-                    && ! $this->submission?->generated_dtr_id
-                    && ! $this->submission?->generated_visible_dtr_id
-                ))
-                ->requiresConfirmation()
-                ->modalHeading('Reopen Rejected On Field DTR?')
-                ->modalDescription('Returning this request to Pending allows it to be edited and reconsidered for approval.')
-                ->schema([
-                    Textarea::make('remarks')
-                        ->label('HR Remarks (Optional)')
-                        ->rows(3)
-                        ->maxLength(2000),
-                ])
-                ->action(fn (array $data): mixed => $this->reopenSubmission($data['remarks'] ?? null)),
         ];
     }
 
@@ -172,35 +151,6 @@ class ViewOnFieldDtrSubmission extends Page
         } catch (\DomainException $exception) {
             Notification::make()
                 ->title('On Field DTR was not reviewed')
-                ->body($exception->getMessage())
-                ->danger()
-                ->send();
-
-            return null;
-        }
-    }
-
-    protected function reopenSubmission(?string $remarks): mixed
-    {
-        try {
-            $service = app(OnFieldDtrService::class);
-            $submission = $this->submission;
-            $user = auth()->user();
-
-            abort_unless($submission && $user, 404);
-
-            $service->reopen($submission, $user, $remarks);
-
-            Notification::make()
-                ->title('On Field DTR reopened')
-                ->body('The request status is back to Pending for review.')
-                ->success()
-                ->send();
-
-            return $this->redirect(static::getUrl(['submissionId' => $this->submissionId]));
-        } catch (\DomainException $exception) {
-            Notification::make()
-                ->title('On Field DTR was not reopened')
                 ->body($exception->getMessage())
                 ->danger()
                 ->send();

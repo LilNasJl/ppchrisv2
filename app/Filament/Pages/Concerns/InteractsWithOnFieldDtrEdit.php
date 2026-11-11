@@ -64,7 +64,7 @@ trait InteractsWithOnFieldDtrEdit
                 $submission = $findSubmission($record);
 
                 return $submission instanceof DtrSubmission
-                    && $submission->submission_type === DtrSubmission::TYPE_PROOF;
+                    && app(OnFieldDtrService::class)->canHrEdit($submission);
             })
             ->disabled(function (?DtrSubmission $record = null) use ($findSubmission): bool {
                 $submission = $findSubmission($record);
@@ -76,7 +76,7 @@ trait InteractsWithOnFieldDtrEdit
                 $submission = $findSubmission($record);
 
                 if ($submission instanceof DtrSubmission && ! app(OnFieldDtrService::class)->canHrEdit($submission)) {
-                    return 'Approved requests in a locked payroll period cannot be edited.';
+                    return 'Approved or rejected On Field D.T.R requests cannot be edited.';
                 }
 
                 return 'Edit dates, punches, schedules, period, proof, or remarks';
@@ -96,15 +96,7 @@ trait InteractsWithOnFieldDtrEdit
                     return '';
                 }
 
-                if ($submission->isApproved()) {
-                    return 'Editing this approved request updates both the submission and its linked official and employee-visible D.T.R records.';
-                }
-
-                if ($submission->isRejected()) {
-                    return 'Update dates, punches, schedules, or remarks for this rejected request. You can reopen it to Pending afterward if needed.';
-                }
-
-                return 'Adjust attendance entries, schedule details, payroll period, or proof file before or during approval.';
+                return 'Adjust attendance entries, schedule details, payroll period, or proof file before approval.';
             })
             ->modalSubmitActionLabel('Save Changes')
             ->fillForm(function (?DtrSubmission $record = null) use ($findSubmission): array {
@@ -350,9 +342,7 @@ trait InteractsWithOnFieldDtrEdit
 
                         Notification::make()
                             ->title('On Field DTR updated')
-                            ->body($updated->isApproved()
-                                ? 'Request changes saved and linked D.T.R records were recalculated.'
-                                : 'The On Field DTR request details were updated.')
+                            ->body('The pending On Field D.T.R request details were updated.')
                             ->success()
                             ->send();
                     }

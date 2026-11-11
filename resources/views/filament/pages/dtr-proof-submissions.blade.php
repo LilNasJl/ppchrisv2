@@ -253,7 +253,7 @@
             <div class="ofd-list-header-copy">
                 <p class="ofd-list-eyebrow">Workforce Records</p>
                 <h1 class="ofd-list-title" id="ofd-list-title">On Field DTR</h1>
-                <p class="ofd-list-subtitle">Review, edit, approve, or reject employee on-field attendance submissions.</p>
+                <p class="ofd-list-subtitle">Review, edit, approve, or reject pending employee on-field attendance submissions.</p>
             </div>
 
             <div class="ofd-list-header-actions">

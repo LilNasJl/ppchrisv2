@@ -267,19 +267,11 @@ class OnFieldDtrService
             return false;
         }
 
-        if (! $submission->isApproved()) {
-            return true;
-        }
-
-        if ($submission->payrollPeriod?->is_locked) {
+        if (! $submission->isPending()) {
             return false;
         }
 
-        if (Dtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->where('is_locked', true)->exists()) {
-            return false;
-        }
-
-        if (EmployeeVisibleDtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->where('is_locked', true)->exists()) {
+        if ($submission->generated_dtr_id || $submission->generated_visible_dtr_id) {
             return false;
         }
 
@@ -300,28 +292,17 @@ class OnFieldDtrService
                 throw new \DomainException('This record is not an On Field D.T.R request.');
             }
 
-            $existingOfficial = Dtr::query()
-                ->where('on_field_dtr_submission_id', $submission->getKey())
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->values();
+            if (! $submission->isPending()) {
+                throw new \DomainException('Approved or rejected On Field D.T.R requests cannot be edited.');
+            }
 
-            $existingVisible = EmployeeVisibleDtr::query()
-                ->where('on_field_dtr_submission_id', $submission->getKey())
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->values();
-
-            $hasActiveGeneratedRows = $existingOfficial->isNotEmpty() || $existingVisible->isNotEmpty();
-
-            if (($submission->isApproved() || $hasActiveGeneratedRows) && (
-                $submission->payrollPeriod?->is_locked
-                || $existingOfficial->contains(fn (Dtr $r): bool => (bool) $r->is_locked || $r->isPayrollPeriodLocked())
-                || $existingVisible->contains(fn (EmployeeVisibleDtr $r): bool => (bool) $r->is_locked || $r->isPayrollPeriodLocked())
-            )) {
-                throw new \DomainException('This approved On Field D.T.R belongs to a locked payroll period and cannot be edited.');
+            if (
+                $submission->generated_dtr_id
+                || $submission->generated_visible_dtr_id
+                || Dtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->exists()
+                || EmployeeVisibleDtr::query()->where('on_field_dtr_submission_id', $submission->getKey())->exists()
+            ) {
+                throw new \DomainException('This request already has generated D.T.R records and cannot be edited.');
             }
 
             $targetPeriodId = (int) ($data['payroll_period_id'] ?? $submission->payroll_period_id);
@@ -438,112 +419,6 @@ class OnFieldDtrService
                 $attributes['schedule_start'] = $firstEntry['schedule_start'];
                 $attributes['schedule_end'] = $firstEntry['schedule_end'];
                 $attributes['entries'] = $normalizedEntries;
-            }
-
-            $submission->forceFill($attributes)->save();
-            $submission->refresh();
-
-            if ($submission->isApproved() && $hasActiveGeneratedRows) {
-                $builtEntries = [];
-
-                foreach ($normalizedEntries as $index => $entry) {
-                    $dtrData = $this->buildDtrData($submission, $employee, $branch, $entry, $index);
-                    $this->assertNoAttendanceConflict($submission, $employee, $dtrData, excludeSelf: true);
-                    $builtEntries[] = [
-                        'data' => $dtrData,
-                        'entry' => $entry,
-                        'index' => $index,
-                    ];
-                }
-
-                $firstOfficial = null;
-                $firstVisible = null;
-                $hasDtrSourceId = Schema::hasColumn('employee_visible_dtrs', 'dtr_source_id');
-
-                foreach ($builtEntries as $i => $item) {
-                    $dtrData = $item['data'];
-                    /** @var Dtr|null $official */
-                    $official = $existingOfficial->get($i);
-
-                    if ($official) {
-                        $official->forceFill($dtrData)->save();
-                    } else {
-                        $official = Dtr::query()->create($dtrData);
-                    }
-
-                    $visibleAttributes = [
-                        ...$dtrData,
-                        'employee_id' => $employee->getKey(),
-                        'latest_source_row_hash' => $dtrData['source_row_hash'],
-                        'latest_source_payload' => $this->sourcePayload($submission, $item['entry'], $item['index']),
-                        'is_manually_edited' => false,
-                        'needs_review' => false,
-                    ];
-
-                    if ($hasDtrSourceId) {
-                        $visibleAttributes['dtr_source_id'] = $official->getKey();
-                    }
-
-                    /** @var EmployeeVisibleDtr|null $visible */
-                    $visible = $existingVisible->get($i);
-
-                    if ($visible) {
-                        $visible->forceFill($visibleAttributes)->save();
-                    } else {
-                        $visible = EmployeeVisibleDtr::query()->create($visibleAttributes);
-                    }
-
-                    $firstOfficial ??= $official;
-                    $firstVisible ??= $visible;
-                }
-
-                $existingOfficial->slice(count($builtEntries))->each->forceDelete();
-                $existingVisible->slice(count($builtEntries))->each->forceDelete();
-
-                $submission->forceFill([
-                    'generated_dtr_id' => $firstOfficial?->getKey(),
-                    'generated_visible_dtr_id' => $firstVisible?->getKey(),
-                ])->save();
-            }
-
-            return $submission->refresh();
-        }, 3);
-    }
-
-    public function reopen(DtrSubmission $submission, User $reviewer, ?string $remarks = null): DtrSubmission
-    {
-        $this->assertHrReviewer($reviewer);
-
-        return DB::transaction(function () use ($submission, $remarks): DtrSubmission {
-            $submission = DtrSubmission::query()
-                ->with(['payrollPeriod'])
-                ->lockForUpdate()
-                ->findOrFail($submission->getKey());
-
-            if ($submission->submission_type !== DtrSubmission::TYPE_PROOF) {
-                throw new \DomainException('This record is not an On Field D.T.R request.');
-            }
-
-            if (! $submission->isRejected()) {
-                throw new \DomainException('Only rejected On Field D.T.R requests can be reopened to Pending.');
-            }
-
-            if ($submission->payrollPeriod?->is_locked) {
-                throw new \DomainException('This request belongs to a locked payroll period and cannot be reopened.');
-            }
-
-            if ($submission->generated_dtr_id || $submission->generated_visible_dtr_id) {
-                throw new \DomainException('This request already has generated D.T.R records.');
-            }
-
-            $attributes = [
-                'status' => DtrSubmission::STATUS_PENDING,
-                'reviewed_by_user_id' => null,
-                'reviewed_at' => null,
-            ];
-
-            if ($remarks !== null) {
-                $attributes['reviewer_remarks'] = $this->normalizeRemarks($remarks);
             }
 
             $submission->forceFill($attributes)->save();

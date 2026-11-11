@@ -13,7 +13,6 @@ use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -123,7 +122,7 @@ class DtrProofSubmissions extends Page implements HasTable
                     ->latest()
             ))
             ->heading('On Field DTR Requests')
-            ->description('Open payroll period edits automatically recalculate linked D.T.R records.')
+            ->description('Edit pending requests before approval. Approved and rejected requests are final and cannot be edited.')
             ->recordUrl(fn (DtrSubmission $record): string => ViewOnFieldDtrSubmission::getUrl([
                 'submissionId' => $record->publicKey(),
             ]))
@@ -329,41 +328,6 @@ class DtrProofSubmissions extends Page implements HasTable
                     ->size('xs'),
 
                 ActionGroup::make([
-                    Action::make('reopen')
-                        ->label('Reopen to Pending')
-                        ->icon(Heroicon::ArrowPath)
-                        ->color('warning')
-                        ->visible(fn (DtrSubmission $record): bool => $record->isRejected()
-                            && ! (bool) $record->payrollPeriod?->is_locked
-                            && ! $record->generated_dtr_id
-                            && ! $record->generated_visible_dtr_id)
-                        ->requiresConfirmation()
-                        ->modalHeading('Reopen Rejected On Field DTR?')
-                        ->modalDescription('This returns the request status to Pending so it can be edited and approved.')
-                        ->action(function (DtrSubmission $record): void {
-                            $user = auth()->user();
-
-                            if (! $user) {
-                                return;
-                            }
-
-                            try {
-                                app(OnFieldDtrService::class)->reopen($record, $user);
-
-                                Notification::make()
-                                    ->title('On Field DTR reopened')
-                                    ->body('The request status is now Pending for review.')
-                                    ->success()
-                                    ->send();
-                            } catch (\DomainException $exception) {
-                                Notification::make()
-                                    ->title('Unable to reopen request')
-                                    ->body($exception->getMessage())
-                                    ->danger()
-                                    ->send();
-                            }
-                        }),
-
                     DeleteAction::make()
                         ->label('Delete')
                         ->visible(fn (DtrSubmission $record): bool => $record->isPending())
@@ -378,7 +342,11 @@ class DtrProofSubmissions extends Page implements HasTable
                                 Storage::disk('local')->delete($record->file_path);
                             }
                         }),
-                ])->icon(Heroicon::EllipsisVertical)->size('xs')->tooltip('More actions'),
+                ])
+                    ->visible(fn (DtrSubmission $record): bool => $record->isPending())
+                    ->icon(Heroicon::EllipsisVertical)
+                    ->size('xs')
+                    ->tooltip('More actions'),
             ])
             ->defaultSort('created_at', 'desc')
             ->defaultPaginationPageOption(10)

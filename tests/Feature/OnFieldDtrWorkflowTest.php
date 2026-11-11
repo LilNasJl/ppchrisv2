@@ -997,30 +997,31 @@ class OnFieldDtrWorkflowTest extends TestCase
             'time_in' => '09:00:00',
             'time_out' => '18:00:00',
         ]);
+
+        // Once approved via Save & Approve, the submission can no longer be edited.
+        $this->assertFalse(app(OnFieldDtrService::class)->canHrEdit($fresh));
+        Livewire::test(DtrProofSubmissions::class)
+            ->assertTableActionHidden('edit', $fresh);
     }
 
-    public function test_hr_can_edit_approved_on_field_dtr_in_open_period_and_recalculate_linked_dtrs_and_payroll(): void
+    public function test_hr_can_edit_pending_on_field_dtr_from_view_page(): void
     {
         [, $employee, $period] = $this->context();
         $reviewer = User::factory()->create(['role' => 'hr']);
         $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
-        $approved = app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Initial approval.');
-
-        $beforeRow = app(PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
-        $this->assertEquals(1.0, (float) $beforeRow['days_worked']);
-        $this->assertEquals(500.0, (float) $beforeRow['gross_pay']);
 
         Filament::setCurrentPanel(Filament::getPanel('hr'));
         Gate::before(fn () => true);
         $this->actingAs($reviewer);
 
-        $page = Livewire::withQueryParams(['submissionId' => $approved->publicKey()])
+        $page = Livewire::withQueryParams(['submissionId' => $submission->publicKey()])
             ->test(ViewOnFieldDtrSubmission::class)
             ->assertSuccessful()
             ->assertSeeText('Workforce Records')
             ->assertDontSeeHtml('<h2 class="ofd-employee-name">')
             ->assertSeeText('Credited Work')
             ->assertSeeText('Supporting Proof')
+            ->assertActionVisible('edit')
             ->assertActionEnabled('edit')
             ->mountAction('edit');
 
@@ -1049,77 +1050,26 @@ class OnFieldDtrWorkflowTest extends TestCase
                         'schedule_end' => '17:00',
                     ],
                 ],
-                'description' => 'Extended two-day assignment.',
-                'reviewer_remarks' => 'Added day 2 and adjusted day 1 arrival time.',
+                'description' => 'Extended two-day pending assignment.',
+                'reviewer_remarks' => 'Added day 2 while still pending.',
             ])
             ->callMountedAction()
-            ->assertHasNoActionErrors();
+            ->assertHasNoActionErrors()
+            ->assertNotified('On Field DTR updated');
 
-        $fresh = $approved->fresh();
-        $this->assertSame(DtrSubmission::STATUS_APPROVED, $fresh->status);
+        $fresh = $submission->fresh();
+        $this->assertSame(DtrSubmission::STATUS_PENDING, $fresh->status);
         $this->assertCount(2, $fresh->normalizedEntries());
-        $this->assertDatabaseCount('dtrs', 2);
-        $this->assertDatabaseCount('employee_visible_dtrs', 2);
-
-        $this->assertDatabaseHas('dtrs', [
-            'on_field_dtr_submission_id' => $fresh->id,
-            'date_in' => '2026-08-20',
-            'time_in' => '09:00:00',
-            'late' => 60,
-        ]);
-
-        $this->assertDatabaseHas('dtrs', [
-            'on_field_dtr_submission_id' => $fresh->id,
-            'date_in' => '2026-08-21',
-            'time_in' => '08:00:00',
-            'late' => 0,
-        ]);
-
-        $afterTwoDays = app(PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
-        $this->assertEquals(2.0, (float) $afterTwoDays['days_worked']);
-        $this->assertEquals(62.5, (float) $afterTwoDays['late']);
-        $this->assertEquals(937.5, (float) $afterTwoDays['net_pay']);
-
-        // Removing the second entry and replacing proof file shrinks linked DTR tables cleanly
-        Storage::disk('local')->put('dtr-proof-submissions/revised.pdf', "%PDF-1.4\n%revised\n%%EOF");
-        app(OnFieldDtrService::class)->updateByHr($fresh, $reviewer, [
-            'payroll_period_id' => $period->id,
-            'entries' => [
-                [
-                    'date_in' => '2026-08-20',
-                    'time_in' => '08:00:00',
-                    'date_out' => '2026-08-20',
-                    'time_out' => '17:00:00',
-                    'schedule_type' => 'Regular',
-                    'schedule_start' => '08:00:00',
-                    'schedule_end' => '17:00:00',
-                ],
-            ],
-            'proof_file' => 'dtr-proof-submissions/revised.pdf',
-            'description' => 'Reverted to single verified day.',
-            'reviewer_remarks' => 'Removed extra entry.',
-        ]);
-
-        $this->assertDatabaseCount('dtrs', 1);
-        $this->assertDatabaseCount('employee_visible_dtrs', 1);
-        $this->assertSame('dtr-proof-submissions/revised.pdf', $fresh->fresh()->file_path);
-        $this->assertSame(Dtr::query()->sole()->id, $fresh->fresh()->generated_dtr_id);
-        $this->assertSame(EmployeeVisibleDtr::query()->sole()->id, $fresh->fresh()->generated_visible_dtr_id);
-
-        $afterShrink = app(PayrollCalculator::class)->employeeRow($employee->fresh(), $period->fresh());
-        $this->assertEquals(1.0, (float) $afterShrink['days_worked']);
-        $this->assertEquals(0.0, (float) $afterShrink['late']);
-        $this->assertEquals(500.0, (float) $afterShrink['net_pay']);
+        $this->assertDatabaseCount('dtrs', 0);
+        $this->assertDatabaseCount('employee_visible_dtrs', 0);
     }
 
-    public function test_locked_payroll_period_blocks_hr_edit_of_approved_on_field_dtr(): void
+    public function test_hr_cannot_edit_approved_on_field_dtr_in_open_or_locked_period(): void
     {
         [, $employee, $period] = $this->context();
         $reviewer = User::factory()->create(['role' => 'hr']);
         $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
-        $approved = app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Approved before lock.');
-
-        $period->update(['is_locked' => true]);
+        $approved = app(OnFieldDtrService::class)->approve($submission, $reviewer, 'Initial approval.');
 
         $this->assertFalse(app(OnFieldDtrService::class)->canHrEdit($approved->fresh()));
 
@@ -1127,15 +1077,20 @@ class OnFieldDtrWorkflowTest extends TestCase
         Gate::before(fn () => true);
         $this->actingAs($reviewer);
 
+        // Even while payroll period is still open, Approved On Field DTR is not editable in UI or service.
         Livewire::test(DtrProofSubmissions::class)
             ->assertSuccessful()
-            ->assertTableActionDisabled('edit', $approved->fresh());
+            ->assertTableActionVisible('view', $approved->fresh())
+            ->assertTableActionHidden('edit', $approved->fresh())
+            ->assertTableActionHidden('delete', $approved->fresh());
 
         Livewire::withQueryParams(['submissionId' => $approved->publicKey()])
             ->test(ViewOnFieldDtrSubmission::class)
             ->assertSuccessful()
-            ->assertSeeText('Locked Period')
-            ->assertActionDisabled('edit');
+            ->assertActionVisible('return')
+            ->assertActionHidden('edit')
+            ->assertActionHidden('approve')
+            ->assertActionHidden('reject');
 
         try {
             app(OnFieldDtrService::class)->updateByHr($approved->fresh(), $reviewer, [
@@ -1151,93 +1106,100 @@ class OnFieldDtrWorkflowTest extends TestCase
                         'schedule_end' => '17:00:00',
                     ],
                 ],
-                'description' => 'Should fail',
+                'description' => 'Should fail in open period',
             ]);
-            $this->fail('Expected DomainException when HR edits an approved request in a locked period.');
+            $this->fail('Expected DomainException when HR tries to edit an approved On Field DTR request.');
         } catch (\DomainException $e) {
-            $this->assertStringContainsString('locked', strtolower($e->getMessage()));
+            $this->assertStringContainsString('approved or rejected', strtolower($e->getMessage()));
         }
 
+        // Locking the payroll period continues to keep edit hidden/blocked and renders Locked Period pill.
+        $period->update(['is_locked' => true]);
+        $this->assertFalse(app(OnFieldDtrService::class)->canHrEdit($approved->fresh()));
+
+        Livewire::withQueryParams(['submissionId' => $approved->publicKey()])
+            ->test(ViewOnFieldDtrSubmission::class)
+            ->assertSuccessful()
+            ->assertSeeText('Locked Period')
+            ->assertActionHidden('edit');
+
+        $this->assertDatabaseHas('dtr_submissions', [
+            'id' => $approved->id,
+            'status' => DtrSubmission::STATUS_APPROVED,
+            'time_in' => '08:00:00',
+            'time_out' => '17:00:00',
+        ]);
         $this->assertDatabaseHas('dtrs', [
             'on_field_dtr_submission_id' => $approved->id,
             'time_in' => '08:00:00',
+            'time_out' => '17:00:00',
+        ]);
+        $this->assertDatabaseHas('employee_visible_dtrs', [
+            'on_field_dtr_submission_id' => $approved->id,
+            'time_in' => '08:00:00',
+            'time_out' => '17:00:00',
         ]);
     }
 
-    public function test_hr_can_edit_and_reopen_rejected_on_field_dtr_request(): void
+    public function test_hr_cannot_edit_or_reopen_rejected_on_field_dtr_request(): void
     {
-        [$branch, $employee, $period] = $this->context();
+        [, $employee, $period] = $this->context();
         $reviewer = User::factory()->create(['role' => 'hr']);
         $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
-        $rejected = app(OnFieldDtrService::class)->reject($submission, $reviewer, 'Wrong payroll period.');
+        $rejected = app(OnFieldDtrService::class)->reject($submission, $reviewer, 'Insufficient supporting proof.');
 
-        // Lock original period and move the rejected request into a newer open period
-        $period->update(['is_locked' => true]);
-        $openPeriod = PayrollPeriod::query()->create([
-            'title' => 'Aug 26 - Sep 10, 2026',
-            'date_start' => '2026-08-26',
-            'date_end' => '2026-09-10',
-            'date_payout' => '2026-09-15',
-            'description' => 'Next open period',
-            'is_locked' => false,
-        ]);
+        $this->assertFalse(app(OnFieldDtrService::class)->canHrEdit($rejected->fresh()));
 
         Filament::setCurrentPanel(Filament::getPanel('hr'));
         Gate::before(fn () => true);
         $this->actingAs($reviewer);
 
-        $rejectedPage = Livewire::test(DtrProofSubmissions::class)
-            ->assertTableActionEnabled('edit', $rejected->fresh())
-            ->mountTableAction('edit', $rejected->fresh());
-
-        $firstUuid = array_key_first($rejectedPage->get('mountedActions.0.data.entries'));
-
-        $rejectedPage
-            ->fillForm([
-                'payroll_period_id' => $openPeriod->id,
-                'entries' => [
-                    $firstUuid => [
-                        'date_in' => '2026-08-27',
-                        'time_in' => '08:00',
-                        'date_out' => '2026-08-27',
-                        'time_out' => '17:00',
-                        'schedule_type' => 'Regular',
-                        'schedule_start' => '08:00',
-                        'schedule_end' => '17:00',
-                    ],
-                ],
-                'description' => 'Moved to correct open period.',
-                'reviewer_remarks' => 'Corrected cutoff period before reopening.',
-            ])
-            ->callMountedTableAction()
-            ->assertHasNoTableActionErrors()
-            ->assertNotified('On Field DTR updated');
-
-        $this->assertSame(DtrSubmission::STATUS_REJECTED, $rejected->fresh()->status);
-        $this->assertSame($openPeriod->id, $rejected->fresh()->payroll_period_id);
-        $this->assertSame('2026-08-27', $rejected->fresh()->date_in?->toDateString());
+        Livewire::test(DtrProofSubmissions::class)
+            ->assertSuccessful()
+            ->assertTableActionVisible('view', $rejected->fresh())
+            ->assertTableActionHidden('edit', $rejected->fresh())
+            ->assertTableActionHidden('delete', $rejected->fresh())
+            ->assertTableActionDoesNotExist('reopen', record: $rejected->fresh())
+            ->assertDontSeeText('Reopen to Pending');
 
         Livewire::withQueryParams(['submissionId' => $rejected->publicKey()])
             ->test(ViewOnFieldDtrSubmission::class)
-            ->assertActionVisible('reopen')
-            ->callAction('reopen', data: [
-                'remarks' => 'Reopened for final approval.',
-            ])
-            ->assertHasNoActionErrors();
+            ->assertSuccessful()
+            ->assertActionVisible('return')
+            ->assertActionHidden('edit')
+            ->assertActionHidden('approve')
+            ->assertActionHidden('reject')
+            ->assertActionDoesNotExist('reopen')
+            ->assertDontSeeText('Reopen to Pending');
 
-        $reopened = $rejected->fresh();
-        $this->assertSame(DtrSubmission::STATUS_PENDING, $reopened->status);
-        $this->assertNull($reopened->reviewed_at);
-        $this->assertNull($reopened->reviewed_by_user_id);
+        try {
+            app(OnFieldDtrService::class)->updateByHr($rejected->fresh(), $reviewer, [
+                'payroll_period_id' => $period->id,
+                'entries' => [
+                    [
+                        'date_in' => '2026-08-21',
+                        'time_in' => '09:00:00',
+                        'date_out' => '2026-08-21',
+                        'time_out' => '18:00:00',
+                        'schedule_type' => 'Regular',
+                        'schedule_start' => '08:00:00',
+                        'schedule_end' => '17:00:00',
+                    ],
+                ],
+                'description' => 'Attempted edit after rejection',
+            ]);
+            $this->fail('Expected DomainException when HR tries to edit a rejected On Field DTR request.');
+        } catch (\DomainException $e) {
+            $this->assertStringContainsString('approved or rejected', strtolower($e->getMessage()));
+        }
 
-        app(OnFieldDtrService::class)->approve($reopened, $reviewer, 'Approved after reopen.');
-
-        $this->assertDatabaseHas('dtrs', [
-            'on_field_dtr_submission_id' => $reopened->id,
-            'payroll_period_id' => $openPeriod->id,
-            'branch_id' => $branch->id,
-            'date_in' => '2026-08-27',
-        ]);
+        $fresh = $rejected->fresh();
+        $this->assertSame(DtrSubmission::STATUS_REJECTED, $fresh->status);
+        $this->assertSame('2026-08-20', $fresh->date_in?->toDateString());
+        $this->assertSame('08:00:00', $fresh->time_in);
+        $this->assertSame('Insufficient supporting proof.', $fresh->reviewer_remarks);
+        $this->assertDatabaseCount('dtrs', 0);
+        $this->assertDatabaseCount('employee_visible_dtrs', 0);
     }
 
     public function test_review_page_renders_conflict_alert_and_gates_inline_proof_preview_to_hr(): void
@@ -1397,7 +1359,8 @@ class OnFieldDtrWorkflowTest extends TestCase
             ->assertSeeText('By masteradmin')
             ->assertDontSeeText('Pending decision')
             ->assertSeeText('Review')
-            ->assertSeeText('Edit')
+            ->assertTableActionEnabled('edit', $multiEntrySubmission)
+            ->assertTableActionHidden('edit', $legacyApproved)
             ->sortTable('attendance_summary')
             ->assertCanSeeTableRecords([$legacyApproved, $multiEntrySubmission], inOrder: true);
     }

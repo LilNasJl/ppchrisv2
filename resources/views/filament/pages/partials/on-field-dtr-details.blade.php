@@ -713,7 +713,7 @@
                 @if ($submission->generatedDtrDeletedBy)
                     by {{ $submission->generatedDtrDeletedBy->username }}
                 @endif
-                . Editing this request will update submission records only.
+                .
             </div>
         </div>
     @endif
@@ -722,7 +722,7 @@
         <div class="ofd-alert ofd-alert--danger">
             <x-filament::icon icon="heroicon-o-exclamation-circle" class="ofd-alert-icon" />
             <div>
-                <strong>Schedule Conflict Detected:</strong> One or more entries overlap an existing D.T.R, leave, or absence entry for this employee. Edit the dates or time punches before approving.
+                <strong>Schedule Conflict Detected:</strong> One or more entries overlap an existing D.T.R, leave, or absence entry for this employee.{{ $submission->isPending() ? ' Edit the dates or time punches before approving.' : '' }}
             </div>
         </div>
     @endif
