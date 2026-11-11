@@ -30,11 +30,16 @@ use App\Observers\HrActionNotificationObserver;
 use App\Services\AccountLogService;
 use App\Services\PayrollPeriodGenerator;
 use App\Services\PayrollPeriodLockService;
+use App\Services\SystemUpdateService;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
+use Filament\Facades\Filament;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -73,13 +78,53 @@ class AppServiceProvider extends ServiceProvider
         Dtr::observe(DtrDailyAggregationObserver::class);
 
         $this->registerAccountLogEvents();
+        $this->registerSystemUpdateHooks();
         $this->ensureCurrentPayrollPeriodForWebRequests();
+    }
+
+    protected function registerSystemUpdateHooks(): void
+    {
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::GLOBAL_SEARCH_AFTER,
+            static function (): string {
+                $panelId = Filament::getCurrentPanel()?->getId();
+
+                if (! in_array($panelId, ['hr', 'employee'], true) || ! auth('web')->check()) {
+                    return '';
+                }
+
+                return Blade::render(
+                    '@livewire(\App\Livewire\SystemUpdatesTrigger::class, ["panelId" => $panelId], key("su-trigger-".$panelId))',
+                    ['panelId' => $panelId],
+                );
+            },
+        );
+
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            static function (): string {
+                $panelId = Filament::getCurrentPanel()?->getId();
+
+                if (! in_array($panelId, ['hr', 'employee'], true) || ! auth('web')->check()) {
+                    return '';
+                }
+
+                return Blade::render(
+                    '@livewire(\App\Livewire\SystemUpdatesModal::class, ["panelId" => $panelId], key("su-modal-".$panelId))',
+                    ['panelId' => $panelId],
+                );
+            },
+        );
     }
 
     protected function registerAccountLogEvents(): void
     {
         Event::listen(Login::class, function (Login $event): void {
             app(AccountLogService::class)->record('login', $event->user);
+
+            if ($event->guard === 'web') {
+                app(SystemUpdateService::class)->markLoginPending($event->user);
+            }
         });
 
         Event::listen(Logout::class, function (Logout $event): void {
