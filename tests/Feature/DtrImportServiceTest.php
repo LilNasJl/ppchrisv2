@@ -605,6 +605,48 @@ class DtrImportServiceTest extends TestCase
         $this->assertSame(3, (int) $record->overtime);
         $this->assertSame('n/a', $record->overtime_status);
         $this->assertSame(0.5, app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record));
+
+        // Simulate a legacy/live row that was previously saved as Overtime before the fix,
+        // and verify that re-syncing / re-importing the same session repairs it in-place.
+        $record->forceFill([
+            'schedule_type' => 'Overtime',
+            'schedule_start' => '00:00:00',
+            'schedule_end' => '00:00:00',
+            'day_part' => 'whole_day',
+            'work_hrs' => 308,
+            'credited_work_hrs' => 0,
+            'overtime' => 308,
+            'overtime_status' => 'Pending',
+            'source_session_id' => 'AA0DDB460D',
+            'source_row_hash' => hash('sha256', 'legacy-overtime-hash'),
+        ])->save();
+
+        $resync = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Fingerprint ID' => '723352',
+                'Name' => 'JUNNA',
+                'Date In' => '2026-07-22',
+                'Time In' => '12:54:53',
+                'Date Out' => '2026-07-22',
+                'Time Out' => '18:03:11',
+                'Schedule Type' => 'Overtime',
+                'Schedule Start' => '00:00:00',
+                'Schedule End' => '00:00:00',
+                'day_part' => 'whole_day',
+                'Source Session ID' => 'AA0DDB460D',
+            ]),
+        ], 'Biometrics Payroll: ADMIN');
+
+        $this->assertSame(1, $resync['successful']);
+        $this->assertSame(0, $resync['skipped']);
+        $this->assertDatabaseCount('dtrs', 1);
+        $repaired = $record->fresh();
+        $this->assertSame('Regular', $repaired->schedule_type);
+        $this->assertSame('afternoon', $repaired->day_part);
+        $this->assertSame('13:00:00', $repaired->schedule_start);
+        $this->assertSame('18:00:00', $repaired->schedule_end);
+        $this->assertSame(300, (int) $repaired->credited_work_hrs);
+        $this->assertSame('n/a', $repaired->overtime_status);
     }
 
     public function test_regular_employee_sunday_or_after_hours_overtime_remains_overtime(): void

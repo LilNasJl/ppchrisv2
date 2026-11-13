@@ -116,14 +116,16 @@ class EmployeeVisibleDtrImportService extends DtrImportService
                 $metadata = $this->getImportMetadata($data, $importName);
 
                 if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
-                    $result['skipped']++;
-                    $result['already_existing']++;
+                    if (! $this->findRepairableOvertimeRecord($data, $metadata)) {
+                        $result['skipped']++;
+                        $result['already_existing']++;
 
-                    if (filled($sourceRowHash)) {
-                        $seenSourceRowHashes[$sourceRowHash] = true;
+                        if (filled($sourceRowHash)) {
+                            $seenSourceRowHashes[$sourceRowHash] = true;
+                        }
+
+                        continue;
                     }
-
-                    continue;
                 }
 
                 if ($this->hasBatchConflict(
@@ -316,14 +318,36 @@ class EmployeeVisibleDtrImportService extends DtrImportService
         $existing = $this->findExistingRecord($data, $metadata);
 
         if ($existing || $this->hasDatabaseConflict($data, $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY)) {
-            if ($existing && Schema::hasTable('dtrs') && blank($existing->dtr_source_id)) {
-                app(DtrSynchronizationService::class)->syncVisibleToOfficial($existing);
+            $repairable = $this->findRepairableOvertimeRecord($data, $metadata);
+
+            if (! $repairable) {
+                if ($existing && Schema::hasTable('dtrs') && blank($existing->dtr_source_id)) {
+                    app(DtrSynchronizationService::class)->syncVisibleToOfficial($existing);
+                }
+
+                return [
+                    'id' => $existing?->id ?? 0,
+                    'batch_id' => $existing?->batch_id ?? ($data['batch_id'] ?? null),
+                    'skipped' => true,
+                ];
             }
 
+            $repairable->forceFill($this->filterAttributesForTable('employee_visible_dtrs', [
+                'schedule_type' => $data['schedule_type'],
+                'schedule_start' => $data['schedule_start'],
+                'schedule_end' => $data['schedule_end'],
+                ...$metadata,
+                'latest_source_row_hash' => null,
+                'latest_source_payload' => null,
+                'needs_review' => false,
+                'review_reason' => null,
+            ]))->save();
+
+            app(AutomaticAbsenceService::class)->supersede($repairable);
+
             return [
-                'id' => $existing?->id ?? 0,
-                'batch_id' => $existing?->batch_id ?? ($data['batch_id'] ?? null),
-                'skipped' => true,
+                'id' => $repairable->id,
+                'batch_id' => $repairable->batch_id,
             ];
         }
 

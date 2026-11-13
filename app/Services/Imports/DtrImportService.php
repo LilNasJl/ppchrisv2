@@ -142,17 +142,19 @@ class DtrImportService
                 $metadata = $this->getImportMetadata($data, $importName);
 
                 if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
-                    $result['skipped']++;
-                    $result['already_existing']++;
-                    $result['conflicts']++;
-                    $result['skipped_rows'][] = $validatedRow['row'];
-                    $result['notices'][] = ['row' => $validatedRow['row'], 'message' => 'An existing DTR conflicts with this session. It was preserved; review incomplete or corrected entries before importing again.'];
+                    if (! $this->findRepairableOvertimeRecord($data, $metadata)) {
+                        $result['skipped']++;
+                        $result['already_existing']++;
+                        $result['conflicts']++;
+                        $result['skipped_rows'][] = $validatedRow['row'];
+                        $result['notices'][] = ['row' => $validatedRow['row'], 'message' => 'An existing DTR conflicts with this session. It was preserved; review incomplete or corrected entries before importing again.'];
 
-                    if (filled($sourceRowHash)) {
-                        $seenSourceRowHashes[$sourceRowHash] = true;
+                        if (filled($sourceRowHash)) {
+                            $seenSourceRowHashes[$sourceRowHash] = true;
+                        }
+
+                        continue;
                     }
-
-                    continue;
                 }
 
                 if ($this->hasBatchConflict(
@@ -422,10 +424,28 @@ class DtrImportService
         $metadata = $this->getImportMetadata($data, $importName);
 
         if ($this->hasExistingOrConflictingDatabaseRecord($data, $metadata)) {
+            $repairable = $this->findRepairableOvertimeRecord($data, $metadata);
+
+            if (! $repairable) {
+                return [
+                    'id' => 0,
+                    'batch_id' => $data['batch_id'] ?? null,
+                    'skipped' => true,
+                ];
+            }
+
+            $repairable->forceFill($this->filterAttributesForTable('dtrs', [
+                'schedule_type' => $data['schedule_type'],
+                'schedule_start' => $data['schedule_start'],
+                'schedule_end' => $data['schedule_end'],
+                ...$metadata,
+            ]))->save();
+
+            app(AutomaticAbsenceService::class)->supersede($repairable);
+
             return [
-                'id' => 0,
-                'batch_id' => $data['batch_id'] ?? null,
-                'skipped' => true,
+                'id' => $repairable->id,
+                'batch_id' => $repairable->batch_id,
             ];
         }
 
@@ -928,6 +948,59 @@ class DtrImportService
             $data,
             $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
         );
+    }
+
+    /**
+     * Find an existing imported "Overtime" record for the exact same punch session that should be
+     * repaired in-place to Regular/Saturday when re-imported or re-synced.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $metadata
+     */
+    protected function findRepairableOvertimeRecord(array $data, array $metadata): ?Dtr
+    {
+        if (
+            $this->isAbsenceRow($data)
+            || ! in_array($metadata['schedule_type'] ?? null, ['Regular', 'Saturday'], true)
+        ) {
+            return null;
+        }
+
+        $records = $this->getPotentialConflictRecords($data);
+
+        $match = $records->first(function (Dtr $record) use ($data): bool {
+            if ($record->is_locked || $record->schedule_type !== 'Overtime') {
+                return false;
+            }
+
+            if (
+                filled($data['source_session_id'] ?? null)
+                && filled($record->source_session_id)
+                && (string) $record->source_session_id === (string) $data['source_session_id']
+            ) {
+                return true;
+            }
+
+            return $record->getRawOriginal('date_in') === ($data['date_in'] ?? null)
+                && $record->getRawOriginal('time_in') === ($data['time_in'] ?? null)
+                && $record->getRawOriginal('date_out') === ($data['date_out'] ?? null)
+                && $record->getRawOriginal('time_out') === ($data['time_out'] ?? null);
+        });
+
+        if (! $match) {
+            return null;
+        }
+
+        // Ensure no other record conflicts if we ignore this repairable record.
+        if ($this->hasDatabaseConflict(
+            $data,
+            $metadata['day_part'] ?? DtrDayPartService::WHOLE_DAY,
+            (int) $match->getKey(),
+        )) {
+            return null;
+        }
+
+        return $match;
     }
 
     /**
