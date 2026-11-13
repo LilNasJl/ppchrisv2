@@ -624,6 +624,14 @@ class DtrImportService
      */
     protected function buildSourceRowHash(array $data): string
     {
+        $resolvedScheduleType = $this->resolveScheduleType($data);
+        $scheduleStart = in_array($resolvedScheduleType, ['Regular', 'Saturday'], true)
+            ? (string) ($this->getScheduleStartValue($data, $resolvedScheduleType) ?? '')
+            : (string) ($data['schedule_start'] ?? '');
+        $scheduleEnd = in_array($resolvedScheduleType, ['Regular', 'Saturday'], true)
+            ? (string) ($this->getScheduleEndValue($data, $resolvedScheduleType) ?? '')
+            : (string) ($data['schedule_end'] ?? '');
+
         $fields = [
             (string) ($data['payroll_period_id'] ?? ''),
             (string) $this->getImportedBranchId($data),
@@ -632,9 +640,9 @@ class DtrImportService
             (string) ($data['time_in'] ?? ''),
             (string) ($data['date_out'] ?? ''),
             (string) ($data['time_out'] ?? ''),
-            $this->resolveScheduleType($data),
-            (string) ($data['schedule_start'] ?? ''),
-            (string) ($data['schedule_end'] ?? ''),
+            $resolvedScheduleType,
+            $scheduleStart,
+            $scheduleEnd,
         ];
         if ($this->isAbsenceRow($data)) {
             $fields[] = $data['day_part'];
@@ -749,9 +757,18 @@ class DtrImportService
             return app(AutomaticAbsenceService::class)->calculation($data, $this->getEmployee($data));
         }
 
+        $calculation = $this->calculateImportedDtrData($data);
+
+        if (
+            $this->normalizeScheduleType($data['schedule_type'] ?? null) === 'Overtime'
+            && ($calculation['schedule_type'] ?? null) !== 'Overtime'
+        ) {
+            return $calculation;
+        }
+
         return app(DtrOvertimeTransferService::class)->applyImportedPayload(
             $data,
-            $this->calculateImportedDtrData($data),
+            $calculation,
         );
     }
 
@@ -1160,6 +1177,12 @@ class DtrImportService
         $isSaturday = filled($data['date_in'] ?? null)
             && Carbon::parse($data['date_in'])->isSaturday();
 
+        if ($scheduleType === 'Overtime' && $this->shouldNormalizeOvertimeToRegularSchedule($data)) {
+            return $isSaturday && $this->employeeUsesSaturdaySchedule($data)
+                ? 'Saturday'
+                : 'Regular';
+        }
+
         if (
             $isSaturday
             && $this->employeeUsesSaturdaySchedule($data)
@@ -1173,6 +1196,89 @@ class DtrImportService
         }
 
         return $scheduleType;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function shouldNormalizeOvertimeToRegularSchedule(array $data): bool
+    {
+        $employee = $this->getEmployee($data);
+
+        if (! $employee || ! app(DtrDayPartService::class)->isRegularScheduleType($employee->schedule_type ?: 'regular')) {
+            return false;
+        }
+
+        foreach (['date_in', 'time_in', 'date_out', 'time_out'] as $key) {
+            if (blank($data[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        $dateIn = Carbon::parse($data['date_in'])->startOfDay();
+
+        if ($dateIn->isSunday()) {
+            return false;
+        }
+
+        if ($dateIn->isSaturday() && ! $this->employeeUsesSaturdaySchedule($data)) {
+            return false;
+        }
+
+        $holidayData = $this->getHolidayData($data);
+        if (! empty($holidayData['is_holiday']) && empty($holidayData['holiday_excluded'])) {
+            return false;
+        }
+
+        [$windowStart, $windowEnd] = $this->getRegularScheduleWindowForDate($data, $dateIn->isSaturday());
+
+        if (blank($windowStart) || blank($windowEnd)) {
+            return false;
+        }
+
+        $actualIn = Carbon::parse("{$data['date_in']} {$data['time_in']}");
+        $actualOut = Carbon::parse("{$data['date_out']} {$data['time_out']}");
+
+        if ($actualOut->lessThanOrEqualTo($actualIn)) {
+            $actualOut->addDay();
+        }
+
+        $scheduledStart = Carbon::parse("{$data['date_in']} {$windowStart}");
+        $scheduledEnd = Carbon::parse("{$data['date_in']} {$windowEnd}");
+
+        if ($scheduledEnd->lessThanOrEqualTo($scheduledStart)) {
+            $scheduledEnd->addDay();
+        }
+
+        $overlapStart = $actualIn->greaterThan($scheduledStart) ? $actualIn : $scheduledStart;
+        $overlapEnd = $actualOut->lessThan($scheduledEnd) ? $actualOut : $scheduledEnd;
+
+        return $overlapEnd->greaterThan($overlapStart);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{0: string, 1: string}
+     */
+    protected function getRegularScheduleWindowForDate(array $data, bool $isSaturday): array
+    {
+        if ($isSaturday) {
+            return ['08:00:00', '11:00:00'];
+        }
+
+        $branch = $this->getBranch($data);
+        $start = filled($branch?->reg_sched_start)
+            ? Carbon::parse($branch->reg_sched_start)->format('H:i:s')
+            : '08:00:00';
+        $end = filled($branch?->reg_sched_end)
+            ? Carbon::parse($branch->reg_sched_end)->format('H:i:s')
+            : '18:00:00';
+
+        if ($start === '00:00:00' && $end === '00:00:00') {
+            return ['08:00:00', '18:00:00'];
+        }
+
+        return [$start, $end];
     }
 
     /**
@@ -1226,7 +1332,14 @@ class DtrImportService
             return '08:00:00';
         }
 
-        return $data['schedule_start'] ?? null;
+        $start = $data['schedule_start'] ?? null;
+        $end = $data['schedule_end'] ?? null;
+
+        if ($scheduleType === 'Regular' && (blank($start) || ($start === '00:00:00' && $end === '00:00:00'))) {
+            return $this->getRegularScheduleWindowForDate($data, false)[0];
+        }
+
+        return $start;
     }
 
     /**
@@ -1238,7 +1351,14 @@ class DtrImportService
             return '11:00:00';
         }
 
-        return $data['schedule_end'] ?? null;
+        $start = $data['schedule_start'] ?? null;
+        $end = $data['schedule_end'] ?? null;
+
+        if ($scheduleType === 'Regular' && (blank($end) || ($start === '00:00:00' && $end === '00:00:00'))) {
+            return $this->getRegularScheduleWindowForDate($data, false)[1];
+        }
+
+        return $end;
     }
 
     protected function getScheduleStartColumn(string $scheduleType): ?string

@@ -563,6 +563,98 @@ class DtrImportServiceTest extends TestCase
         ]);
     }
 
+    public function test_regular_employee_weekday_afternoon_punch_labeled_overtime_by_device_is_normalized_to_regular_half_day(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $employee = Employee::query()->create([
+            'uid' => 'PF-0091',
+            'firstname' => 'Junna',
+            'lastname' => 'Martinez',
+            'branch_id' => $branch->id,
+            'fingerprint_id' => '723352',
+            'employment_type' => 'Permanent',
+            'schedule_type' => 'regular',
+            'rate_type' => 'monthly',
+            'monthly_rate' => 15000,
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([
+            $this->row($branch, $period, [
+                'Fingerprint ID' => '723352',
+                'Name' => 'JUNNA',
+                'Date In' => '2026-07-22', // Wednesday
+                'Time In' => '12:54:53',
+                'Date Out' => '2026-07-22',
+                'Time Out' => '18:03:11',
+                'Schedule Type' => 'Overtime',
+                'Schedule Start' => '00:00:00',
+                'Schedule End' => '00:00:00',
+                'day_part' => 'whole_day',
+            ]),
+        ], 'Biometrics Payroll: ADMIN');
+
+        $this->assertSame(1, $result['successful']);
+        $record = Dtr::query()->where('employee_id', $employee->id)->sole();
+        $this->assertSame('Regular', $record->schedule_type);
+        $this->assertSame('afternoon', $record->day_part);
+        $this->assertSame('13:00:00', $record->schedule_start);
+        $this->assertSame('18:00:00', $record->schedule_end);
+        $this->assertSame(300, (int) $record->credited_work_hrs);
+        $this->assertSame(0, (int) $record->late);
+        $this->assertSame(0, (int) $record->undertime);
+        $this->assertSame(3, (int) $record->overtime);
+        $this->assertSame('n/a', $record->overtime_status);
+        $this->assertSame(0.5, app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record));
+    }
+
+    public function test_regular_employee_sunday_or_after_hours_overtime_remains_overtime(): void
+    {
+        [$branch, $period] = $this->importContext();
+        $employee = Employee::query()->create([
+            'uid' => 'PF-0092',
+            'firstname' => 'Sunday',
+            'lastname' => 'Worker',
+            'branch_id' => $branch->id,
+            'fingerprint_id' => '723353',
+            'employment_type' => 'Permanent',
+            'schedule_type' => 'regular',
+            'rate_type' => 'monthly',
+            'monthly_rate' => 15000,
+        ]);
+
+        $sundayRow = $this->row($branch, $period, [
+            'Fingerprint ID' => '723353',
+            'Date In' => '2026-07-26', // Sunday
+            'Time In' => '09:00:00',
+            'Date Out' => '2026-07-26',
+            'Time Out' => '15:00:00',
+            'Schedule Type' => 'Overtime',
+            'Schedule Start' => '00:00:00',
+            'Schedule End' => '00:00:00',
+        ]);
+
+        $afterHoursRow = $this->row($branch, $period, [
+            'Fingerprint ID' => '723353',
+            'Date In' => '2026-07-22', // Wednesday
+            'Time In' => '18:30:00',
+            'Date Out' => '2026-07-22',
+            'Time Out' => '21:00:00',
+            'Schedule Type' => 'Overtime',
+            'Schedule Start' => '00:00:00',
+            'Schedule End' => '00:00:00',
+        ]);
+
+        $result = app(DtrImportService::class)->importRows([$sundayRow, $afterHoursRow], 'Biometrics Payroll: ADMIN');
+
+        $this->assertSame(2, $result['successful']);
+        $records = Dtr::query()->where('employee_id', $employee->id)->orderBy('date_in')->get();
+        $this->assertCount(2, $records);
+        $this->assertSame('Overtime', $records[0]->schedule_type);
+        $this->assertSame(150, (int) $records[0]->overtime);
+        $this->assertSame('Overtime', $records[1]->schedule_type);
+        $this->assertSame(360, (int) $records[1]->overtime);
+    }
+
     public function test_regular_morning_and_afternoon_rows_import_in_the_same_batch(): void
     {
         [$branch, $period] = $this->importContext();
