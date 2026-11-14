@@ -298,9 +298,30 @@ class DtrChangeRequestWorkflowTest extends TestCase
         Livewire::test(DtrChangeRequests::class)
             ->assertSuccessful()
             ->assertSee('WORKFORCE RECORDS')
-            ->assertSee('Missing DTR Entries')
+            ->assertSee('Missing DTR')
+            ->assertSee('Return');
+    }
+
+    public function test_employee_dtr_page_renders_on_field_dtr_in_header_and_print_dtr_in_table_header(): void
+    {
+        [$employee, $period] = $this->context();
+        $user = User::factory()->create([
+            'role' => 'employee',
+            'employee_id' => $employee->id,
+        ]);
+        $employee->update(['user_id' => $user->id]);
+
+        $this->actingAs($user, 'web');
+
+        Livewire::withQueryParams(['periodId' => $period->publicKey()])
+            ->test(\App\Filament\Employee\Pages\Dtr::class)
+            ->assertSuccessful()
+            ->assertSee('WORKFORCE RECORDS')
+            ->assertSee('Daily Time Record')
+            ->assertSee('Change Requests')
             ->assertSee('On Field DTR')
-            ->assertSee('Return to D.T.R');
+            ->assertTableHeaderActionsExistInOrder(['periodSelector', 'printDtr'])
+            ->assertSee('Print D.T.R');
     }
 
     public function test_submission_routes_to_the_active_station_manager_without_modifying_dtr(): void

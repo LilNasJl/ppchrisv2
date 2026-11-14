@@ -182,10 +182,13 @@
         .emp-leave-page .fi-tabs-item {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
+            vertical-align: middle;
             gap: 0.45rem;
-            padding: 0.45rem 0.85rem;
+            padding: 0.35rem 0.85rem;
             font-size: 0.8rem;
             font-weight: 600;
+            line-height: 1.25;
             border-radius: 0.45rem;
             color: #64748b;
             background: transparent;
@@ -193,7 +196,17 @@
             text-decoration: none;
             white-space: nowrap;
             min-height: 2.15rem;
+            height: 2.15rem;
             border: 1px solid transparent;
+            box-sizing: border-box;
+        }
+
+        .emp-leave-page .fi-tabs-item svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .dark .emp-leave-page .fi-tabs-item {
@@ -338,60 +351,86 @@
                 font-size: 0.6rem !important;
             }
         }
+
+        /* ── Modal Window & Transparency Fix ────────────────────────── */
+        .fi-modal-window,
+        .dark .fi-modal-window {
+            background-color: #0f172a !important;
+        }
+
+        .fi-modal-header,
+        .fi-modal-content,
+        .fi-modal-footer {
+            background-color: #0f172a !important;
+        }
+
+        @media (max-width: 640px) {
+            /* ── Modal Full Width & Transparency Fix for Mobile View ─── */
+            .fi-modal-window-ctn {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+
+            .fi-modal-window {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                min-width: 100vw !important;
+                margin: 0 !important;
+                border-radius: 1rem 1rem 0 0 !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                border-bottom: 0 !important;
+                background-color: #0f172a !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                max-height: 92dvh !important;
+                overflow: hidden !important;
+            }
+
+            .fi-modal-header {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.85rem 1rem 0.5rem !important;
+                border-bottom: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-content {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem 0.75rem !important;
+                gap: 0.75rem !important;
+            }
+
+            .fi-modal-footer {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem !important;
+                border-top: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-footer-actions {
+                width: 100% !important;
+                display: flex !important;
+                gap: 0.5rem !important;
+            }
+
+            .fi-modal-footer-actions .fi-btn {
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                justify-content: center !important;
+            }
+        }
+
     </style>
 
     <div class="emp-leave-page employee-blue-page">
-        {{-- KPI Summary Strip --}}
-        <div class="emp-leave-kpis">
-            <div class="emp-leave-kpi primary">
-                <div class="emp-leave-icon">
-                    <x-filament::icon icon="heroicon-m-calendar-days" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div class="emp-leave-body">
-                    <span class="emp-leave-label">TOTAL REQUESTS</span>
-                    <div class="emp-leave-val text-blue-700 dark:text-blue-300">{{ $stats['total'] }}</div>
-                    <span class="emp-leave-subtext">All filed leaves</span>
-                </div>
-            </div>
-
-            <div class="emp-leave-kpi">
-                <div class="emp-leave-icon">
-                    <x-filament::icon icon="heroicon-m-clock" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div class="emp-leave-body">
-                    <span class="emp-leave-label">PENDING APPROVAL</span>
-                    <div class="emp-leave-val {{ $stats['pending'] > 0 ? 'text-amber-700 dark:text-amber-300' : '' }}">
-                        {{ $stats['pending'] }}
-                    </div>
-                    <span class="emp-leave-badge {{ $stats['pending'] > 0 ? 'amber' : 'blue' }}">
-                        {{ $stats['pending'] > 0 ? 'Awaiting action' : 'None pending' }}
-                    </span>
-                </div>
-            </div>
-
-            <div class="emp-leave-kpi">
-                <div class="emp-leave-icon">
-                    <x-filament::icon icon="heroicon-m-check-circle" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div class="emp-leave-body">
-                    <span class="emp-leave-label">APPROVED LEAVES</span>
-                    <div class="emp-leave-val text-emerald-700 dark:text-emerald-300">{{ $stats['approved'] }}</div>
-                    <span class="emp-leave-badge green">Granted</span>
-                </div>
-            </div>
-
-            <div class="emp-leave-kpi">
-                <div class="emp-leave-icon">
-                    <x-filament::icon icon="heroicon-m-sparkles" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div class="emp-leave-body">
-                    <span class="emp-leave-label">REGULAR CREDITS</span>
-                    <div class="emp-leave-val text-purple-700 dark:text-purple-300">{{ number_format($stats['credits'], 1) }}</div>
-                    <span class="emp-leave-subtext">+{{ number_format($stats['bday_credits'], 1) }} B-day leave</span>
-                </div>
-            </div>
-        </div>
-
         {{-- Content: Tabs + Compact Table --}}
         <div>
             {{ $this->content }}

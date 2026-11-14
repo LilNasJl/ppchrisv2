@@ -369,9 +369,8 @@ class DtrChangeRequests extends Page implements HasTable
     {
         return [
             $this->getMissingDtrEntriesAction(),
-            $this->getOnFieldDtrAction(),
             Action::make('return')
-                ->label('Return to D.T.R')
+                ->label('Return')
                 ->icon(Heroicon::ArrowLeft)
                 ->color('gray')
                 ->outlined()
@@ -393,21 +392,18 @@ class DtrChangeRequests extends Page implements HasTable
     protected function getMissingDtrEntriesAction(): Action
     {
         return Action::make('missingDtrEntries')
-            ->label('Missing DTR Entries')
+            ->label('Missing DTR')
             ->icon(Heroicon::DocumentPlus)
             ->color('primary')
             ->visible(fn (): bool => ! $this->isSelectedPeriodLocked())
             ->disabled(fn (): bool => $this->isSelectedPeriodLocked())
-            ->modalHeading('Submit Missing D.T.R Entries')
+            ->modalHeading('Submit Missing DTR')
             ->modalDescription('Submit one or more missing attendance records for an unlocked payroll period.')
             ->modalSubmitActionLabel('Submit Request')
             ->modalCancelActionLabel('Cancel')
                 ->modalWidth('4xl')
                 ->form([
-                    Section::make('Payroll Period')
-                        ->description('Select the unlocked payroll period to which the missing attendance records belong.')
-                        ->schema([
-                            Select::make('payroll_period_id')
+                    Select::make('payroll_period_id')
                                 ->label('Payroll Period')
                                 ->placeholder('Select unlocked payroll period...')
                                 ->options(function (): array {
@@ -430,12 +426,8 @@ class DtrChangeRequests extends Page implements HasTable
                                 })
                                 ->required()
                                 ->live(),
-                        ]),
 
-                    Section::make('Missing Attendance Entries')
-                        ->description('Add all missing attendance dates and times. You can add, review, or remove entries before submitting.')
-                        ->schema([
-                            Repeater::make('entries')
+                    Repeater::make('entries')
                                 ->label('Attendance Records')
                                 ->addActionLabel('Add DTR Entry')
                                 ->defaultItems(1)
@@ -548,35 +540,31 @@ class DtrChangeRequests extends Page implements HasTable
                                         ->maxLength(500)
                                         ->columnSpanFull(),
                                 ])
-                                ->columns(2),
-                        ]),
+                                ->columns(['default' => 1, 'sm' => 2]),
 
-                    Section::make('Explanation & Supporting Document')
-                        ->schema([
-                            Textarea::make('explanation')
-                                ->label('Explanation / Justification')
-                                ->placeholder('Explain why these attendance entries were missed (e.g. forgot to punch during field assignment, biometric lag)...')
-                                ->required()
-                                ->rows(3)
-                                ->maxLength(2000)
-                                ->columnSpanFull(),
+                    Textarea::make('explanation')
+                        ->label('Explanation / Justification')
+                        ->placeholder('Explain why these attendance entries were missed (e.g. forgot to punch during field assignment, biometric lag)...')
+                        ->required()
+                        ->rows(3)
+                        ->maxLength(2000)
+                        ->columnSpanFull(),
 
-                            FileUpload::make('attachment_path')
-                                ->label('Supporting Document (Image Attachment)')
-                                ->required()
-                                ->disk('local')
-                                ->directory('dtr-change-requests')
-                                ->acceptedFileTypes([
-                                    'image/png',
-                                    'image/jpeg',
-                                    'image/jpg',
-                                ])
-                                ->maxSize(2560)
-                                ->helperText('Required. Upload supporting document (proof / log sheet). Accepted: PNG, JPG, JPEG (Max 2.5MB).')
-                                ->storeFileNamesIn('attachment_original_name')
-                                ->fetchFileInformation(false)
-                                ->columnSpanFull(),
-                        ]),
+                    FileUpload::make('attachment_path')
+                        ->label('Supporting Document (Image Attachment)')
+                        ->required()
+                        ->disk('local')
+                        ->directory('dtr-change-requests')
+                        ->acceptedFileTypes([
+                            'image/png',
+                            'image/jpeg',
+                            'image/jpg',
+                        ])
+                        ->maxSize(2560)
+                        ->helperText('Required. Upload supporting document (proof / log sheet). Accepted: PNG, JPG, JPEG (Max 2.5MB).')
+                        ->storeFileNamesIn('attachment_original_name')
+                        ->fetchFileInformation(false)
+                        ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
                     if ($this->isSelectedPeriodLocked()) {

@@ -160,118 +160,42 @@
             color: #f8fafc;
         }
 
-        /* Sticky Columns (1: Index, 2: Bank ID, 3: Name) */
+        /* Leading Columns (1: Index, 2: Bank ID, 3: Name) */
         .payroll-col-index {
-            position: sticky !important;
-            left: 0 !important;
-            inset-inline-start: 0 !important;
-            width: 2.75rem !important;
-            min-width: 2.75rem !important;
-            max-width: 2.75rem !important;
+            position: static !important;
+            width: auto !important;
+            min-width: 4.25rem !important;
+            max-width: none !important;
             text-align: center !important;
+            white-space: nowrap !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
             border-right: 1px solid rgba(203, 213, 225, 0.95) !important;
-            z-index: 5;
         }
 
         .payroll-col-bank-id {
-            position: sticky !important;
-            left: 2.75rem !important;
-            inset-inline-start: 2.75rem !important;
+            position: static !important;
             width: 6.5rem !important;
             min-width: 6.5rem !important;
             max-width: 6.5rem !important;
             border-right: 1px solid rgba(203, 213, 225, 0.95) !important;
-            z-index: 5;
         }
 
         .payroll-col-name {
-            position: sticky !important;
-            left: 9.25rem !important;
-            inset-inline-start: 9.25rem !important;
-            width: 13rem !important;
-            min-width: 13rem !important;
-            max-width: 13rem !important;
-            border-right: 2px solid rgba(148, 163, 184, 0.85) !important;
-            box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.2) !important;
-            z-index: 5;
+            position: static !important;
+            width: auto !important;
+            min-width: 16rem !important;
+            max-width: none !important;
+            white-space: nowrap !important;
+            border-right: 1px solid rgba(203, 213, 225, 0.95) !important;
+            box-shadow: none !important;
         }
 
         .dark .payroll-col-index,
-        .dark .payroll-col-bank-id {
-            border-right: 1px solid rgba(51, 65, 85, 0.95) !important;
-        }
-
+        .dark .payroll-col-bank-id,
         .dark .payroll-col-name {
-            border-right: 2px solid rgba(71, 85, 105, 0.95) !important;
-            box-shadow: 4px 0 10px -2px rgba(0, 0, 0, 0.5) !important;
-        }
-
-        /* Opaque backgrounds for sticky headers to prevent scrolled text bleed-through */
-        .payroll-table thead th.payroll-col-index,
-        .payroll-table thead th.payroll-col-bank-id,
-        .payroll-table thead th.payroll-col-name {
-            background: rgb(241, 245, 249) !important;
-            z-index: 10 !important;
-        }
-
-        .dark .payroll-table thead th.payroll-col-index,
-        .dark .payroll-table thead th.payroll-col-bank-id,
-        .dark .payroll-table thead th.payroll-col-name {
-            background: rgb(30, 41, 59) !important;
-            z-index: 10 !important;
-        }
-
-        /* Opaque backgrounds for sticky body cells to prevent scrolled text bleed-through */
-        .payroll-table tbody tr:nth-child(odd) td.payroll-col-index,
-        .payroll-table tbody tr:nth-child(odd) td.payroll-col-bank-id,
-        .payroll-table tbody tr:nth-child(odd) td.payroll-col-name {
-            background: #ffffff !important;
-        }
-
-        .payroll-table tbody tr:nth-child(even) td.payroll-col-index,
-        .payroll-table tbody tr:nth-child(even) td.payroll-col-bank-id,
-        .payroll-table tbody tr:nth-child(even) td.payroll-col-name {
-            background: #f8fafc !important;
-        }
-
-        .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-index,
-        .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-bank-id,
-        .dark .payroll-table tbody tr:nth-child(odd) td.payroll-col-name {
-            background: rgb(15, 23, 42) !important;
-        }
-
-        .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-index,
-        .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-bank-id,
-        .dark .payroll-table tbody tr:nth-child(even) td.payroll-col-name {
-            background: rgb(30, 41, 59) !important;
-        }
-
-        /* Opaque backgrounds on hover for sticky cells */
-        .payroll-table tbody tr:hover td.payroll-col-index,
-        .payroll-table tbody tr:hover td.payroll-col-bank-id,
-        .payroll-table tbody tr:hover td.payroll-col-name {
-            background: rgb(239, 246, 255) !important;
-        }
-
-        .dark .payroll-table tbody tr:hover td.payroll-col-index,
-        .dark .payroll-table tbody tr:hover td.payroll-col-bank-id,
-        .dark .payroll-table tbody tr:hover td.payroll-col-name {
-            background: rgb(30, 58, 138) !important;
-        }
-
-        /* Opaque backgrounds on summary/total row for sticky cells */
-        .payroll-table tfoot td.payroll-col-index,
-        .payroll-table tfoot td.payroll-col-bank-id,
-        .payroll-table tfoot td.payroll-col-name {
-            background: rgb(219, 234, 254) !important;
-            z-index: 8 !important;
-        }
-
-        .dark .payroll-table tfoot td.payroll-col-index,
-        .dark .payroll-table tfoot td.payroll-col-bank-id,
-        .dark .payroll-table tfoot td.payroll-col-name {
-            background: rgb(30, 58, 138) !important;
-            z-index: 8 !important;
+            border-right: 1px solid rgba(51, 65, 85, 0.95) !important;
+            box-shadow: none !important;
         }
 
         /* Screen preview styling inside print document containers */

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Employee\Pages\Station;
 
+use App\Filament\Employee\Pages\Dtr;
 use App\Filament\Employee\Pages\DtrChangeRequests;
 use App\Models\DtrSubmission;
 use App\Models\Employee;
@@ -21,11 +22,14 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Resources\Concerns\HasTabs;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -34,11 +38,13 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Override;
 
 class StationProofSubmissions extends Page implements HasTable
 {
+    use HasTabs;
     use InteractsWithTable;
 
     protected string $view = 'filament.employee.pages.station-proof-submissions';
@@ -74,59 +80,356 @@ class StationProofSubmissions extends Page implements HasTable
         if (! auth()->user()?->employee) {
             abort(403, 'An employee account is required to submit On Field DTR.');
         }
+
+        $this->loadDefaultActiveTab();
+    }
+
+    public function updatedPeriodId($value): void
+    {
+        $this->periodId = filled($value) ? (string) $value : null;
+        $this->resetPage();
+        $this->resetTable();
+    }
+
+    public function payrollPeriods(): Collection
+    {
+        return PayrollPeriod::query()
+            ->newestFirst()
+            ->get();
+    }
+
+    public function getSelectedPeriodProperty(): ?PayrollPeriod
+    {
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
+
+        return filled($resolvedPeriodId)
+            ? PayrollPeriod::query()->find($resolvedPeriodId)
+            : null;
+    }
+
+    public function getStatsProperty(): array
+    {
+        $employeeId = auth()->user()?->employee?->id;
+        if (! $employeeId) {
+            return [
+                'total' => 0,
+                'pending' => 0,
+                'approved' => 0,
+                'rejected' => 0,
+            ];
+        }
+
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
+
+        $counts = DtrSubmission::query()
+            ->where('submitted_by_employee_id', $employeeId)
+            ->where('submission_type', DtrSubmission::TYPE_PROOF)
+            ->when(filled($resolvedPeriodId), fn (Builder $q) => $q->where('payroll_period_id', $resolvedPeriodId))
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->all();
+
+        $pending = (int) ($counts[DtrSubmission::STATUS_PENDING] ?? 0);
+        $approved = (int) ($counts[DtrSubmission::STATUS_APPROVED] ?? 0);
+        $rejected = (int) ($counts[DtrSubmission::STATUS_REJECTED] ?? 0);
+        $total = $pending + $approved + $rejected;
+
+        return [
+            'total' => $total,
+            'pending' => $pending,
+            'approved' => $approved,
+            'rejected' => $rejected,
+        ];
+    }
+
+    public function getDefaultActiveTab(): string|int|null
+    {
+        return 'all';
+    }
+
+    public function getTabs(): array
+    {
+        return [
+            'all' => Tab::make('All')
+                ->badge(fn (): ?int => $this->getTabCount(null)),
+
+            'pending' => Tab::make('Pending')
+                ->badge(fn (): ?int => $this->getTabCount(DtrSubmission::STATUS_PENDING))
+                ->badgeColor('warning')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', DtrSubmission::STATUS_PENDING)),
+
+            'approved' => Tab::make('Approved')
+                ->badge(fn (): ?int => $this->getTabCount(DtrSubmission::STATUS_APPROVED))
+                ->badgeColor('success')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', DtrSubmission::STATUS_APPROVED)),
+
+            'rejected' => Tab::make('Rejected')
+                ->badge(fn (): ?int => $this->getTabCount(DtrSubmission::STATUS_REJECTED))
+                ->badgeColor('danger')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', DtrSubmission::STATUS_REJECTED)),
+        ];
+    }
+
+    protected function getTabCount(?string $status): ?int
+    {
+        $employeeId = auth()->user()?->employee?->id;
+        if (! $employeeId) {
+            return null;
+        }
+
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
+
+        $count = DtrSubmission::query()
+            ->where('submitted_by_employee_id', $employeeId)
+            ->where('submission_type', DtrSubmission::TYPE_PROOF)
+            ->when(filled($resolvedPeriodId), fn (Builder $q) => $q->where('payroll_period_id', $resolvedPeriodId))
+            ->when(filled($status), fn (Builder $q) => $q->where('status', $status))
+            ->count();
+
+        return $count > 0 ? $count : null;
+    }
+
+    public static function onFieldScheduleOptions(): array
+    {
+        return [
+            'Regular' => 'Regular',
+            'Flexible' => 'Flexible',
+            'Shift1' => 'Shift 1',
+            'Shift2' => 'Shift 2',
+            'Shift3' => 'Shift 3',
+            'Broken1' => 'Broken Shift 1',
+            'Broken2' => 'Broken Shift 2',
+            'Broken3' => 'Broken Shift 3',
+            'Saturday' => 'Saturday',
+            'Overtime' => 'Overtime Only',
+        ];
+    }
+
+    protected function formatAttendanceTooltip(DtrSubmission $record): string
+    {
+        $entries = $record->normalizedEntries();
+
+        if ($entries === []) {
+            return 'No attendance entries.';
+        }
+
+        $service = app(OnFieldDtrService::class);
+        $scheduleLabels = static::onFieldScheduleOptions();
+
+        return collect($entries)
+            ->values()
+            ->map(function (array $entry, int $index) use ($record, $service, $scheduleLabels, $entries): string {
+                $dateIn = filled($entry['date_in'] ?? null)
+                    ? Carbon::parse($entry['date_in'])->format('M d, Y')
+                    : '-';
+                $in = filled($entry['time_in'] ?? null)
+                    ? Carbon::parse($entry['time_in'])->format('g:i A')
+                    : '-';
+                $out = filled($entry['time_out'] ?? null)
+                    ? Carbon::parse($entry['time_out'])->format('g:i A')
+                    : '-';
+                $defaults = $service->resolveEntryScheduleDefaults($record, $entry);
+                $type = (string) ($defaults['schedule_type'] ?? 'Regular');
+                $typeLabel = $scheduleLabels[$type] ?? $type;
+                $schedStart = Carbon::parse($defaults['schedule_start'])->format('g:i A');
+                $schedEnd = Carbon::parse($defaults['schedule_end'])->format('g:i A');
+                $prefix = count($entries) > 1 ? 'Entry '.($index + 1).': ' : '';
+
+                return "{$prefix}{$dateIn} ({$in} – {$out}) · {$typeLabel} ({$schedStart} – {$schedEnd})";
+            })
+            ->implode(' | ');
     }
 
     public function table(Table $table): Table
     {
         $employeeId = auth()->user()?->employee?->id;
+        $resolvedPeriodId = filled($this->periodId)
+            ? (PayrollPeriod::resolvePublicId($this->periodId) ?: (int) $this->periodId)
+            : null;
 
         return $table
-            ->query(fn (): Builder => DtrSubmission::query()
-                ->with(['payrollPeriod', 'branch'])
-                ->where('submitted_by_employee_id', $employeeId)
-                ->where('submission_type', DtrSubmission::TYPE_PROOF)
-                ->when(filled($this->periodId), fn (Builder $query): Builder => $query->where('payroll_period_id', (int) $this->periodId))
-                ->latest())
+            ->query(fn (): Builder => $this->modifyQueryWithActiveTab(
+                DtrSubmission::query()
+                    ->with(['payrollPeriod', 'branch', 'reviewedBy'])
+                    ->where('submitted_by_employee_id', $employeeId)
+                    ->where('submission_type', DtrSubmission::TYPE_PROOF)
+                    ->when(filled($resolvedPeriodId), fn (Builder $query): Builder => $query->where('payroll_period_id', $resolvedPeriodId))
+                    ->latest()
+            ))
+            ->headerActions([
+                Action::make('periodSelector')
+                    ->view('filament.employee.pages.partials.dtr-period-select-action'),
+            ])
             ->columns([
-                TextColumn::make('index')->label('#')->rowIndex(),
-                TextColumn::make('payrollPeriod.title')->label('Payroll Period')->searchable()->sortable()->wrap(),
-                TextColumn::make('entries_count')
-                    ->label('Entries')
-                    ->getStateUsing(fn (DtrSubmission $record): string => count($record->normalizedEntries()).' '.str('entry')->plural(count($record->normalizedEntries())))
-                    ->badge()
-                    ->color('info'),
-                TextColumn::make('date_in')->label('Date In')->date('M d, Y')->sortable(),
-                TextColumn::make('time_in')->label('Time In')->time('h:i A'),
-                TextColumn::make('date_out')->label('Date Out')->date('M d, Y')->sortable(),
-                TextColumn::make('time_out')->label('Time Out')->time('h:i A'),
-                TextColumn::make('schedule_type')
-                    ->label('Sched Type')
-                    ->badge()
-                    ->placeholder('-'),
-                TextColumn::make('schedule_start')
-                    ->label('Sched Start')
-                    ->time('h:i A')
-                    ->placeholder('-')
+                TextColumn::make('index')
+                    ->label('#')
+                    ->rowIndex(),
+
+                TextColumn::make('attendance_summary')
+                    ->label('Attendance')
+                    ->getStateUsing(function (DtrSubmission $record): string {
+                        $entries = $record->normalizedEntries();
+                        $first = $entries[0] ?? null;
+
+                        if (! $first) {
+                            return '-';
+                        }
+
+                        $date = filled($first['date_in'] ?? null)
+                            ? Carbon::parse($first['date_in'])->format('M d, Y')
+                            : '-';
+                        $extra = count($entries) > 1 ? ' (+'.(count($entries) - 1).')' : '';
+
+                        return "{$date}{$extra}";
+                    })
+                    ->weight(FontWeight::SemiBold)
+                    ->description(function (DtrSubmission $record): string {
+                        $entries = $record->normalizedEntries();
+                        $first = $entries[0] ?? null;
+
+                        if (! $first) {
+                            return '';
+                        }
+
+                        $in = filled($first['time_in'] ?? null)
+                            ? Carbon::parse($first['time_in'])->format('g:i A')
+                            : '-';
+                        $out = filled($first['time_out'] ?? null)
+                            ? Carbon::parse($first['time_out'])->format('g:i A')
+                            : '-';
+
+                        $overnight = '';
+                        if (
+                            filled($first['date_in'] ?? null)
+                            && filled($first['date_out'] ?? null)
+                            && $first['date_out'] !== $first['date_in']
+                        ) {
+                            $overnight = ' (+1d)';
+                        }
+
+                        $countSuffix = count($entries) > 1
+                            ? ' · '.count($entries).' entries'
+                            : '';
+
+                        return "{$in} – {$out}{$overnight}{$countSuffix}";
+                    })
+                    ->tooltip(fn (DtrSubmission $record): string => $this->formatAttendanceTooltip($record))
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('date_in', $direction))
+                    ->wrap(),
+
+                TextColumn::make('schedule_summary')
+                    ->label('Schedule')
+                    ->getStateUsing(function (DtrSubmission $record): string {
+                        $entries = $record->normalizedEntries();
+                        $first = $entries[0] ?? null;
+
+                        if (! $first) {
+                            return '-';
+                        }
+
+                        $defaults = app(OnFieldDtrService::class)->resolveEntryScheduleDefaults($record, $first);
+                        $type = (string) ($defaults['schedule_type'] ?? 'Regular');
+
+                        return static::onFieldScheduleOptions()[$type] ?? $type;
+                    })
+                    ->weight(FontWeight::Medium)
+                    ->description(function (DtrSubmission $record): string {
+                        $entries = $record->normalizedEntries();
+                        $first = $entries[0] ?? null;
+
+                        if (! $first) {
+                            return '';
+                        }
+
+                        $defaults = app(OnFieldDtrService::class)->resolveEntryScheduleDefaults($record, $first);
+                        $start = Carbon::parse($defaults['schedule_start'])->format('g:i A');
+                        $end = Carbon::parse($defaults['schedule_end'])->format('g:i A');
+
+                        return "{$start} – {$end}";
+                    })
+                    ->tooltip(fn (DtrSubmission $record): string => $this->formatAttendanceTooltip($record))
+                    ->wrap()
                     ->toggleable(),
-                TextColumn::make('schedule_end')
-                    ->label('Sched End')
-                    ->time('h:i A')
-                    ->placeholder('-')
-                    ->toggleable(),
+
+                TextColumn::make('payrollPeriod.title')
+                    ->label('Payroll Period')
+                    ->weight(FontWeight::Medium)
+                    ->description(fn (DtrSubmission $record): string => match (true) {
+                        $record->payrollPeriod === null => '-',
+                        (bool) $record->payrollPeriod->is_locked => 'Locked',
+                        default => 'Open',
+                    })
+                    ->searchable()
+                    ->sortable()
+                    ->wrap(),
+
                 TextColumn::make('branch_name_snapshot')
                     ->label('Station / Branch')
                     ->getStateUsing(fn (DtrSubmission $record): string => $record->submittedBranchName())
                     ->searchable()
-                    ->wrap(),
-                TextColumn::make('created_at')->label('Date Submitted')->dateTime('M d, Y h:i A')->sortable(),
+                    ->wrap()
+                    ->toggleable(),
+
+                TextColumn::make('created_at')
+                    ->label('Submitted')
+                    ->date('M d, Y')
+                    ->weight(FontWeight::Medium)
+                    ->description(fn (DtrSubmission $record): ?string => $record->created_at
+                        ? $record->created_at->format('g:i A').' · '.$record->created_at->diffForHumans(short: true)
+                        : null)
+                    ->tooltip(fn (DtrSubmission $record): ?string => $record->created_at
+                        ? $record->created_at->format('M d, Y g:i A').' ('.$record->created_at->diffForHumans().')'
+                        : null)
+                    ->sortable(),
+
                 TextColumn::make('status')
                     ->badge()
+                    ->icon(fn (string $state): Heroicon => match ($state) {
+                        DtrSubmission::STATUS_APPROVED => Heroicon::CheckCircle,
+                        DtrSubmission::STATUS_REJECTED => Heroicon::XCircle,
+                        default => Heroicon::Clock,
+                    })
                     ->color(fn (string $state): string => match ($state) {
                         DtrSubmission::STATUS_APPROVED => 'success',
                         DtrSubmission::STATUS_REJECTED => 'danger',
                         default => 'warning',
+                    })
+                    ->description(function (DtrSubmission $record): string {
+                        if ($record->reviewed_at) {
+                            $by = $record->reviewedBy?->username ?: 'HR';
+
+                            return "By {$by}";
+                        }
+
+                        return $record->viewed_at ? 'Viewed by HR' : 'Pending review';
+                    })
+                    ->tooltip(function (DtrSubmission $record): string {
+                        if ($record->reviewed_at) {
+                            $by = $record->reviewedBy?->username ?: 'HR';
+                            $when = $record->reviewed_at->format('M d, Y g:i A');
+                            $remarks = filled($record->reviewer_remarks) ? " — {$record->reviewer_remarks}" : '';
+
+                            return "{$record->status} by {$by} on {$when}{$remarks}";
+                        }
+
+                        return $record->viewed_at
+                            ? 'Viewed by HR. Awaiting decision.'
+                            : 'Submitted. Waiting for HR review.';
                     }),
-                TextColumn::make('description')->label('Description')->placeholder('None')->limit(80)->wrap()->toggleable(),
+
+                TextColumn::make('description')
+                    ->label('Description')
+                    ->placeholder('None')
+                    ->limit(60)
+                    ->wrap()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -155,12 +458,18 @@ class StationProofSubmissions extends Page implements HasTable
             ])
             ->defaultSort('created_at', 'desc')
             ->defaultPaginationPageOption(10)
-            ->poll('15s');
+            ->poll('15s')
+            ->emptyStateHeading('No On Field DTR submissions found')
+            ->emptyStateDescription('Submit your attendance records with proof for HR review.')
+            ->emptyStateIcon(Heroicon::DocumentCheck);
     }
 
     public function content(Schema $schema): Schema
     {
-        return $schema->components([EmbeddedTable::make()]);
+        return $schema->components([
+            $this->getTabsContentComponent(),
+            EmbeddedTable::make(),
+        ]);
     }
 
     #[Override]
@@ -172,7 +481,7 @@ class StationProofSubmissions extends Page implements HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(fn (): string => DtrChangeRequests::getUrl(array_filter([
+            Action::make('return')->label('Return')->icon(Heroicon::ArrowLeft)->url(fn (): string => Dtr::getUrl(array_filter([
                 'periodId' => filled($this->periodId) ? PayrollPeriod::query()->find((int) $this->periodId)?->publicKey() : null,
             ]))),
             Action::make('submitDtr')
@@ -196,21 +505,18 @@ class StationProofSubmissions extends Page implements HasTable
                         ->preload()
                         ->required(),
 
-                    Section::make('DTR Entries')
-                        ->description('Add one or more On-Field attendance entries with their expected schedule details.')
+                    Repeater::make('entries')
+                        ->label('Attendance Records')
+                        ->addActionLabel('Add DTR Entry')
+                        ->defaultItems(1)
+                        ->minItems(1)
+                        ->collapsible()
+                        ->itemLabel(fn (array $state): string => filled($state['date_in'] ?? null)
+                            ? 'D.T.R Entry: '.Carbon::parse($state['date_in'])->format('M d, Y')
+                                .(filled($state['schedule_type'] ?? null) ? ' ['.$state['schedule_type'].']' : '')
+                                .' ('.($state['time_in'] ?? '-').' - '.($state['time_out'] ?? '-').')'
+                            : 'New On-Field D.T.R Entry')
                         ->schema([
-                            Repeater::make('entries')
-                                ->label('Attendance Records')
-                                ->addActionLabel('Add DTR Entry')
-                                ->defaultItems(1)
-                                ->minItems(1)
-                                ->collapsible()
-                                ->itemLabel(fn (array $state): string => filled($state['date_in'] ?? null)
-                                    ? 'D.T.R Entry: '.Carbon::parse($state['date_in'])->format('M d, Y')
-                                        .(filled($state['schedule_type'] ?? null) ? ' ['.$state['schedule_type'].']' : '')
-                                        .' ('.($state['time_in'] ?? '-').' - '.($state['time_out'] ?? '-').')'
-                                    : 'New On-Field D.T.R Entry')
-                                ->schema([
                                     DatePicker::make('date_in')
                                         ->label('Date In')
                                         ->required()
@@ -249,18 +555,7 @@ class StationProofSubmissions extends Page implements HasTable
 
                                     Select::make('schedule_type')
                                         ->label('Sched Type')
-                                        ->options([
-                                            'Regular' => 'Regular',
-                                            'Flexible' => 'Flexible',
-                                            'Shift1' => 'Shift 1',
-                                            'Shift2' => 'Shift 2',
-                                            'Shift3' => 'Shift 3',
-                                            'Broken1' => 'Broken Shift 1',
-                                            'Broken2' => 'Broken Shift 2',
-                                            'Broken3' => 'Broken Shift 3',
-                                            'Saturday' => 'Saturday',
-                                            'Overtime' => 'Overtime Only',
-                                        ])
+                                        ->options(static::onFieldScheduleOptions())
                                         ->default('Regular')
                                         ->required()
                                         ->live()
@@ -313,10 +608,8 @@ class StationProofSubmissions extends Page implements HasTable
                                             return $end ?: '05:00 PM';
                                         }),
                                 ])
-                                ->columns(2)
+                                ->columns(['default' => 1, 'sm' => 2])
                                 ->columnSpanFull(),
-                        ])
-                        ->columnSpanFull(),
 
                     FileUpload::make('proof_file')
                         ->label('Proof File')

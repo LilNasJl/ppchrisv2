@@ -165,13 +165,18 @@
         .emp-loan-nav {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 0.35rem;
             padding: 0.35rem 0.45rem;
             background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 0.55rem;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+            width: fit-content;
+            max-width: 100%;
+            margin-inline: auto;
             overflow-x: auto;
+            box-sizing: border-box;
         }
 
         .dark .emp-loan-nav {
@@ -182,10 +187,13 @@
         .emp-loan-tab {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
+            vertical-align: middle;
             gap: 0.45rem;
-            padding: 0.45rem 0.85rem;
+            padding: 0.35rem 0.85rem;
             font-size: 0.8rem;
             font-weight: 600;
+            line-height: 1.25;
             border-radius: 0.45rem;
             color: #64748b;
             background: transparent;
@@ -193,8 +201,24 @@
             text-decoration: none;
             white-space: nowrap;
             min-height: 2.15rem;
+            height: 2.15rem;
             border: 1px solid transparent;
             cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        .emp-loan-tab > span:not(.emp-loan-tab-badge) {
+            display: inline-flex;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .emp-loan-tab svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .dark .emp-loan-tab {
@@ -223,9 +247,13 @@
         }
 
         .emp-loan-tab-badge {
-            font-size: 0.7rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.68rem;
             font-weight: 700;
-            padding: 0.1rem 0.45rem;
+            line-height: 1;
+            padding: 0.15rem 0.45rem;
             border-radius: 9999px;
             background: #f1f5f9;
             color: #64748b;
@@ -256,6 +284,13 @@
             background: #000000;
             border-color: #1e293b;
             border-top-color: #3b82f6;
+        }
+
+        
+
+        .emp-loan-page .fi-ta-header-description,
+        .emp-loan-page .fi-ta-description {
+            display: none !important;
         }
 
         .emp-loan-page .fi-ta-header-cell {
@@ -342,60 +377,86 @@
                 font-size: 0.6rem !important;
             }
         }
+
+        /* ── Modal Window & Transparency Fix ────────────────────────── */
+        .fi-modal-window,
+        .dark .fi-modal-window {
+            background-color: #0f172a !important;
+        }
+
+        .fi-modal-header,
+        .fi-modal-content,
+        .fi-modal-footer {
+            background-color: #0f172a !important;
+        }
+
+        @media (max-width: 640px) {
+            /* ── Modal Full Width & Transparency Fix for Mobile View ─── */
+            .fi-modal-window-ctn {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+
+            .fi-modal-window {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                min-width: 100vw !important;
+                margin: 0 !important;
+                border-radius: 1rem 1rem 0 0 !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                border-bottom: 0 !important;
+                background-color: #0f172a !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                max-height: 92dvh !important;
+                overflow: hidden !important;
+            }
+
+            .fi-modal-header {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.85rem 1rem 0.5rem !important;
+                border-bottom: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-content {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem 0.75rem !important;
+                gap: 0.75rem !important;
+            }
+
+            .fi-modal-footer {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem !important;
+                border-top: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-footer-actions {
+                width: 100% !important;
+                display: flex !important;
+                gap: 0.5rem !important;
+            }
+
+            .fi-modal-footer-actions .fi-btn {
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                justify-content: center !important;
+            }
+        }
+
     </style>
 
     <div class="emp-loan-page employee-blue-page">
-        {{-- KPI Summary Strip --}}
-        <div class="emp-loan-kpis">
-            <div class="emp-loan-kpi primary">
-                <div class="emp-loan-icon">
-                    <x-filament::icon icon="heroicon-m-banknotes" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div class="emp-loan-body">
-                    <span class="emp-loan-label">OUTSTANDING BALANCE</span>
-                    <div class="emp-loan-val text-blue-700 dark:text-blue-300">₱{{ number_format($stats['total_balance'], 2) }}</div>
-                    <span class="emp-loan-subtext">{{ $stats['active_count'] }} active {{ \Illuminate\Support\Str::plural('loan', $stats['active_count']) }}</span>
-                </div>
-            </div>
-
-            <div class="emp-loan-kpi">
-                <div class="emp-loan-icon">
-                    <x-filament::icon icon="heroicon-m-check-badge" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div class="emp-loan-body">
-                    <span class="emp-loan-label">TOTAL AMORTIZED</span>
-                    <div class="emp-loan-val text-emerald-700 dark:text-emerald-300">₱{{ number_format($stats['total_paid'], 2) }}</div>
-                    <span class="emp-loan-badge green">Paid to date</span>
-                </div>
-            </div>
-
-            <div class="emp-loan-kpi">
-                <div class="emp-loan-icon">
-                    <x-filament::icon icon="heroicon-m-clock" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div class="emp-loan-body">
-                    <span class="emp-loan-label">PENDING REQUESTS</span>
-                    <div class="emp-loan-val {{ $stats['pending_requests'] > 0 ? 'text-amber-700 dark:text-amber-300' : '' }}">
-                        {{ $stats['pending_requests'] }}
-                    </div>
-                    <span class="emp-loan-badge {{ $stats['pending_requests'] > 0 ? 'amber' : 'blue' }}">
-                        {{ $stats['pending_requests'] > 0 ? 'Under HR review' : 'No pending' }}
-                    </span>
-                </div>
-            </div>
-
-            <div class="emp-loan-kpi">
-                <div class="emp-loan-icon">
-                    <x-filament::icon icon="heroicon-m-calculator" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div class="emp-loan-body">
-                    <span class="emp-loan-label">LIFETIME BORROWED</span>
-                    <div class="emp-loan-val text-purple-700 dark:text-purple-300">₱{{ number_format($stats['total_borrowing'], 2) }}</div>
-                    <span class="emp-loan-subtext">{{ $stats['total_loans'] }} total recorded</span>
-                </div>
-            </div>
-        </div>
-
         {{-- Navigation Pill Tabs --}}
         <nav class="emp-loan-nav" aria-label="Employee loan records">
             <button

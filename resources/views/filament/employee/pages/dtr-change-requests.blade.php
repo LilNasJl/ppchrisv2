@@ -8,84 +8,297 @@
         .dtr-employee-workspace {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.75rem;
             width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: hidden;
+            box-sizing: border-box;
             margin-bottom: 0.5rem;
         }
 
+
+        .dark .dtr-topbar {
+            border-color: #1e293b !important;
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+        }
         .dtr-topbar {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
-            gap: 1rem 1.5rem;
-            width: 100%;
-            padding: 1.25rem 1.5rem;
-            border: 1px solid #3b82f6;
+            gap: 0.75rem 1rem;
+            padding: 0.95rem 1.25rem;
+            border: 1px solid rgba(59, 130, 246, 0.6);
             border-radius: 0.75rem;
-            background: linear-gradient(110deg, #1257b8, #173c70 68%, #102a50);
+            background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
+            box-shadow: 0 4px 16px -2px rgba(2, 6, 23, 0.4);
             color: #fff;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
         }
 
         .dtr-topbar-copy {
             display: flex;
-            flex: 1 1 20rem;
+            flex: 1 1 12rem;
             flex-direction: column;
-            gap: 0.25rem;
+            gap: 0.15rem;
             min-width: 0;
         }
 
         .dtr-eyebrow {
             margin: 0;
             color: #d9f722;
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             font-weight: 800;
+            letter-spacing: 0.06em;
             line-height: 1.2;
+            text-transform: uppercase;
         }
 
         .dtr-title {
             margin: 0;
             color: #fff;
-            font-size: 1.65rem;
+            font-size: 1.45rem;
             font-weight: 800;
+            letter-spacing: -0.015em;
             line-height: 1.2;
         }
 
-        .dtr-subtitle {
-            margin: 0;
-            color: #e0ecff;
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-
-        .dtr-actions-row,
-        .dtr-actions-row .fi-ac {
+        .dtr-actions-row {
             display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
             align-items: center;
             justify-content: flex-end;
-            gap: 0.65rem;
+            flex-shrink: 0;
+        }
+
+        .dtr-actions-row .fi-ac {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            gap: 0.5rem !important;
+            width: auto !important;
         }
 
         .dtr-actions-row .fi-btn {
-            white-space: nowrap;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 2.2rem;
+            padding: 0.35rem 0.85rem !important;
+            border-radius: 0.45rem;
+            white-space: nowrap !important;
+            font-size: 0.79rem !important;
+            font-weight: 600 !important;
+            box-sizing: border-box !important;
+            gap: 0.4rem !important;
+        }
+
+        /* ── Modal Window & Transparency Fix ────────────────────────── */
+        .fi-modal-window,
+        .dark .fi-modal-window {
+            background-color: #0f172a !important;
+        }
+
+        .fi-modal-header,
+        .fi-modal-content,
+        .fi-modal-footer {
+            background-color: #0f172a !important;
         }
 
         @media (max-width: 640px) {
             .dtr-topbar {
-                align-items: stretch;
-                padding: 1rem;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                padding: 0.85rem 0.95rem !important;
+                gap: 0.75rem !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            .dtr-topbar-copy {
+                width: 100% !important;
+                flex: 0 0 auto !important;
             }
 
             .dtr-title {
-                font-size: 1.35rem;
+                font-size: 1.25rem !important;
             }
 
-            .dtr-actions-row,
+            .dtr-actions-row {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+            }
+
             .dtr-actions-row .fi-ac {
-                justify-content: flex-start;
-                width: 100%;
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                gap: 0.5rem !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            /* When exactly 2 actions (Missing DTR + Return): 50% / 50% side-by-side */
+            .dtr-actions-row .fi-ac > :first-child:nth-last-child(2),
+            .dtr-actions-row .fi-ac > :last-child:nth-child(2) {
+                grid-column: span 1 !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* When 3 actions: first spans full width, next two 50% each */
+            .dtr-actions-row .fi-ac > :first-child:nth-last-child(3) {
+                grid-column: 1 / -1 !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            .dtr-actions-row .fi-ac > :nth-child(2):nth-last-child(2),
+            .dtr-actions-row .fi-ac > :nth-child(3):nth-last-child(1) {
+                grid-column: span 1 !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* Single button fallback (e.g. Return only when period locked): span full */
+            .dtr-actions-row .fi-ac > :only-child {
+                grid-column: 1 / -1 !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            .dtr-actions-row .fi-btn {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                text-align: center !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                min-height: 2.35rem !important;
+                padding: 0.4rem 0.5rem !important;
+                font-size: 0.775rem !important;
+                font-weight: 600 !important;
+                border-radius: 0.5rem !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                box-sizing: border-box !important;
+                gap: 0.35rem !important;
+                margin: 0 !important;
+            }
+
+            .dtr-actions-row .fi-btn svg.fi-icon {
+                flex-shrink: 0 !important;
+                width: 1.05rem !important;
+                height: 1.05rem !important;
+                margin: 0 !important;
+            }
+
+            /* ── Modal Full Width & Transparency Fix for Mobile View ─── */
+            .fi-modal-window-ctn {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+
+            .fi-modal-window {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                min-width: 100vw !important;
+                margin: 0 !important;
+                border-radius: 1rem 1rem 0 0 !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                border-bottom: 0 !important;
+                background-color: #0f172a !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                max-height: 92dvh !important;
+                overflow: hidden !important;
+            }
+
+            .fi-modal-header {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.85rem 1rem 0.5rem !important;
+                border-bottom: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-content {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem 0.75rem !important;
+                gap: 0.75rem !important;
+            }
+
+            .fi-modal-footer {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem !important;
+                border-top: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-footer-actions {
+                width: 100% !important;
+                display: flex !important;
+                gap: 0.5rem !important;
+            }
+
+            .fi-modal-footer-actions .fi-btn {
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                justify-content: center !important;
+            }
+
+            /* Repeater inside modal takes full available width */
+            .fi-modal-content .fi-fo-repeater {
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            .fi-modal-content .fi-fo-repeater-item {
+                padding: 0.5rem 0.65rem !important;
+                border-radius: 0.5rem !important;
+                margin-bottom: 0.5rem !important;
+                background-color: rgb(30, 41, 59) !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                box-sizing: border-box !important;
+            }
+
+            .fi-modal-content .fi-fo-repeater-item-header {
+                padding: 0.35rem 0.5rem !important;
+            }
+
+            .fi-modal-content .fi-fo-repeater-item-content {
+                padding: 0.35rem 0 0 !important;
+                gap: 0.45rem !important;
+            }
+
+            .dtr-period-select-wrap {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            .dtr-table-container .fi-ta table {
+                min-width: 520px;
             }
         }
 
@@ -497,6 +710,14 @@
             gap: 0.25rem;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
             margin-bottom: 0.5rem;
+            max-width: 100%;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .fi-page .fi-tabs::-webkit-scrollbar {
+            display: none;
         }
 
         .dark .fi-page .fi-tabs {
@@ -505,12 +726,19 @@
         }
 
         .fi-page .fi-tabs-item {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            vertical-align: middle !important;
             border-radius: 0.45rem;
             font-size: 0.775rem;
             font-weight: 600;
+            line-height: 1.25;
             padding: 0.3rem 0.75rem;
             min-height: 2rem;
+            height: 2rem;
             transition: all 120ms ease;
+            box-sizing: border-box;
         }
 
         .fi-page .fi-tabs-item:hover {
@@ -541,7 +769,6 @@
             <div class="dtr-topbar-copy">
                 <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
                 <h2 class="dtr-title">D.T.R Change Requests</h2>
-                <p class="dtr-subtitle">Review attendance corrections and submit On Field DTR entries for HR review.</p>
             </div>
 
             <div class="dtr-actions-row">

@@ -3,6 +3,7 @@
         $selectedPeriod = $this->selectedPeriod;
         $overview = $this->overview;
         $changeRequestsUrl = $this->getChangeRequestsUrl();
+        $onFieldDtrUrl = $this->getOnFieldDtrUrl();
         $unseenCount = $this->getUnseenReviewedRequestCount();
         $printUrl = $this->getPrintUrl();
         $canPrint = $this->canPrintDtr();
@@ -22,6 +23,11 @@
             margin-bottom: 0.5rem;
         }
 
+
+        .dark .dtr-topbar {
+            border-color: #1e293b !important;
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+        }
         .dtr-topbar {
             display: flex;
             flex-wrap: wrap;
@@ -286,6 +292,17 @@
             transform: translateY(-1px);
         }
 
+        .dtr-btn-success {
+            background: #16a34a !important;
+            border-color: #22c55e !important;
+            box-shadow: 0 1px 2px 0 rgba(22, 163, 74, 0.2) !important;
+            color: #ffffff !important;
+        }
+
+        .dtr-btn-success:hover {
+            background: #15803d !important;
+        }
+
         .dtr-btn.outline {
             color: rgb(30, 41, 59);
             background: #ffffff;
@@ -493,36 +510,160 @@
         }
 
         .fi-page .fi-ta-header {
-            gap: 0.45rem;
-            padding: 0.55rem 0.85rem !important;
-            background: rgb(248, 250, 252);
-            border-bottom: 1px solid rgb(226, 232, 240);
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 0.75rem 1rem !important;
+            padding: 0.75rem 1rem !important;
+            background: rgb(248, 250, 252) !important;
+            border-bottom: 1px solid rgb(226, 232, 240) !important;
         }
 
         .dark .fi-page .fi-ta-header {
-            background: #070b12;
-            border-bottom-color: #1e293b;
+            background: #0b1120 !important;
+            border-bottom-color: #1e293b !important;
         }
 
-        .fi-page .fi-ta-heading {
-            font-size: 0.785rem !important;
-            font-weight: 800 !important;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: rgb(51, 65, 85);
+        .fi-page .fi-ta-header > div:first-child {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
         }
 
-        .dark .fi-page .fi-ta-heading {
-            color: rgb(203, 213, 225);
+        .fi-page .fi-ta-header .fi-ta-header-heading,
+        .fi-page .fi-ta-header .fi-ta-heading {
+            font-size: 0.85rem !important;
+            font-weight: 700 !important;
+            line-height: 1.25rem !important;
+            letter-spacing: 0.015em !important;
+            color: #0f172a !important;
+            margin: 0 !important;
         }
 
-        .fi-page .fi-ta-description {
-            font-size: 0.72rem !important;
+        .dark .fi-page .fi-ta-header .fi-ta-header-heading,
+        .dark .fi-page .fi-ta-header .fi-ta-heading {
+            color: #f1f5f9 !important;
+        }
+
+        .fi-page .fi-ta-header .fi-ta-header-description,
+        .fi-page .fi-ta-header .fi-ta-description {
+            font-size: 0.725rem !important;
+            line-height: 1.1rem !important;
             color: rgb(100, 116, 139) !important;
+            margin-top: 0.15rem !important;
+            margin-bottom: 0 !important;
         }
 
-        .dark .fi-page .fi-ta-description {
+        .dark .fi-page .fi-ta-header .fi-ta-header-description,
+        .dark .fi-page .fi-ta-header .fi-ta-description {
             color: rgb(148, 163, 184) !important;
+        }
+
+        .fi-page .fi-ta-header .fi-ta-actions {
+            display: inline-flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            gap: 0.5rem !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            flex-shrink: 0 !important;
+            flex-wrap: nowrap !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-period-select-wrap {
+            width: auto !important;
+            min-width: 200px !important;
+            max-width: 280px !important;
+            flex: 0 1 auto !important;
+            margin: 0 !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-native-select {
+            width: 100% !important;
+            min-height: 2.15rem !important;
+            height: 2.15rem !important;
+            box-sizing: border-box !important;
+            padding: 0.25rem 1.75rem 0.25rem 2rem !important;
+            border-radius: 0.45rem !important;
+            font-size: 0.76rem !important;
+            font-weight: 600 !important;
+            line-height: 1.4 !important;
+            border: 1px solid rgb(203, 213, 225) !important;
+            background-color: #ffffff !important;
+            color: rgb(15, 23, 42) !important;
+        }
+
+        .dark .fi-page .fi-ta-header .dtr-native-select {
+            border-color: #1e293b !important;
+            background-color: #070b12 !important;
+            color: #ffffff !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-print-btn,
+        .fi-page .fi-ta-header .fi-btn {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: auto !important;
+            min-width: fit-content !important;
+            max-width: none !important;
+            min-height: 2.15rem !important;
+            height: 2.15rem !important;
+            padding: 0.35rem 0.85rem !important;
+            font-size: 0.785rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.01em !important;
+            border-radius: 0.45rem !important;
+            gap: 0.4rem !important;
+            white-space: nowrap !important;
+            text-decoration: none !important;
+            transition: all 0.15s ease-in-out !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+            cursor: pointer !important;
+            background-color: #2563eb !important;
+            border: 1px solid #3b82f6 !important;
+            color: #ffffff !important;
+            box-sizing: border-box !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-print-btn:hover,
+        .fi-page .fi-ta-header .fi-btn:hover {
+            background-color: #1d4ed8 !important;
+            border-color: #2563eb !important;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35) !important;
+            transform: translateY(-1px);
+            color: #ffffff !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-print-btn svg,
+        .fi-page .fi-ta-header .dtr-print-btn .fi-icon,
+        .fi-page .fi-ta-header .fi-btn svg,
+        .fi-page .fi-ta-header .fi-btn .fi-icon {
+            width: 1.05rem !important;
+            height: 1.05rem !important;
+            min-width: 1.05rem !important;
+            min-height: 1.05rem !important;
+            max-width: 1.05rem !important;
+            max-height: 1.05rem !important;
+            display: inline-block !important;
+            flex-shrink: 0 !important;
+            color: #ffffff !important;
+            margin: 0 !important;
+            fill: currentColor !important;
+        }
+
+        .fi-page .fi-ta-header .dtr-print-btn.fi-disabled,
+        .fi-page .fi-ta-header .dtr-print-btn[aria-disabled="true"],
+        .fi-page .fi-ta-header .dtr-print-btn[disabled],
+        .fi-page .fi-ta-header .fi-btn.fi-disabled,
+        .fi-page .fi-ta-header .fi-btn[aria-disabled="true"],
+        .fi-page .fi-ta-header .fi-btn[disabled] {
+            opacity: 0.45 !important;
+            cursor: not-allowed !important;
+            pointer-events: none !important;
+            box-shadow: none !important;
+            transform: none !important;
         }
 
         .fi-page .fi-ta-header-toolbar {
@@ -649,7 +790,8 @@
             white-space: nowrap !important;
         }
 
-        .fi-page .fi-ta-actions {
+        .fi-page tbody .fi-ta-actions,
+        .fi-page .fi-ta-cell .fi-ta-actions {
             display: flex;
             flex-direction: row;
             flex-wrap: nowrap;
@@ -660,8 +802,10 @@
             white-space: nowrap;
         }
 
-        .fi-page .fi-ta-actions .fi-btn,
-        .fi-page .fi-ta-actions .fi-icon-btn {
+        .fi-page tbody .fi-ta-actions .fi-btn,
+        .fi-page tbody .fi-ta-actions .fi-icon-btn,
+        .fi-page .fi-ta-cell .fi-ta-actions .fi-btn,
+        .fi-page .fi-ta-cell .fi-ta-actions .fi-icon-btn {
             min-height: 1.75rem !important;
             height: 1.75rem !important;
             width: 1.75rem !important;
@@ -746,16 +890,108 @@
         @media (max-width: 640px) {
             .dtr-topbar {
                 align-items: stretch;
-                padding: 1rem;
+                padding: 0.85rem 1rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
             }
 
             .dtr-title {
-                font-size: 1.35rem;
+                font-size: 1.3rem;
             }
 
             .dtr-actions-row {
-                justify-content: flex-start;
-                width: 100%;
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.5rem !important;
+                width: 100% !important;
+            }
+
+            .dtr-actions-row .dtr-btn {
+                width: 100% !important;
+                justify-content: center !important;
+                min-height: 2.35rem !important;
+                padding: 0.4rem 0.5rem !important;
+                font-size: 0.775rem !important;
+            }
+
+            .fi-page .fi-ta-header {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.65rem !important;
+                padding: 0.75rem 0.85rem !important;
+            }
+
+            .fi-page .fi-ta-header > div:first-child {
+                width: 100% !important;
+            }
+
+            .fi-page .fi-ta-header .fi-ta-header-heading,
+            .fi-page .fi-ta-header .fi-ta-heading {
+                font-size: 0.825rem !important;
+            }
+
+            .fi-page .fi-ta-header .fi-ta-header-description,
+            .fi-page .fi-ta-header .fi-ta-description {
+                font-size: 0.7rem !important;
+            }
+
+            .fi-page .fi-ta-header .fi-ta-actions {
+                width: 100% !important;
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 0.45rem !important;
+                margin: 0 !important;
+                flex-wrap: nowrap !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-period-select-wrap {
+                flex: 1 1 0 !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-native-select {
+                min-height: 2.15rem !important;
+                height: 2.15rem !important;
+                padding: 0.25rem 1.45rem 0.25rem 1.85rem !important;
+                font-size: 0.735rem !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-select-icon {
+                left: 0.5rem !important;
+                width: 0.85rem !important;
+                height: 0.85rem !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-select-chevron {
+                right: 0.45rem !important;
+                width: 0.75rem !important;
+                height: 0.75rem !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-print-btn,
+            .fi-page .fi-ta-header .fi-btn {
+                flex: 0 0 auto !important;
+                min-height: 2.15rem !important;
+                height: 2.15rem !important;
+                padding: 0.35rem 0.65rem !important;
+                font-size: 0.735rem !important;
+                gap: 0.3rem !important;
+            }
+
+            .fi-page .fi-ta-header .dtr-print-btn svg,
+            .fi-page .fi-ta-header .dtr-print-btn .fi-icon,
+            .fi-page .fi-ta-header .fi-btn svg,
+            .fi-page .fi-ta-header .fi-btn .fi-icon {
+                width: 0.95rem !important;
+                height: 0.95rem !important;
+                min-width: 0.95rem !important;
+                min-height: 0.95rem !important;
             }
         }
     </style>
@@ -765,7 +1001,6 @@
             <div class="dtr-topbar-copy">
                 <p class="dtr-eyebrow">WORKFORCE RECORDS</p>
                 <h2 class="dtr-title">Daily Time Record</h2>
-                <p class="dtr-subtitle">Review your attendance and track DTR requests by payroll period.</p>
             </div>
 
             <div class="dtr-actions-row">
@@ -777,48 +1012,15 @@
                     @endif
                 </a>
 
-                @if ($canPrint)
-                    <a href="{{ $printUrl }}" target="_blank" class="dtr-btn" title="Print / PDF D.T.R">
-                        <x-filament::icon icon="heroicon-m-printer" class="dtr-btn-icon" />
-                        <span>Print D.T.R</span>
-                    </a>
-                @endif
+                <a href="{{ $onFieldDtrUrl }}" class="dtr-btn dtr-btn-success" title="View / Submit On Field DTR">
+                    <x-filament::icon icon="heroicon-m-map-pin" class="dtr-btn-icon" />
+                    <span>On Field DTR</span>
+                </a>
             </div>
         </header>
 
-        {{-- Payroll period filter --}}
-        <section class="dtr-filter-bar">
-            <div class="dtr-filter-heading">
-                <div class="dtr-filter-icon">
-                    <x-filament::icon icon="heroicon-o-calendar" class="w-4 h-4" />
-                </div>
-                <div>
-                    <h3>Payroll Period</h3>
-                    <p>Select a payroll cycle to view attendance records</p>
-                </div>
-            </div>
-
-            <div class="dtr-filter-controls">
-                <div class="dtr-period-select-wrap">
-                    <div class="dtr-select-container">
-                        <x-filament::icon icon="heroicon-m-calendar" class="dtr-select-icon" />
-                        <select wire:model.live="period_id" class="dtr-native-select" aria-label="Payroll Period">
-                            <option value="">Select Payroll Period...</option>
-                            @foreach ($this->payrollPeriods() as $periodOption)
-                                <option value="{{ $periodOption->id }}" @selected((string) $periodOption->id === (string) $this->period_id)>
-                                    {{ $periodOption->title }} ({{ $periodOption->is_locked ? 'Locked' : 'Open' }})
-                                </option>
-                            @endforeach
-                        </select>
-                        <x-filament::icon icon="heroicon-m-chevron-down" class="dtr-select-chevron" />
-                    </div>
-                </div>
-
-            </div>
-        </section>
-
         @if (! $selectedPeriod)
-            <div class="dtr-empty-box">No payroll period is available yet.</div>
+            <div class="dtr-empty-box">Please select a payroll period to view attendance records.</div>
         @else
             {{-- Thematic Stat Summary Cards --}}
             <section class="dtr-summary-strip" aria-label="Employee DTR Period Summary">
@@ -895,11 +1097,11 @@
                     </div>
                 </div>
             </section>
-
-            {{-- DTR Table --}}
-            <section class="dtr-table-container">
-                {{ $this->table }}
-            </section>
         @endif
+
+        {{-- DTR Table --}}
+        <section class="dtr-table-container">
+            {{ $this->table }}
+        </section>
     </div>
 </x-filament-panels::page>

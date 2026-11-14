@@ -15,16 +15,16 @@
         .station-overview-page {
             display: flex;
             flex-direction: column;
-            gap: 0.85rem;
+            gap: 0.75rem;
             width: 100%;
             max-width: 1600px;
             margin-inline: auto;
         }
 
-        /* KPI Stat Strip */
+        /* ── KPI Stat Strip ─────────────────────────────────────────── */
         .station-overview-kpis {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.65rem;
             width: 100%;
         }
@@ -51,7 +51,7 @@
 
         .dark .station-kpi-card {
             background: #0f172a;
-            border-color: #334155;
+            border-color: #1e293b;
         }
 
         .dark .station-kpi-card:hover {
@@ -165,10 +165,10 @@
             color: #93c5fd;
         }
 
-        /* Quick Navigation Action Grid */
+        /* ── Quick Navigation Action Grid ───────────────────────────── */
         .station-quick-nav-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 0.65rem;
             width: 100%;
         }
@@ -177,10 +177,10 @@
             background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 0.55rem;
-            padding: 0.85rem 1rem;
+            padding: 0.75rem 0.95rem;
             display: flex;
             align-items: center;
-            gap: 0.85rem;
+            gap: 0.75rem;
             text-decoration: none;
             color: inherit;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
@@ -196,7 +196,7 @@
 
         .dark .station-quick-nav-card {
             background: #0f172a;
-            border-color: #334155;
+            border-color: #1e293b;
         }
 
         .dark .station-quick-nav-card:hover {
@@ -205,7 +205,7 @@
         }
 
         .station-quick-nav-icon {
-            padding: 0.6rem;
+            padding: 0.55rem;
             border-radius: 0.5rem;
             background: #eff6ff;
             color: #2563eb;
@@ -258,25 +258,235 @@
             transform: translateX(2px);
         }
 
+        /* ── Filament Section & Widget Dark Styling ─────────────────── */
+        .fi-page:has(.station-overview-page) .fi-wi-chart,
+        .fi-page:has(.station-overview-page) .fi-wi-table {
+            margin-top: 0.5rem;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-section {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-top: 3px solid #3b82f6 !important;
+            border-radius: 0.55rem !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-section-header {
+            border-bottom: 1px solid #1e293b !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-section-header-heading {
+            color: #f8fafc !important;
+            font-weight: 750 !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-section-header-description {
+            color: #94a3b8 !important;
+        }
+
+        /* ── Ranking Table Dark & Compact Layout ────────────────────── */
         .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters-header {
-            display: none;
+            display: none !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-ctn {
+            background: #000000 !important;
+            border: 1px solid #1e293b !important;
+            border-top: 3px solid #3b82f6 !important;
+            border-radius: 0.55rem !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-header {
+            background: #070b12 !important;
+            border-bottom: 1px solid #1e293b !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-header-heading {
+            color: #f8fafc !important;
+            font-weight: 750 !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-header-description {
+            color: #94a3b8 !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-header-cell {
+            background: #070b12 !important;
+            border-bottom: 1px solid #1e293b !important;
+            color: #94a3b8 !important;
+            font-size: 0.7rem !important;
+            font-weight: 750 !important;
+            letter-spacing: 0.03em !important;
+            text-transform: uppercase !important;
+            padding: 0.55rem 0.65rem !important;
+            white-space: nowrap !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-cell {
+            padding: 0.45rem 0.65rem !important;
+            font-size: 0.78rem !important;
+            white-space: nowrap !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-table tbody tr {
+            border-bottom: 1px solid #161f2e !important;
+            transition: background-color 100ms ease !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-table tbody tr:nth-child(even) {
+            background: #070b12 !important;
+        }
+
+        .dark .fi-page:has(.station-overview-page) .fi-ta-table tbody tr:hover {
+            background: #0f172a !important;
         }
 
         @media (min-width: 64rem) {
             .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters-above-content-ctn .fi-ta-filters {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             }
 
             .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters .fi-sc-form {
-                grid-column: 1 / -1;
-                min-width: 0;
+                grid-column: 1 / -1 !important;
+                min-width: 0 !important;
             }
         }
 
+        /* ── Mobile Layout Optimizations ────────────────────────────── */
         @media (max-width: 640px) {
-            .station-overview-kpis,
+            .station-overview-page {
+                gap: 0.6rem !important;
+            }
+
+            /* 2x2 Grid for Top KPI cards on mobile */
+            .station-overview-kpis {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
+            }
+
+            .station-kpi-card {
+                padding: 0.55rem 0.65rem !important;
+                gap: 0.45rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .station-kpi-icon {
+                padding: 0.35rem !important;
+                border-radius: 0.4rem !important;
+            }
+
+            .station-kpi-icon svg {
+                width: 1rem !important;
+                height: 1rem !important;
+            }
+
+            .station-kpi-label {
+                font-size: 0.6rem !important;
+                line-height: 1.15 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            .station-kpi-val {
+                font-size: 1.15rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .station-kpi-subtext {
+                font-size: 0.6rem !important;
+                line-height: 1.1 !important;
+                display: -webkit-box !important;
+                -webkit-line-clamp: 1 !important;
+                -webkit-box-orient: vertical !important;
+                overflow: hidden !important;
+            }
+
+            .station-kpi-badge {
+                font-size: 0.58rem !important;
+                padding: 0.05rem 0.35rem !important;
+                margin-top: 0.1rem !important;
+            }
+
+            /* Quick Action List on Mobile */
             .station-quick-nav-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr !important;
+                gap: 0.35rem !important;
+            }
+
+            .station-quick-nav-card {
+                padding: 0.5rem 0.75rem !important;
+                gap: 0.6rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .station-quick-nav-icon {
+                padding: 0.35rem !important;
+                border-radius: 0.4rem !important;
+            }
+
+            .station-quick-nav-icon svg {
+                width: 1rem !important;
+                height: 1rem !important;
+            }
+
+            .station-quick-nav-title {
+                font-size: 0.79rem !important;
+                font-weight: 700 !important;
+            }
+
+            .station-quick-nav-desc {
+                display: none !important;
+            }
+
+            /* Chart Header & Sizing on Mobile */
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-header {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.5rem !important;
+                padding: 0.75rem 0.85rem !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-header-heading {
+                font-size: 0.92rem !important;
+                font-weight: 750 !important;
+                line-height: 1.25 !important;
+                white-space: normal !important;
+                width: 100% !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-header-description {
+                display: none !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-header-actions,
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-header-actions select {
+                width: 100% !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-chart .fi-section-content {
+                padding: 0.45rem 0.65rem 0.65rem !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-chart canvas {
+                max-height: 250px !important;
+            }
+
+            /* Table Header & Sizing on Mobile */
+            .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-header-description {
+                display: none !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-header-heading {
+                font-size: 0.92rem !important;
+                line-height: 1.25 !important;
+            }
+
+            .fi-page:has(.station-overview-page) .fi-wi-table .fi-ta-filters-above-content-ctn {
+                padding: 0.55rem 0.75rem !important;
             }
         }
     </style>
@@ -311,7 +521,7 @@
                     <x-filament::icon icon="heroicon-m-document-text" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div class="station-kpi-body">
-                    <span class="station-kpi-label">Pending Change Requests</span>
+                    <span class="station-kpi-label">Change Requests</span>
                     <div class="station-kpi-val {{ $stats['pending_cr'] > 0 ? 'text-amber-700 dark:text-amber-300' : '' }}">
                         {{ number_format($stats['pending_cr']) }}
                     </div>
@@ -326,7 +536,7 @@
                     <x-filament::icon icon="heroicon-m-clipboard-document-check" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div class="station-kpi-body">
-                    <span class="station-kpi-label">Pending Leave Queue</span>
+                    <span class="station-kpi-label">Leave Queue</span>
                     <div class="station-kpi-val {{ $stats['pending_leaves'] > 0 ? 'text-purple-700 dark:text-purple-300' : '' }}">
                         {{ number_format($stats['pending_leaves']) }}
                     </div>
@@ -358,6 +568,11 @@
                     <span class="station-quick-nav-title">Station Change Requests</span>
                     <span class="station-quick-nav-desc">Review and decide pending time adjustments</span>
                 </div>
+                @if($stats['pending_cr'] > 0)
+                    <span class="station-kpi-badge amber" style="margin-left: auto; margin-right: 0.35rem; font-size: 0.65rem;">
+                        {{ $stats['pending_cr'] }} pending
+                    </span>
+                @endif
                 <x-filament::icon icon="heroicon-m-chevron-right" class="w-4 h-4 station-quick-nav-arrow" />
             </a>
 
@@ -369,6 +584,11 @@
                     <span class="station-quick-nav-title">Station Leave Approvals</span>
                     <span class="station-quick-nav-desc">Approve or reject leave applications</span>
                 </div>
+                @if($stats['pending_leaves'] > 0)
+                    <span class="station-kpi-badge amber" style="margin-left: auto; margin-right: 0.35rem; font-size: 0.65rem;">
+                        {{ $stats['pending_leaves'] }} pending
+                    </span>
+                @endif
                 <x-filament::icon icon="heroicon-m-chevron-right" class="w-4 h-4 station-quick-nav-arrow" />
             </a>
         </div>

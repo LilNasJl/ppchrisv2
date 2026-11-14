@@ -97,9 +97,9 @@ class ReviewDtrChangeRequests extends Page implements HasTable
         }
     }
 
-    public function getSubheading(): string
+    public function getSubheading(): ?string
     {
-        return 'Review attendance change requests from employees in your assigned stations.';
+        return null;
     }
 
     public function getChangeRequestStats(): array
@@ -127,10 +127,16 @@ class ReviewDtrChangeRequests extends Page implements HasTable
             ->whereDate('reviewed_at', now()->toDateString())
             ->count();
 
+        $approvedCount = DtrChangeRequest::query()
+            ->forStationHistory(auth()->user())
+            ->where('status', DtrChangeRequest::STATUS_APPROVED)
+            ->count();
+
         return [
             'pending' => $pending,
             'history_count' => $historyCount,
             'resolved_today' => $resolvedToday,
+            'approved_count' => $approvedCount,
         ];
     }
 
@@ -143,8 +149,6 @@ class ReviewDtrChangeRequests extends Page implements HasTable
                 ->pendingForApprover($employee)
                 ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee', 'employeeVisibleDtr', 'dtr'])
                 ->latest('created_at'))
-            ->heading('Employee D.T.R Change Requests')
-            ->description('Review attendance requests in order. Overtime approval requests can be edited up to actual D.T.R overtime; employee-submitted punch corrections can be approved or rejected without editing.')
             ->columns([
                 TextColumn::make('index')->label('#')->rowIndex(),
 

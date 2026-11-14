@@ -52,9 +52,9 @@ class ManageStationDtr extends Page implements HasTable
         }
     }
 
-    public function getSubheading(): string
+    public function getSubheading(): ?string
     {
-        return 'Choose an assigned branch to manage employee attendance, or open the D.T.R importer from the page header.';
+        return null;
     }
 
     protected function getHeaderActions(): array
@@ -92,10 +92,15 @@ class ManageStationDtr extends Page implements HasTable
             ->where('is_locked', false)
             ->count();
 
+        $pendingChangeRequests = \App\Models\DtrChangeRequest::query()
+            ->pendingForApprover(auth()->user()?->employee)
+            ->count();
+
         return [
             'branches_count' => $branchesCount,
             'active_employees_count' => $activeEmployeesCount,
             'open_periods_count' => $openPeriodsCount,
+            'pending_cr' => $pendingChangeRequests,
         ];
     }
 
@@ -103,7 +108,6 @@ class ManageStationDtr extends Page implements HasTable
     {
         return $table
             ->heading('Assigned Station Branches')
-            ->description('Choose a station branch, then select an open payroll period to manage employees and D.T.R records.')
             ->query(fn (): Builder => BranchModel::query()
                 ->whereIn('id', $this->assignedBranchIds())
                 ->withCount(['employees' => fn (Builder $query): Builder => StationManagementAccess::scopeManagedEmployeesQuery(

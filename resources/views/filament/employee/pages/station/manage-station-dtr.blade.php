@@ -553,91 +553,275 @@
             border-top-color: #334155 !important;
         }
 
+        /* ── Dark Theme & Contrast Overrides ────────────────────────── */
+        .dark .station-dtr-kpi-card {
+            background: #0f172a !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .station-dtr-shortcuts {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .station-dtr-shortcut-item {
+            background: #0f172a !important;
+            border-color: #1e293b !important;
+        }
+
+        .dark .station-dtr-shortcut-item:hover {
+            background: #1e293b !important;
+            border-color: #3b82f6 !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta,
+        .dark .station-dtr-table-wrap .fi-ta-ctn {
+            background: #000000 !important;
+            border-color: #1e293b !important;
+            border-top: 3px solid #3b82f6 !important;
+            border-radius: 0.55rem !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-header {
+            background: #070b12 !important;
+            border-bottom: 1px solid #1e293b !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-header-heading {
+            color: #f8fafc !important;
+            font-weight: 750 !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-header-cell {
+            background: #070b12 !important;
+            border-bottom: 1px solid #1e293b !important;
+            color: #94a3b8 !important;
+            font-size: 0.7rem !important;
+            font-weight: 750 !important;
+            letter-spacing: 0.03em !important;
+            text-transform: uppercase !important;
+            padding: 0.55rem 0.65rem !important;
+            white-space: nowrap !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-cell {
+            padding: 0.5rem 0.65rem !important;
+            font-size: 0.8rem !important;
+            border-bottom: 1px solid #161f2e !important;
+            white-space: nowrap !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-table tbody tr:nth-child(even) {
+            background: #070b12 !important;
+        }
+
+        .dark .station-dtr-table-wrap .fi-ta-table tbody tr:hover {
+            background: #0f172a !important;
+        }
+
+        .station-dtr-table-wrap .fi-ta-header-description {
+            display: none !important;
+        }
+
+        /* ── Modal Window & Transparency Fix ────────────────────────── */
+        .fi-modal-window,
+        .dark .fi-modal-window {
+            background-color: #0f172a !important;
+        }
+
+        .fi-modal-header,
+        .fi-modal-content,
+        .fi-modal-footer {
+            background-color: #0f172a !important;
+        }
+
         /* Responsive Breakpoints */
         @media (max-width: 900px) {
-            .station-dtr-kpis {
-                grid-template-columns: 1fr;
-            }
-
             .station-dtr-shortcuts-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
         @media (max-width: 640px) {
             .emp-station-dtr-page {
-                gap: 1rem;
+                gap: 0.65rem !important;
+            }
+
+            /* 3-column compact horizontal strip for stats */
+            .station-dtr-kpis {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
             }
 
             .station-dtr-kpi-card {
-                padding: 1rem 1.15rem;
+                padding: 0.55rem 0.45rem !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                text-align: center !important;
+                gap: 0.3rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .station-dtr-kpi-icon {
+                width: 2rem !important;
+                height: 2rem !important;
+                border-radius: 0.45rem !important;
+            }
+
+            .station-dtr-kpi-icon svg {
+                width: 1.1rem !important;
+                height: 1.1rem !important;
+            }
+
+            .station-dtr-kpi-body {
+                align-items: center !important;
+                width: 100% !important;
+                gap: 0.1rem !important;
+            }
+
+            .station-dtr-kpi-label {
+                font-size: 0.58rem !important;
+                font-weight: 800 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                max-width: 100% !important;
+                line-height: 1.15 !important;
             }
 
             .station-dtr-kpi-val {
-                font-size: 1.5rem;
+                font-size: 1.25rem !important;
+                line-height: 1.15 !important;
             }
 
+            .station-dtr-kpi-subtext {
+                display: none !important;
+            }
+
+            /* Shortcuts on mobile */
             .station-dtr-shortcuts {
-                padding: 0.85rem 1rem;
+                padding: 0.65rem 0.75rem !important;
+                border-radius: 0.55rem !important;
+                gap: 0.45rem !important;
+            }
+
+            .station-dtr-shortcuts-header {
+                padding-bottom: 0.35rem !important;
+                margin-bottom: 0.15rem !important;
+                border-bottom: 1px solid #1e293b !important;
+            }
+
+            .station-dtr-shortcuts-title {
+                font-size: 0.78rem !important;
+                font-weight: 750 !important;
+            }
+
+            .station-dtr-shortcuts-hint {
+                display: none !important;
+            }
+
+            .station-dtr-shortcuts-grid {
+                grid-template-columns: 1fr !important;
+                gap: 0.35rem !important;
+            }
+
+            .station-dtr-shortcut-item {
+                padding: 0.5rem 0.75rem !important;
+                gap: 0.6rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .station-dtr-shortcut-icon {
+                width: 1.85rem !important;
+                height: 1.85rem !important;
+                border-radius: 0.4rem !important;
+            }
+
+            .station-dtr-shortcut-icon svg {
+                width: 0.95rem !important;
+                height: 0.95rem !important;
+            }
+
+            .station-dtr-shortcut-name {
+                font-size: 0.79rem !important;
+                font-weight: 700 !important;
+            }
+
+            .station-dtr-shortcut-desc {
+                display: none !important;
+            }
+
+            /* Table header on mobile */
+            .station-dtr-table-wrap .fi-ta-header-heading {
+                font-size: 0.92rem !important;
+                line-height: 1.25 !important;
+            }
+
+            /* Modal Bottom Sheet on Mobile */
+            .fi-modal-window-ctn {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+
+            .fi-modal-window {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                min-width: 100vw !important;
+                margin: 0 !important;
+                border-radius: 1rem 1rem 0 0 !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                border-bottom: 0 !important;
+                background-color: #0f172a !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                max-height: 92dvh !important;
+                overflow: hidden !important;
+            }
+
+            .fi-modal-header {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.85rem 1rem 0.5rem !important;
+                border-bottom: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-content {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem 0.75rem !important;
+                gap: 0.75rem !important;
+            }
+
+            .fi-modal-footer {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem !important;
+                border-top: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-footer-actions {
+                width: 100% !important;
+                display: flex !important;
+                gap: 0.5rem !important;
+            }
+
+            .fi-modal-footer-actions .fi-btn {
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                justify-content: center !important;
             }
         }
     </style>
 
     <div class="emp-station-dtr-page employee-blue-page">
-        {{-- KPI Strip --}}
-        <div class="station-dtr-kpis" aria-label="Station D.T.R overview statistics">
-            {{-- 1. Assigned Branches --}}
-            <div class="station-dtr-kpi-card theme-blue">
-                <div class="station-dtr-kpi-icon">
-                    <x-filament::icon icon="heroicon-m-building-storefront" class="w-6 h-6" />
-                </div>
-                <div class="station-dtr-kpi-body">
-                    <span class="station-dtr-kpi-label">Assigned Stations</span>
-                    <div class="station-dtr-kpi-val text-blue-700 dark:text-blue-300">
-                        {{ number_format($stats['branches_count']) }}
-                    </div>
-                    <span class="station-dtr-kpi-subtext">
-                        <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
-                        Managed branch stations
-                    </span>
-                </div>
-            </div>
-
-            {{-- 2. Active Personnel --}}
-            <div class="station-dtr-kpi-card theme-emerald">
-                <div class="station-dtr-kpi-icon">
-                    <x-filament::icon icon="heroicon-m-users" class="w-6 h-6" />
-                </div>
-                <div class="station-dtr-kpi-body">
-                    <span class="station-dtr-kpi-label">Active Personnel</span>
-                    <div class="station-dtr-kpi-val text-emerald-700 dark:text-emerald-300">
-                        {{ number_format($stats['active_employees_count']) }}
-                    </div>
-                    <span class="station-dtr-kpi-subtext">
-                        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>
-                        Staff members across stations
-                    </span>
-                </div>
-            </div>
-
-            {{-- 3. Open Payroll Periods --}}
-            <div class="station-dtr-kpi-card theme-indigo">
-                <div class="station-dtr-kpi-icon">
-                    <x-filament::icon icon="heroicon-m-calendar-days" class="w-6 h-6" />
-                </div>
-                <div class="station-dtr-kpi-body">
-                    <span class="station-dtr-kpi-label">Open Payroll Periods</span>
-                    <div class="station-dtr-kpi-val text-indigo-700 dark:text-indigo-300">
-                        {{ number_format($stats['open_periods_count']) }}
-                    </div>
-                    <span class="station-dtr-kpi-subtext">
-                        <span class="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></span>
-                        Active cycles open for review
-                    </span>
-                </div>
-            </div>
-        </div>
-
         {{-- Quick Station Hub Navigation --}}
         <div class="station-dtr-shortcuts" aria-label="Station Quick Navigation">
             <div class="station-dtr-shortcuts-header">
@@ -678,6 +862,11 @@
                         <span class="station-dtr-shortcut-name">Change Requests</span>
                         <span class="station-dtr-shortcut-desc">Review employee time adjustments</span>
                     </div>
+                    @if(($stats['pending_cr'] ?? 0) > 0)
+                        <span class="station-kpi-badge amber" style="margin-left: auto; margin-right: 0.35rem; font-size: 0.65rem; padding: 0.08rem 0.4rem; border-radius: 9999px; background: rgba(245, 158, 11, 0.2); color: #fcd34d; font-weight: 750;">
+                            {{ $stats['pending_cr'] }} pending
+                        </span>
+                    @endif
                     <x-filament::icon icon="heroicon-m-chevron-right" class="w-4 h-4 station-dtr-shortcut-arrow" />
                 </a>
 

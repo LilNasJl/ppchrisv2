@@ -15,10 +15,10 @@
             width: 100%;
         }
 
-        /* Reference Page Header (matching system style from dashboard/dtr) */
+        /* Reference Page Header (matching system style from dashboard/dtr/loan/leave) */
         .bio-header-banner {
-            background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
-            border: 1px solid rgba(147, 197, 253, 0.35);
+            background: linear-gradient(110deg, #1257b8 0%, #173c70 68%, #102a50 100%);
+            border: 1px solid #3b82f6;
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -26,10 +26,17 @@
             gap: 1.25rem;
             justify-content: space-between;
             min-height: 4.75rem;
-            padding: 1rem 1.35rem;
+            padding: 0.95rem 1.25rem;
             width: 100%;
-            box-shadow: 0 4px 14px -3px rgba(18, 87, 184, 0.28), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.28), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .dark .bio-header-banner {
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+            border-color: #1e293b !important;
+            box-shadow: 0 4px 20px -3px rgba(0, 0, 0, 0.5) !important;
         }
 
         .bio-header-copy {
@@ -45,8 +52,8 @@
         }
 
         .bio-header-eyebrow {
-            color: #93c5fd;
-            font-size: 0.6875rem;
+            color: #d9f722 !important;
+            font-size: 0.65rem;
             font-weight: 800;
             letter-spacing: 0.06em;
             line-height: 1.2;
@@ -58,16 +65,30 @@
             font-size: 1.45rem;
             font-weight: 800;
             line-height: 1.2;
-            margin: 0.1rem 0 0.25rem;
+            margin: 0.1rem 0 0;
             letter-spacing: -0.015em;
         }
 
         .bio-header-description {
-            color: #dbeafe;
-            font-size: 0.8125rem;
-            line-height: 1.4;
-            margin: 0;
-            max-width: 52rem;
+            display: none !important;
+        }
+
+        @media (max-width: 640px) {
+            .bio-header-banner {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.75rem !important;
+                padding: 0.85rem 1rem !important;
+            }
+
+            .bio-header-actions {
+                width: 100% !important;
+            }
+
+            .bio-header-actions .bio-header-btn {
+                flex: 1 1 0 !important;
+                justify-content: center !important;
+            }
         }
 
         .bio-header-actions {
@@ -1291,7 +1312,6 @@
                     <span class="bio-header-eyebrow">{{ $this->device ? 'Device Management' : 'Biometrics Synchronization' }}</span>
                 </div>
                 <h2 class="bio-header-title">{{ $this->device ? ($selected['name'] ?? 'Device '.$this->device) : 'Biometrics Devices' }}</h2>
-                <p class="bio-header-description">{{ $this->canSyncEmployees() ? 'Payroll DTR and device employee synchronization' : 'Payroll DTR synchronization' }} · Processing continues after you leave this page.</p>
             </div>
             <div class="bio-header-actions">
                 <a href="{{ $this->device ? static::getUrl() : $this->returnUrl() }}" class="bio-header-btn">

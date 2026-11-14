@@ -803,8 +803,36 @@ class OnFieldDtrWorkflowTest extends TestCase
             ->assertSee('WORKFORCE RECORDS')
             ->assertSee('Submit On Field DTR')
             ->assertSee('Return')
+            ->assertDontSee('Total Submissions')
+            ->assertDontSee('On Field DTR Guidelines')
             ->assertDontSee('On Field DTR Requests')
             ->assertDontSee('Submitted records remain pending until HR reviews them.');
+    }
+
+    public function test_employee_on_field_dtr_renders_consolidated_responsive_table(): void
+    {
+        [$branch, $employee, $period] = $this->context();
+
+        $user = User::factory()->create([
+            'role' => 'employee',
+            'employee_id' => $employee->id,
+        ]);
+        $employee->update(['user_id' => $user->id]);
+
+        $submission = app(OnFieldDtrService::class)->submit($employee, $this->submissionData($period));
+
+        $this->actingAs($user);
+
+        Livewire::withQueryParams(['periodId' => $period->publicKey()])
+            ->test(StationProofSubmissions::class)
+            ->assertSuccessful()
+            ->assertSee('WORKFORCE RECORDS')
+            ->assertSee('On Field DTR')
+            ->assertDontSee('Total Submissions')
+            ->assertDontSee('On Field DTR Guidelines')
+            ->assertSee($period->title)
+            ->assertSee('Regular')
+            ->assertSee('8:00 AM – 5:00 PM');
     }
 
     public function test_viewing_on_field_dtr_request_does_not_deduct_pending_notification_counts_until_approved_or_rejected(): void

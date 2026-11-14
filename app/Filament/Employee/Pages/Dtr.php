@@ -2,6 +2,7 @@
 
 namespace App\Filament\Employee\Pages;
 
+use App\Filament\Employee\Pages\Station\StationProofSubmissions;
 use App\Models\Dtr as DtrModel;
 use App\Models\DtrChangeRequest;
 use App\Models\Employee;
@@ -57,6 +58,7 @@ class Dtr extends Page implements HasForms, HasTable
     protected static ?int $navigationSort = 2;
 
     public ?string $period_id = null;
+    public ?string $periodId = null;
 
     public static function canAccess(): bool
     {
@@ -77,6 +79,7 @@ class Dtr extends Page implements HasForms, HasTable
             : $latestPeriodId;
 
         $this->period_id = filled($periodId) ? (string) $periodId : null;
+        $this->periodId = $this->period_id;
 
         $this->reconcileCurrentPeriodDtr();
 
@@ -88,6 +91,7 @@ class Dtr extends Page implements HasForms, HasTable
     public function updatedPeriodId($value): void
     {
         $this->period_id = filled($value) ? (string) $value : null;
+        $this->periodId = $this->period_id;
 
         $this->reconcileCurrentPeriodDtr();
 
@@ -152,13 +156,19 @@ class Dtr extends Page implements HasForms, HasTable
                 ->badgeTooltip('Reviewed change requests you have not opened yet')
                 ->url(fn (): string => $this->getChangeRequestsUrl()),
 
-            Action::make('printDtr')
-                ->label('Print / PDF D.T.R')
-                ->icon(Heroicon::Printer)
-                ->url(fn (): string => $this->getPrintUrl())
-                ->openUrlInNewTab()
-                ->disabled(fn (): bool => ! $this->canPrintDtr()),
+            Action::make('onFieldDtr')
+                ->label('On Field DTR')
+                ->icon(Heroicon::MapPin)
+                ->color('success')
+                ->url(fn (): string => $this->getOnFieldDtrUrl()),
         ];
+    }
+
+    public function getOnFieldDtrUrl(): string
+    {
+        return StationProofSubmissions::getUrl(array_filter([
+            'periodId' => $this->selectedPeriod?->publicKey(),
+        ]));
     }
 
     public function getChangeRequestsUrl(): string
@@ -219,7 +229,20 @@ class Dtr extends Page implements HasForms, HasTable
                 ->orderByDesc('time_in')
                 ->orderByDesc('id'))
             ->heading(fn (): string => $this->selectedPeriod?->title ?: 'D.T.R Entries')
-            ->description('Read-only attendance records for the selected payroll period.')
+            ->headerActions([
+                Action::make('periodSelector')
+                    ->view('filament.employee.pages.partials.dtr-period-select-action'),
+                Action::make('printDtr')
+                    ->label('Print D.T.R')
+                    ->icon(Heroicon::Printer)
+                    ->color('primary')
+                    ->url(fn (): string => $this->getPrintUrl())
+                    ->openUrlInNewTab()
+                    ->disabled(fn (): bool => ! $this->canPrintDtr())
+                    ->extraAttributes([
+                        'class' => 'dtr-print-btn',
+                    ]),
+            ])
             ->recordClasses('text-xs')
             ->columns([
                 TextColumn::make('index')

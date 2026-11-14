@@ -52,7 +52,7 @@ class Loan extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return 'View your active company and statutory loans, repayment schedules, balances, and request history.';
+        return null;
     }
 
     public function getLoanStats(): array
@@ -241,7 +241,6 @@ class Loan extends Page implements HasTable
     {
         return $table
             ->heading('My Loans')
-            ->description('Loan details, current balance, status, and payment history.')
             ->query(fn (): Builder => EmployeeLoan::query()
                 ->with(['amortizationStartPayrollPeriod', 'payments.payrollPeriod'])
                 ->where('employee_id', $this->employee()->id)

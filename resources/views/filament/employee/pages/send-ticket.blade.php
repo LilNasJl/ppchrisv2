@@ -46,12 +46,12 @@
         }
 
         .dark .emp-ticket-kpi {
-            background: #0f172a;
-            border-color: #334155;
+            background: #000000 !important;
+            border-color: #1e293b !important;
         }
 
         .dark .emp-ticket-kpi:hover {
-            border-color: #3b82f6;
+            border-color: #3b82f6 !important;
         }
 
         .emp-ticket-kpi.primary {
@@ -60,8 +60,8 @@
         }
 
         .dark .emp-ticket-kpi.primary {
-            background: rgba(30, 64, 175, 0.15);
-            border-color: rgba(96, 165, 250, 0.3);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(30, 58, 138, 0.08)) !important;
+            border-color: rgba(59, 130, 246, 0.35) !important;
         }
 
         .emp-kpi-icon {
@@ -76,8 +76,8 @@
         }
 
         .dark .emp-kpi-icon {
-            background: #1e293b;
-            border-color: #334155;
+            background: #070b12 !important;
+            border-color: #1e293b !important;
         }
 
         .emp-kpi-body {
@@ -150,15 +150,143 @@
             color: #86efac;
         }
 
+        /* ── Modal Window & Transparency Fix ────────────────────────── */
+        .fi-modal-window,
+        .dark .fi-modal-window {
+            background-color: #0f172a !important;
+        }
+
+        .fi-modal-header,
+        .fi-modal-content,
+        .fi-modal-footer {
+            background-color: #0f172a !important;
+        }
+
+        /* 2x2 Grid for Mobile View */
         @media (max-width: 640px) {
+            .emp-ticket-page {
+                gap: 0.6rem !important;
+            }
+
             .emp-ticket-kpis {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-ticket-kpi {
+                padding: 0.55rem 0.65rem !important;
+                gap: 0.45rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .emp-kpi-icon {
+                padding: 0.35rem !important;
+                border-radius: 0.4rem !important;
+            }
+
+            .emp-kpi-icon svg {
+                width: 1rem !important;
+                height: 1rem !important;
+            }
+
+            .emp-kpi-body {
+                gap: 0.1rem !important;
+            }
+
+            .emp-kpi-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            .emp-kpi-val {
+                font-size: 1.15rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-kpi-subtext {
+                font-size: 0.6rem !important;
+                line-height: 1.1 !important;
+                display: -webkit-box !important;
+                -webkit-line-clamp: 1 !important;
+                -webkit-box-orient: vertical !important;
+                overflow: hidden !important;
+            }
+
+            .emp-kpi-badge {
+                font-size: 0.58rem !important;
+                padding: 0.05rem 0.35rem !important;
+                margin-top: 0.05rem !important;
+            }
+
+            /* ── Modal Full Width Bottom Sheet for Mobile View ─── */
+            .fi-modal-window-ctn {
+                padding: 0 !important;
+                display: flex !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+
+            .fi-modal-window {
+                width: 100vw !important;
+                max-width: 100vw !important;
+                min-width: 100vw !important;
+                margin: 0 !important;
+                border-radius: 1rem 1rem 0 0 !important;
+                border: 1px solid rgb(51, 65, 85) !important;
+                border-bottom: 0 !important;
+                background-color: #0f172a !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75) !important;
+                box-sizing: border-box !important;
+                display: flex !important;
+                flex-direction: column !important;
+                max-height: 92dvh !important;
+                overflow: hidden !important;
+            }
+
+            .fi-modal-header {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.85rem 1rem 0.5rem !important;
+                border-bottom: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-content {
+                flex: 1 1 auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem 0.75rem !important;
+                gap: 0.75rem !important;
+            }
+
+            .fi-modal-footer {
+                flex-shrink: 0 !important;
+                background-color: #0f172a !important;
+                padding: 0.65rem 0.85rem !important;
+                border-top: 1px solid rgb(51, 65, 85) !important;
+            }
+
+            .fi-modal-footer-actions {
+                width: 100% !important;
+                display: flex !important;
+                gap: 0.5rem !important;
+            }
+
+            .fi-modal-footer-actions .fi-btn {
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+                justify-content: center !important;
             }
         }
     </style>
 
     <div class="emp-ticket-page employee-blue-page">
-        {{-- KPI Cards --}}
+        {{-- KPI Cards (2x2 on mobile) --}}
         <div class="emp-ticket-kpis">
             <div class="emp-ticket-kpi primary">
                 <div class="emp-kpi-icon">

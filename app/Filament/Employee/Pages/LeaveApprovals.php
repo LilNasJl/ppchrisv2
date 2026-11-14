@@ -72,9 +72,9 @@ class LeaveApprovals extends Page implements HasTable
         return Width::Full;
     }
 
-    public function getSubheading(): string
+    public function getSubheading(): ?string
     {
-        return 'Review and decide on leave requests submitted by employees within your assigned stations.';
+        return null;
     }
 
     public function getLeaveApprovalStats(): array

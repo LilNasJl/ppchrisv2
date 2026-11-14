@@ -35,11 +35,7 @@
                     {{ $setting?->modal_heading ?: 'System Updates & Notes' }}
                 </x-slot>
 
-                @if (filled($setting?->modal_subtitle))
-                    <x-slot name="description">
-                        {{ $setting->modal_subtitle }}
-                    </x-slot>
-                @endif
+
 
                 <style>
                     .su-modal-footer-bar {

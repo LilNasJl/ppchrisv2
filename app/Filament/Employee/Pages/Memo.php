@@ -52,11 +52,16 @@ class Memo extends Page implements HasTable
             ->whereNotNull('attachment_path')
             ->where('attachment_path', '!=', '')
             ->count();
+        $distinctTypes = MemoModel::query()
+            ->where('employee_id', $employee->id)
+            ->distinct('memo_type_id')
+            ->count('memo_type_id');
 
         return [
             'total' => $total,
             'this_month' => $thisMonth,
             'with_attachment' => $withAttachment,
+            'categories' => $distinctTypes,
         ];
     }
 

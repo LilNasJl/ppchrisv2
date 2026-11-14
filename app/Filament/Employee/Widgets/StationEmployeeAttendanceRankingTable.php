@@ -37,14 +37,10 @@ class StationEmployeeAttendanceRankingTable extends TableWidget
                 TextColumn::make('employee.full_name')
                     ->label('Employee')
                     ->weight('bold')
-                    ->width('16rem')
-                    ->wrap()
                     ->placeholder('Unknown employee'),
 
                 TextColumn::make('branch.branch_name')
                     ->label('Branch')
-                    ->width('12rem')
-                    ->wrap()
                     ->placeholder('Unknown branch'),
 
                 TextColumn::make('late_hours')
@@ -85,7 +81,6 @@ class StationEmployeeAttendanceRankingTable extends TableWidget
                 TextColumn::make('total_exceptions')
                     ->label('Total Exceptions')
                     ->numeric()
-                    ->width('12rem')
                     ->alignCenter()
                     ->badge()
                     ->color('primary')

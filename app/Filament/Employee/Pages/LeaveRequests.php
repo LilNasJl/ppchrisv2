@@ -71,7 +71,7 @@ class LeaveRequests extends Page implements HasForms, HasTable
 
     public function getSubheading(): ?string
     {
-        return 'File leave applications, track approval stages, and view remaining leave credits.';
+        return null;
     }
 
     public function getBreadcrumbs(): array

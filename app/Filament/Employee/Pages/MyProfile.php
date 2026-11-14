@@ -74,12 +74,7 @@ class MyProfile extends Page implements HasForms
 
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('saveProfile')
-                ->label('Save Changes')
-                ->icon(Heroicon::CheckCircle)
-                ->action(fn () => $this->save()),
-        ];
+        return [];
     }
 
     public function getMaxContentWidth(): Width|string|null

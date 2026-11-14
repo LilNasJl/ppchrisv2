@@ -47,7 +47,7 @@
 
         .dark .emp-memo-kpi {
             background: #0f172a;
-            border-color: #334155;
+            border-color: #1e293b;
         }
 
         .dark .emp-memo-kpi:hover {
@@ -119,15 +119,63 @@
             color: #94a3b8;
         }
 
+        /* 2x2 Grid for Mobile View */
         @media (max-width: 640px) {
+            .emp-memo-page {
+                gap: 0.6rem !important;
+            }
+
             .emp-memo-kpis {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 0.45rem !important;
+            }
+
+            .emp-memo-kpi {
+                padding: 0.55rem 0.65rem !important;
+                gap: 0.45rem !important;
+                border-radius: 0.5rem !important;
+            }
+
+            .emp-memo-icon {
+                padding: 0.35rem !important;
+                border-radius: 0.4rem !important;
+            }
+
+            .emp-memo-icon svg {
+                width: 1rem !important;
+                height: 1rem !important;
+            }
+
+            .emp-memo-body {
+                gap: 0.1rem !important;
+            }
+
+            .emp-memo-label {
+                font-size: 0.58rem !important;
+                line-height: 1.15 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            .emp-memo-val {
+                font-size: 1.15rem !important;
+                line-height: 1.15 !important;
+            }
+
+            .emp-memo-subtext {
+                font-size: 0.6rem !important;
+                line-height: 1.1 !important;
+                display: -webkit-box !important;
+                -webkit-line-clamp: 1 !important;
+                -webkit-box-orient: vertical !important;
+                overflow: hidden !important;
             }
         }
     </style>
 
     <div class="emp-memo-page employee-blue-page">
-        {{-- KPI Cards --}}
+        {{-- KPI Cards (2x2 on mobile) --}}
         <div class="emp-memo-kpis">
             <div class="emp-memo-kpi primary">
                 <div class="emp-memo-icon">
@@ -159,6 +207,17 @@
                     <span class="emp-memo-label">WITH ATTACHMENTS</span>
                     <div class="emp-memo-val text-indigo-700 dark:text-indigo-300">{{ $stats['with_attachment'] }}</div>
                     <span class="emp-memo-subtext">Official files attached</span>
+                </div>
+            </div>
+
+            <div class="emp-memo-kpi">
+                <div class="emp-memo-icon">
+                    <x-filament::icon icon="heroicon-m-tag" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div class="emp-memo-body">
+                    <span class="emp-memo-label">NOTICE CATEGORIES</span>
+                    <div class="emp-memo-val text-amber-700 dark:text-amber-300">{{ $stats['categories'] ?? 0 }}</div>
+                    <span class="emp-memo-subtext">Distinct types received</span>
                 </div>
             </div>
         </div>

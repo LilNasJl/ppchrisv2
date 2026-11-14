@@ -46,9 +46,9 @@ class StationOverview extends Page
         return Width::Full;
     }
 
-    public function getSubheading(): string
+    public function getSubheading(): ?string
     {
-        return 'Assigned stations, active employees, and attendance at a glance.';
+        return null;
     }
 
     public function branchCount(): int

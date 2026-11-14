@@ -46,9 +46,16 @@ class Payroll extends Page implements HasForms
     {
         $employee = $this->employee;
 
-        $this->period_id = (string) $this->availablePayrollPeriodsQuery($employee)
-            ->newestFirst()
-            ->value('id');
+        $requestedPeriodId = PayrollPeriod::resolvePublicId(request()->query('periodId'))
+            ?: (int) request()->query('period_id');
+
+        $availableQuery = $this->availablePayrollPeriodsQuery($employee);
+
+        $periodId = $requestedPeriodId && (clone $availableQuery)->whereKey($requestedPeriodId)->exists()
+            ? $requestedPeriodId
+            : $availableQuery->newestFirst()->value('id');
+
+        $this->period_id = filled($periodId) ? (string) $periodId : null;
 
         $this->form->fill([
             'period_id' => $this->period_id,

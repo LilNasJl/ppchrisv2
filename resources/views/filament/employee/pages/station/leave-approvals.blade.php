@@ -296,56 +296,7 @@
     </style>
 
     <div class="emp-leave-approvals-page employee-blue-page">
-        {{-- KPI Strip --}}
-        <div class="emp-leave-appr-kpis">
-            <div class="emp-leave-appr-kpi primary">
-                <div class="emp-leave-appr-icon">
-                    <x-filament::icon icon="heroicon-m-clipboard-document-check" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div class="emp-leave-appr-body">
-                    <span class="emp-leave-appr-label">TOTAL LEAVE QUEUE</span>
-                    <div class="emp-leave-appr-val text-blue-700 dark:text-blue-300">{{ $stats['total'] }}</div>
-                    <span class="emp-leave-appr-subtext">All submitted station leaves</span>
-                </div>
-            </div>
 
-            <div class="emp-leave-appr-kpi">
-                <div class="emp-leave-appr-icon">
-                    <x-filament::icon icon="heroicon-m-clock" class="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div class="emp-leave-appr-body">
-                    <span class="emp-leave-appr-label">PENDING YOUR DECISION</span>
-                    <div class="emp-leave-appr-val {{ $stats['pending'] > 0 ? 'text-amber-700 dark:text-amber-300' : '' }}">
-                        {{ $stats['pending'] }}
-                    </div>
-                    <span class="emp-leave-appr-badge {{ $stats['pending'] > 0 ? 'amber' : 'green' }}">
-                        {{ $stats['pending'] > 0 ? 'Action required' : 'Queue cleared' }}
-                    </span>
-                </div>
-            </div>
-
-            <div class="emp-leave-appr-kpi">
-                <div class="emp-leave-appr-icon">
-                    <x-filament::icon icon="heroicon-m-check-circle" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div class="emp-leave-appr-body">
-                    <span class="emp-leave-appr-label">APPROVED LEAVES</span>
-                    <div class="emp-leave-appr-val text-emerald-700 dark:text-emerald-300">{{ $stats['approved'] }}</div>
-                    <span class="emp-leave-appr-badge green">Approved by you</span>
-                </div>
-            </div>
-
-            <div class="emp-leave-appr-kpi">
-                <div class="emp-leave-appr-icon">
-                    <x-filament::icon icon="heroicon-m-x-circle" class="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                </div>
-                <div class="emp-leave-appr-body">
-                    <span class="emp-leave-appr-label">REJECTED LEAVES</span>
-                    <div class="emp-leave-appr-val text-rose-700 dark:text-rose-300">{{ $stats['rejected'] }}</div>
-                    <span class="emp-leave-appr-subtext">Declined applications</span>
-                </div>
-            </div>
-        </div>
 
         {{-- Content: Tabs + Table --}}
         <div>

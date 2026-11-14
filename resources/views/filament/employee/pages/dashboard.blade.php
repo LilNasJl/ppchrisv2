@@ -124,6 +124,11 @@
         }
 
         /* Gradient Header Banner */
+
+        .dark .employee-dashboard-header {
+            border-color: #1e293b !important;
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+        }
         .employee-dashboard-header {
             align-items: center;
             background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
