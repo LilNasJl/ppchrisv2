@@ -590,25 +590,41 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: linear-gradient(180deg, transparent 0%, rgba(2, 15, 48, 0.78) 35%, rgba(2, 15, 48, 0.94) 100%);
-            backdrop-filter: blur(6px);
-            padding: 34px 22px 18px;
+            background: linear-gradient(180deg, transparent 0%, rgba(2, 15, 48, 0.7) 40%, rgba(2, 15, 48, 0.92) 100%);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            padding: 14px 20px 12px;
             color: #ffffff;
         }
 
         .slide-caption-title {
-            font-size: clamp(16px, 1.8vw, 20px);
-            font-weight: 750;
-            margin: 0 0 4px;
+            font-size: clamp(15px, 1.6vw, 19px);
+            font-weight: 700;
+            margin: 0 0 3px;
             line-height: 1.25;
             color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .slide-caption-desc {
-            font-size: 12px;
-            line-height: 1.45;
-            color: #dbeaff;
+        .slide-caption-title .slide-title-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05em;
+            color: #60a5fa;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .slide-caption-copyright {
+            font-size: 11px;
+            line-height: 1.35;
+            color: rgba(219, 234, 255, 0.78);
             margin: 0;
+            font-weight: 500;
+            letter-spacing: 0.01em;
         }
 
         .carousel-nav-bar {
@@ -693,15 +709,12 @@
             }
 
             .content-panel {
-                width: 100%;
-                max-width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-                padding: 0;
+                display: contents;
             }
 
             .brand-header {
-                padding: 20px 20px 14px;
+                order: 1;
+                padding: 20px 20px 10px;
                 width: 100%;
                 box-sizing: border-box;
             }
@@ -730,23 +743,26 @@
             }
 
             .brand-subline {
-                color: #dbeeff;
-                font-size: 9.5px;
-                letter-spacing: 0.04em;
+                display: none !important;
             }
 
-            .brand-badge {
-                background: rgba(255, 255, 255, 0.18);
-                color: #ffffff;
-                border-color: rgba(255, 255, 255, 0.35);
-            }
-
-            .login-wrapper {
+            .visual-panel {
+                order: 2;
                 width: 100%;
                 max-width: 100%;
                 min-width: 0;
                 box-sizing: border-box;
-                padding: 6px 16px 24px;
+                padding: 10px 16px 18px;
+                overflow: hidden;
+            }
+
+            .login-wrapper {
+                order: 3;
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 8px 16px 36px;
             }
 
             .login-card {
@@ -773,15 +789,6 @@
                 display: none;
             }
 
-            .visual-panel {
-                width: 100%;
-                max-width: 100%;
-                min-width: 0;
-                box-sizing: border-box;
-                padding: 24px 16px 44px;
-                overflow: hidden;
-            }
-
             .visual-content-container {
                 width: 100%;
                 max-width: 410px;
@@ -803,15 +810,22 @@
             }
 
             .slide-glass-caption {
-                padding: 28px 16px 14px;
+                padding: 10px 14px 8px;
             }
 
             .slide-caption-title {
-                font-size: 15px;
+                font-size: 14px;
+                margin: 0 0 2px;
+                gap: 6px;
             }
 
-            .slide-caption-desc {
-                font-size: 11.5px;
+            .slide-caption-title .slide-title-icon {
+                font-size: 1.0em;
+            }
+
+            .slide-caption-copyright {
+                font-size: 10px;
+                color: rgba(219, 234, 255, 0.72);
             }
 
             .mobile-page-footer {
@@ -992,28 +1006,28 @@
                     <div class="carousel-card-stage" aria-live="polite">
                         <!-- Slide 1 -->
                         <article class="carousel-slide-item is-active" data-slide aria-hidden="false">
-                            <img src="{{ asset('image/hris-carousel-people.png') }}" alt="HR team managing records" class="carousel-slide-img">
+                            <img src="{{ asset('image/carousel-slide-1.jpg') }}" alt="HR team managing records" class="carousel-slide-img">
                             <div class="slide-glass-caption">
-                                <h3 class="slide-caption-title">People records, clearly connected</h3>
-                                <p class="slide-caption-desc">Keep essential employee information organized, current, and accessible to the right team.</p>
+                                <h3 class="slide-caption-title"><i class="fi fi-rr-users-alt slide-title-icon" aria-hidden="true"></i><span>People records, clearly connected</span></h3>
+                                <p class="slide-caption-copyright">&copy; {{ now()->year }} Philfumes Petroleum Corporation</p>
                             </div>
                         </article>
 
                         <!-- Slide 2 -->
                         <article class="carousel-slide-item" data-slide aria-hidden="true">
-                            <img src="{{ asset('image/hris-carousel-payroll.png') }}" alt="Attendance and payroll operations" class="carousel-slide-img">
+                            <img src="{{ asset('image/carousel-slide-2.jpg') }}" alt="Attendance and payroll operations" class="carousel-slide-img">
                             <div class="slide-glass-caption">
-                                <h3 class="slide-caption-title">From attendance to payroll</h3>
-                                <p class="slide-caption-desc">Bring D.T.R., schedules, leave, payroll periods, and pay details into one reliable flow.</p>
+                                <h3 class="slide-caption-title"><i class="fi fi-rr-time-check slide-title-icon" aria-hidden="true"></i><span>From attendance to payroll</span></h3>
+                                <p class="slide-caption-copyright">&copy; {{ now()->year }} Philfumes Petroleum Corporation</p>
                             </div>
                         </article>
 
                         <!-- Slide 3 -->
                         <article class="carousel-slide-item" data-slide aria-hidden="true">
-                            <img src="{{ asset('image/hris-carousel-self-service.png') }}" alt="Employee using self service portal" class="carousel-slide-img">
+                            <img src="{{ asset('image/carousel-slide-3.jpg') }}" alt="Employee using self service portal" class="carousel-slide-img">
                             <div class="slide-glass-caption">
-                                <h3 class="slide-caption-title">Self-service that stays simple</h3>
-                                <p class="slide-caption-desc">Give employees secure access to their information, requests, payslips, notices, and updates.</p>
+                                <h3 class="slide-caption-title"><i class="fi fi-rr-user-gear slide-title-icon" aria-hidden="true"></i><span>Self-service that stays simple</span></h3>
+                                <p class="slide-caption-copyright">&copy; {{ now()->year }} Philfumes Petroleum Corporation</p>
                             </div>
                         </article>
                     </div>
