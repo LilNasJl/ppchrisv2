@@ -66,9 +66,9 @@ class UserForm
 
                             DatePicker::make('birthdate')
                                 ->label('Date of Birth')
-                                ->required()
-                                ->native(false)
-                                ->maxDate(now()),
+                                ->native()
+                                ->maxDate(now())
+                                ->required(),
 
                             Select::make('gender')
                                 ->label('Gender')
@@ -147,7 +147,7 @@ class UserForm
 
                             DatePicker::make('hired_date')
                                 ->label('Date Hired')
-                                ->native(false)
+                                ->native()
                                 ->required()
                                 ->columnSpanFull(),
                         ])
