@@ -409,30 +409,109 @@
 
         /* --- Responsive Viewport Adjustments --- */
         @media (max-width: 640px) {
+            .fi-panel-hr .fi-page:has(.master-data-page) .fi-page-content {
+                padding-inline: 0.5rem !important;
+            }
             .master-data-toolbar {
                 align-items: stretch;
                 gap: 0.75rem;
-                padding: 0.8rem 0.9rem;
+                padding: 0.9rem 1rem;
             }
             .master-data-header-controls {
                 width: 100%;
-                align-items: flex-start;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.55rem;
+            }
+            .master-data-header-controls .fi-tabs {
+                width: 100% !important;
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+            }
+            .master-data-header-controls .fi-tabs-item {
+                justify-content: center !important;
+                width: 100% !important;
+            }
+            .master-data-header-controls .fi-btn {
+                width: 100% !important;
+                justify-content: center !important;
             }
             .master-data-title {
                 font-size: 1.25rem;
+            }
+            .master-data-page .fi-ta-ctn {
+                border-radius: 10px !important;
             }
             .master-data-page .fi-ta-header-toolbar {
                 padding: 0.75rem !important;
             }
             .master-data-page .fi-ta-header-toolbar > div:last-child {
                 width: 100%;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
             }
             .master-data-page .fi-ta-search-field {
-                flex: 1 1 12rem;
+                flex: 1 1 auto;
                 width: auto;
             }
+            .master-data-page .fi-ta-content {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
             .master-data-page .fi-ta table {
-                min-width: 980px;
+                min-width: 100% !important;
+                width: 100% !important;
+                font-size: 0.68rem !important;
+            }
+            .master-data-page .fi-ta-header-cell,
+            .dark .master-data-page .fi-ta-header-cell {
+                padding: 0.35rem 0.3rem !important;
+                min-width: 0 !important;
+            }
+            .master-data-page .fi-ta-header-cell-label,
+            .dark .master-data-page .fi-ta-header-cell-label {
+                font-size: 0.62rem !important;
+            }
+            .master-data-page .fi-ta-cell,
+            .dark .master-data-page .fi-ta-cell {
+                padding: 0.25rem 0.3rem !important;
+                min-width: 0 !important;
+            }
+            .master-data-page .fi-ta-cell-index,
+            .dark .master-data-page .fi-ta-cell-index {
+                min-width: 1.4rem !important;
+                font-size: 0.62rem !important;
+            }
+            .master-data-page .fi-ta-text {
+                padding: 0.12rem 0.2rem !important;
+                min-height: 1.35rem !important;
+            }
+            .master-data-page .fi-ta-text-item,
+            .dark .master-data-page .fi-ta-text-item {
+                font-size: 0.68rem !important;
+                line-height: 1.25 !important;
+            }
+            .master-data-page .fi-ta-image {
+                padding: 0.1rem 0.2rem !important;
+            }
+            .master-data-page .fi-ta-image img,
+            .master-data-page .fi-ta .fi-avatar {
+                width: 1.55rem !important;
+                height: 1.55rem !important;
+            }
+            .master-data-page .fi-ta .fi-badge,
+            .master-data-page .fi-ta-cell-employee-uid .fi-badge,
+            .master-data-page .fi-ta-cell-employee-designation-title .fi-badge,
+            .master-data-page .fi-ta-cell-employee-employment-type .fi-badge {
+                font-size: 0.6rem !important;
+                padding: 1px 5px !important;
+            }
+            .master-data-page .fi-ta-header-cell-employee-lastname,
+            .master-data-page .fi-ta-cell-employee-lastname,
+            .master-data-page .fi-ta-header-cell-full-name,
+            .master-data-page .fi-ta-cell-full-name {
+                min-width: 0 !important;
             }
         }
     </style>

@@ -171,8 +171,6 @@ class DtrChangeRequests extends Page implements HasTable
                     ->with(['employee', 'branch', 'payrollPeriod', 'reviewedByEmployee.user', 'assignedEmployee', 'employeeVisibleDtr', 'dtr'])
                     ->latest('created_at')
             ))
-            ->heading('HR Final Approval – D.T.R Change Requests')
-            ->description('Review D.T.R change requests that have completed their employee-level approval workflow and are waiting for HR final approval.')
             ->columns([
                 TextColumn::make('index')
                     ->label('#')

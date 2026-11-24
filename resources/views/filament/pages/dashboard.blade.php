@@ -77,8 +77,8 @@
 
         /* Compact Gradient Section Headers */
         .ppc-dashboard-group-header {
-            background: linear-gradient(110deg, #1257b8 0%, #173c70 65%, #102a50 100%);
-            border: 1px solid rgba(147, 197, 253, 0.35);
+            background: linear-gradient(110deg, #0f274a, #08152b 68%, #030814) !important;
+            border: 1px solid rgba(147, 197, 253, 0.22);
             border-radius: 10px;
             display: flex;
             flex-direction: column;
