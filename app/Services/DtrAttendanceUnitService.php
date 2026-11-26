@@ -174,6 +174,14 @@ class DtrAttendanceUnitService
 
     public function recordAttendanceUnits(Dtr $record): float
     {
+        if (filled($record->leave_id)
+            || $record->entry_source === DtrDayPartService::SOURCE_LEAVE
+            || strcasecmp(trim((string) $record->schedule_type), 'Leave') === 0) {
+            $dayPart = app(DtrDayPartService::class)->normalize($record->day_part);
+
+            return in_array($dayPart, [DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON], true) ? 0.5 : 1.0;
+        }
+
         if ($this->payableRecords(collect([$record]))->isEmpty()) {
             return 0.0;
         }

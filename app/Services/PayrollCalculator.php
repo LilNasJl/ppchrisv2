@@ -425,8 +425,8 @@ class PayrollCalculator
             : max(0, $halfMonthDays - $absenceDayValue));
 
         $deductibleDtrs = $this->deductibleDtrs($dtrs, $employee, $isDaily);
-        $lateMinutes = $this->sumMinutes($deductibleDtrs, 'late');
-        $undertimeMinutes = $this->sumMinutes($deductibleDtrs, 'undertime');
+        $lateMinutes = $this->sumLateMinutes($deductibleDtrs, $isDaily);
+        $undertimeMinutes = $this->sumUndertimeMinutes($deductibleDtrs, $isDaily);
         $overtimeMinutes = $this->sumMinutes($dtrs, 'credited_overtime');
         $overtimeHours = $this->hours($overtimeMinutes);
         $rawOvertimeAmount = $this->minutePay($overtimeMinutes, $ratePerHour, $overtimeMultiplier);
@@ -1087,8 +1087,40 @@ class PayrollCalculator
                     return $coveredPart === DtrDayPartService::WHOLE_DAY || $coveredPart === $missingPart;
                 });
 
-                return $missingPartCovered ? 0.0 : $fallbackMinutes;
+                if ($missingPartCovered) {
+                    return 0.0;
+                }
+
+                $alreadyAccountedInLateOrUndertime = $dateRecords->contains(function (Dtr $dtr) use ($missingPart, $fallbackMinutes, $dayPartService, $dateRecords): bool {
+                    $effectiveLate = $dayPartService->effectiveLate($dtr, $dateRecords);
+                    $effectiveUndertime = $dayPartService->effectiveUndertime($dtr, $dateRecords);
+
+                    if ($missingPart === DtrDayPartService::MORNING && $effectiveLate >= $fallbackMinutes) {
+                        return true;
+                    }
+                    if ($missingPart === DtrDayPartService::AFTERNOON && $effectiveUndertime >= $fallbackMinutes) {
+                        return true;
+                    }
+
+                    return false;
+                });
+
+                return $alreadyAccountedInLateOrUndertime ? 0.0 : $fallbackMinutes;
             });
+    }
+
+    protected function sumLateMinutes(Collection $dtrs, bool $isDaily = false): float
+    {
+        $dayPartService = app(DtrDayPartService::class);
+
+        return $this->number($dtrs->sum(fn (Dtr $dtr): float => (float) $dayPartService->effectiveLate($dtr, $dtrs, $isDaily)));
+    }
+
+    protected function sumUndertimeMinutes(Collection $dtrs, bool $isDaily = false): float
+    {
+        $dayPartService = app(DtrDayPartService::class);
+
+        return $this->number($dtrs->sum(fn (Dtr $dtr): float => (float) $dayPartService->effectiveUndertime($dtr, $dtrs, $isDaily)));
     }
 
     protected function absenceMinutesFor(Collection $dtrs, float $workHoursPerDay, string $dayPart, ?Employee $employee = null): float

@@ -230,8 +230,8 @@ class DtrManage extends Page
             'credited_work_hrs' => (int) $finalizedRecords->sum('credited_work_hrs'),
             'credited_overtime' => (int) $finalizedRecords->sum('credited_overtime'),
             'pending_ot_count' => $pendingOtCount,
-            'late' => (int) $finalizedRecords->sum('late'),
-            'undertime' => (int) $finalizedRecords->sum('undertime'),
+            'late' => (int) $finalizedRecords->sum(fn (DtrModel $r): int => app(DtrDayPartService::class)->effectiveLate($r, $finalizedRecords)),
+            'undertime' => (int) $finalizedRecords->sum(fn (DtrModel $r): int => app(DtrDayPartService::class)->effectiveUndertime($r, $finalizedRecords)),
         ];
     }
 

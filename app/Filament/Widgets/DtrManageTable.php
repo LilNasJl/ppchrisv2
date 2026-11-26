@@ -206,6 +206,17 @@ class DtrManageTable extends BaseWidget
                         default => 'gray',
                     }),
 
+                TextColumn::make('leave_approval')
+                    ->label('LEAVE APPROVAL')
+                    ->getStateUsing(fn (ModelsDtr $record): string => app(DtrDayPartService::class)->leaveApprovalLabel($record))
+                    ->badge(fn (string $state): bool => $state !== '-')
+                    ->color(fn (string $state): string => match (true) {
+                        str_starts_with($state, 'Approved') => 'success',
+                        str_starts_with($state, 'Pending') => 'warning',
+                        default => 'gray',
+                    })
+                    ->alignCenter(),
+
                 TextColumn::make('attendance_unit')
                     ->label('DAY COUNT')
                     ->getStateUsing(fn (ModelsDtr $record): float => app(DtrAttendanceUnitService::class)->recordAttendanceUnits($record))
@@ -222,6 +233,7 @@ class DtrManageTable extends BaseWidget
 
                 TextColumn::make('late')
                     ->label('LATE')
+                    ->getStateUsing(fn (ModelsDtr $record): int => app(DtrDayPartService::class)->effectiveLate($record))
                     ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): string => (int) $state > 0 ? 'danger' : 'gray')
@@ -229,6 +241,7 @@ class DtrManageTable extends BaseWidget
 
                 TextColumn::make('undertime')
                     ->label('UNDERTIME')
+                    ->getStateUsing(fn (ModelsDtr $record): int => app(DtrDayPartService::class)->effectiveUndertime($record))
                     ->formatStateUsing(fn ($state): string => (int) $state > 0 ? ((int) $state).'m' : '-')
                     ->badge(fn ($state): bool => (int) $state > 0)
                     ->color(fn ($state): string => (int) $state > 0 ? 'warning' : 'gray')
@@ -1090,8 +1103,8 @@ class DtrManageTable extends BaseWidget
             'total_days_work' => $workDayUnits + $leaveDayCount,
             'absent_days' => $absence['weekday_days'],
             'saturday_absent_hours' => $absence['saturday_hours'],
-            'late' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->late ?? 0)),
-            'undertime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->undertime ?? 0)),
+            'late' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => app(DtrDayPartService::class)->effectiveLate($record, $finalizedRecords)),
+            'undertime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => app(DtrDayPartService::class)->effectiveUndertime($record, $finalizedRecords)),
             'credited_overtime' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->credited_overtime ?? 0)),
             'credited_work_hrs' => (int) $finalizedRecords->sum(fn (ModelsDtr $record): int => (int) ($record->credited_work_hrs ?? 0)),
         ];
@@ -1362,17 +1375,9 @@ class DtrManageTable extends BaseWidget
     {
         $dayPart = app(DtrDayPartService::class)->normalize($record->day_part);
 
-        if ($dayPart === DtrDayPartService::WHOLE_DAY) {
-            return 1.0;
-        }
-
-        $creditedMinutes = (int) ($record->credited_work_hrs ?? 0);
-
-        if ($creditedMinutes > 0) {
-            return round($creditedMinutes / 480, 3);
-        }
-
-        return $dayPart === DtrDayPartService::AFTERNOON ? 300 / 480 : 240 / 480;
+        return in_array($dayPart, [DtrDayPartService::MORNING, DtrDayPartService::AFTERNOON], true)
+            ? 0.5
+            : 1.0;
     }
 
     protected function getAbsenceTypeOptions(): array

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Dtr;
+use App\Models\Leave;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -281,5 +282,181 @@ class DtrDayPartService
         return $overlapEnd->greaterThan($overlapStart)
             ? (int) $overlapStart->diffInMinutes($overlapEnd)
             : 0;
+    }
+
+    public function complementaryDayPart(?string $dayPart): ?string
+    {
+        return match ($this->normalize($dayPart)) {
+            self::MORNING => self::AFTERNOON,
+            self::AFTERNOON => self::MORNING,
+            default => null,
+        };
+    }
+
+    /**
+     * @param  Collection<int, Dtr>|null  $dateRecords
+     * @return array{status: string, is_approved: bool, leave_type: string, day_part: string, is_direct_leave: bool, label: string}|null
+     */
+    public function findLeaveForRecord(Dtr $record, ?Collection $dateRecords = null): ?array
+    {
+        if (filled($record->leave_id) || $record->schedule_type === 'Leave' || $record->entry_source === self::SOURCE_LEAVE) {
+            $leave = $record->leave ?: (filled($record->leave_id) ? Leave::find($record->leave_id) : null);
+            $status = $leave?->status ?? 'Approved';
+            $isApproved = $status === 'Approved';
+            $type = $leave?->leave_type ?? 'Leave';
+            $part = $this->normalize($record->day_part ?: ($leave?->half_day_period ?? self::WHOLE_DAY));
+            $partLabel = match ($part) {
+                self::MORNING => ' (Morning)',
+                self::AFTERNOON => ' (Afternoon)',
+                default => '',
+            };
+
+            return [
+                'status' => $status,
+                'is_approved' => $isApproved,
+                'leave_type' => $type,
+                'day_part' => $part,
+                'is_direct_leave' => true,
+                'label' => ($isApproved ? 'Approved: ' : ($status . ': ')) . $type . $partLabel,
+            ];
+        }
+
+        $dayPart = $this->normalize($record->day_part);
+        $missingPart = $this->complementaryDayPart($dayPart);
+        if (! $missingPart || blank($record->date_in) || blank($record->employee_id)) {
+            return null;
+        }
+
+        $dateStr = Carbon::parse($record->date_in)->toDateString();
+
+        if ($dateRecords) {
+            $matchingDtr = $dateRecords
+                ->filter(fn (Dtr $r): bool => Carbon::parse($r->date_in)->toDateString() === $dateStr)
+                ->first(function (Dtr $r) use ($missingPart): bool {
+                    $isLeave = filled($r->leave_id)
+                        || $r->schedule_type === 'Leave'
+                        || $r->entry_source === self::SOURCE_LEAVE;
+                    if (! $isLeave) {
+                        return false;
+                    }
+                    $part = $this->normalize($r->day_part);
+
+                    return $part === self::WHOLE_DAY || $part === $missingPart;
+                });
+
+            if ($matchingDtr) {
+                $leave = $matchingDtr->leave ?: (filled($matchingDtr->leave_id) ? Leave::find($matchingDtr->leave_id) : null);
+                $type = $leave?->leave_type ?? 'Leave';
+
+                return [
+                    'status' => 'Approved',
+                    'is_approved' => true,
+                    'leave_type' => $type,
+                    'day_part' => $missingPart,
+                    'is_direct_leave' => false,
+                    'label' => 'Approved: ' . $type . ' (' . ucfirst($missingPart) . ')',
+                ];
+            }
+        }
+
+        $leave = Leave::query()
+            ->where('employee_id', $record->employee_id)
+            ->whereDate('leave_from', '<=', $dateStr)
+            ->whereDate('leave_to', '>=', $dateStr)
+            ->get()
+            ->first(fn (Leave $l): bool => $l->coversDayPart($missingPart));
+
+        if ($leave) {
+            $isApproved = $leave->status === 'Approved';
+            $partLabel = ' (' . ucfirst($missingPart) . ')';
+
+            return [
+                'status' => $leave->status,
+                'is_approved' => $isApproved,
+                'leave_type' => $leave->leave_type,
+                'day_part' => $missingPart,
+                'is_direct_leave' => false,
+                'label' => ($isApproved ? 'Approved: ' : ($leave->status . ': ')) . $leave->leave_type . $partLabel,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  Collection<int, Dtr>|null  $dateRecords
+     */
+    public function leaveApprovalLabel(Dtr $record, ?Collection $dateRecords = null): string
+    {
+        $info = $this->findLeaveForRecord($record, $dateRecords);
+
+        return $info ? $info['label'] : '-';
+    }
+
+    public function unworkedHalfDayMinutes(Dtr $record, string $missingPart): int
+    {
+        if (filled($record->date_in) && Carbon::parse($record->date_in)->isSaturday()) {
+            return 0;
+        }
+
+        return 240;
+    }
+
+    /**
+     * @param  Collection<int, Dtr>|null  $dateRecords
+     */
+    public function effectiveLate(Dtr $record, ?Collection $dateRecords = null, bool $forDailyPayroll = false): int
+    {
+        if ((bool) $record->is_absent || $record->schedule_type === 'Leave' || $record->entry_source === self::SOURCE_LEAVE) {
+            return 0;
+        }
+
+        $dayPart = $this->normalize($record->day_part);
+        $storedLate = (int) ($record->late ?? 0);
+
+        if ($dayPart !== self::AFTERNOON) {
+            return $storedLate;
+        }
+
+        $unworked = $this->unworkedHalfDayMinutes($record, self::MORNING);
+        $punchLate = $storedLate >= $unworked ? $storedLate - $unworked : $storedLate;
+
+        $leaveInfo = $this->findLeaveForRecord($record, $dateRecords);
+        $isExcused = ($leaveInfo['is_approved'] ?? false) === true;
+
+        if ($isExcused || $forDailyPayroll) {
+            return $punchLate;
+        }
+
+        return $unworked + $punchLate;
+    }
+
+    /**
+     * @param  Collection<int, Dtr>|null  $dateRecords
+     */
+    public function effectiveUndertime(Dtr $record, ?Collection $dateRecords = null, bool $forDailyPayroll = false): int
+    {
+        if ((bool) $record->is_absent || $record->schedule_type === 'Leave' || $record->entry_source === self::SOURCE_LEAVE) {
+            return 0;
+        }
+
+        $dayPart = $this->normalize($record->day_part);
+        $storedUndertime = (int) ($record->undertime ?? 0);
+
+        if ($dayPart !== self::MORNING) {
+            return $storedUndertime;
+        }
+
+        $unworked = $this->unworkedHalfDayMinutes($record, self::AFTERNOON);
+        $punchUndertime = $storedUndertime >= $unworked ? $storedUndertime - $unworked : $storedUndertime;
+
+        $leaveInfo = $this->findLeaveForRecord($record, $dateRecords);
+        $isExcused = ($leaveInfo['is_approved'] ?? false) === true;
+
+        if ($isExcused || $forDailyPayroll) {
+            return $punchUndertime;
+        }
+
+        return $unworked + $punchUndertime;
     }
 }
